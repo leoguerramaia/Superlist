@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Superlist - Login</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card">
+      <h1 class="logo">🛒 Superlist</h1>
+      <h2>Entrar</h2>
+
+      <form id="loginForm">
+        <input type="email" id="email" placeholder="E-mail" required />
+        <input type="password" id="password" placeholder="Senha" required />
+        <button type="submit">Entrar</button>
+      </form>
+
+      <p class="register">
+        Ainda não tem conta?
+        <a href="register.html">Cadastre-se</a>
+      </p>
+    </div>
+  </div>
+
+  <script type="module">
+    // Importações do Firebase (modular SDK)
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics.js";
+
+    // Configuração do seu projeto Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyD6llZSjAaeI1g9dDGeQ2SMFion6iFlHvM",
+      authDomain: "super-list-651ad.firebaseapp.com",
+      projectId: "super-list-651ad",
+      storageBucket: "super-list-651ad.firebasestorage.app",
+      messagingSenderId: "255877268377",
+      appId: "1:255877268377:web:381f68e586e41b4c824908",
+      measurementId: "G-JLSZZ47EZY"
+    };
+
+    // Inicialização do Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const analytics = getAnalytics(app);
+
+    // Função de login
+    const form = document.getElementById("loginForm");
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+
+      signInWithEmailAndPassword(auth, email, password)
+        .then((userCredential) => {
+          alert("✅ Login realizado com sucesso!");
+          window.location.href = "home.html"; // redireciona para a página principal
+        })
+        .catch((error) => {
+          alert("❌ Erro ao fazer login: " + error.message);
+        });
+    });
+  </script>
+</body>
+</html>
