@@ -482,6 +482,21 @@ function parseImported(text) {
 
     let norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     let found=db.products.find(p=>norm(name).includes(norm(p.name))||norm(p.name).includes(norm(name)));
+    if (!found) {
+  found = {
+    id: uid(),
+    name: name,
+    category: 'Outros',
+    unit: unit || 'un',
+    ...packageInfo(name, unit || 'un'),
+    barcode: '',
+    photo: '',
+    photoPath: '',
+    active: true
+  };
+
+  db.products.push(found);
+}
 
     return {
       id:uid(),
@@ -854,53 +869,18 @@ function findOrCreateProduct(item) {
 }
 
 
-function addCatalogProductToList() {
-  if (!currentList) return;
 
-  const available = db.products.filter(p =>
-    !currentList.items.some(i => i.productId === p.id)
+function addProductToCurrentList(product, qty = 1) {
+  if (!currentList || !product) return;
+
+  const already = currentList.items.find(
+    i => i.productId === product.id
   );
 
-  if (!available.length) {
-    toast('Todos os produtos do catálogo já estão nesta lista.');
-    return;
-  }
-
-  openModal('Adicionar produto à compra', `
-    <form id="addCatalogProductForm">
-      <div class="field">
-        <label>Produto do catálogo</label>
-        <select name="productId" required>
-          ${available.map(p => `
-            <option value="${p.id}">
-              ${esc(p.name)} — ${esc(p.category)}
-            </option>
-          `).join('')}
-        </select>
-      </div>
-
-      <div class="field">
-        <label>Quantidade</label>
-        <input name="qty" type="number" min="0.01"
-          step="0.01" value="1" required>
-      </div>
-
-      <div class="form-actions">
-        <button type="button" class="btn secondary"
-          data-cancel>Cancelar</button>
-        <button class="btn primary">Adicionar à compra</button>
-      </div>
-    </form>
-  `);
-
-  $('#addCatalogProductForm').addEventListener('submit', e => {
-    e.preventDefault();
-
-    const d = formData(e.currentTarget);
-    const product = db.products.find(p => p.id === d.productId);
-
-    if (!product) return;
-
+  if (already) {
+    already.qty = (Number(already.qty) || 0) + qty;
+    toast('Quantidade atualizada na compra.');
+  } else {
     const previous = latestPrice(product.id, currentList.storeId);
 
     currentList.items.push({
@@ -909,18 +889,337 @@ function addCatalogProductToList() {
       name: product.name,
       category: product.category || 'Outros',
       unit: product.unit || 'un',
-      qty: Number(d.qty) || 1,
+      qty,
       price: 0,
       estimate: previous?.price || 0,
       checked: false
     });
 
-    save();
-    closeModal();
-    renderShopping();
     toast('Produto adicionado à compra!');
-  });
+  }
+
+  save();
+  closeModal();
+  renderShopping();
 }
+
+function addCatalogProductToList() {
+  if (!currentList) return;
+
+  openModal('Adicionar produto à compra', `
+    <div class="field">
+      <label>Como deseja localizar?</label>
+      <select id="addProductMode">
+        <option value="name">Buscar pelo nome</option>
+        <option value="category">Buscar por categoria</option>
+        <option value="barcode">Código de barras</option>
+      </select>
+    </div>
+
+    <div id="addProductSearchArea"></div>
+
+    <div class="field">
+      <label>Quantidade</label>
+      <input id="addProductQty" type="number"
+        min="0.01" step="0.01" value="1">
+    </div>
+
+    <div id="addProductResults"></div>
+
+    <div class="form-actions">
+      <button type="button" class="btn secondary" data-cancel>
+        Fechar
+      </button>
+    </div>
+  `);
+
+  const mode = $('#addProductMode');
+  const area = $('#addProductSearchArea');
+  const results = $('#addProductResults');
+
+  function availableProducts() {
+    return db.products.filter(p => p.active !== false);
+  }
+
+  function showProducts(products) {
+    results.innerHTML = products.length
+      ? products.map(p => `
+          <button type="button" class="product-row"
+            data-add-catalog="${p.id}"
+            style="width:100%;text-align:left">
+            <div class="product-thumb">
+              ${p.photo ? '▧' : '◈'}
+            </div>
+            <div>
+              <strong>${esc(p.name)}</strong>
+              <small>${esc(p.category || 'Outros')} · ${unitLabel(p.unit)}</small>
+            </div>
+            <span>＋</span>
+          </button>
+        `).join('')
+      : '<div class="empty-state">Nenhum produto encontrado.</div>';
+  }
+
+  function renderMode() {
+    results.innerHTML = '';
+
+    if (mode.value === 'name') {
+      area.innerHTML = `
+        <div class="field">
+          <label>Nome do produto</label>
+          <input id="addProductNameSearch"
+            placeholder="Digite o nome do produto">
+        </div>
+        <button type="button" class="btn secondary"
+          id="createProductFromSearch">
+          ＋ Cadastrar este produto
+        </button>
+      `;
+
+      const input = $('#addProductNameSearch');
+
+      function searchName() {
+        const q = input.value.trim().toLocaleLowerCase('pt-BR');
+
+        showProducts(q
+          ? availableProducts().filter(p =>
+              p.name.toLocaleLowerCase('pt-BR').includes(q)
+            )
+          : availableProducts()
+        );
+      }
+
+      input.addEventListener('input', searchName);
+      searchName();
+
+      $('#createProductFromSearch').onclick = () => {
+        const name = input.value.trim();
+
+        if (!name) {
+          toast('Digite o nome do produto.');
+          return;
+        }
+
+        let product = db.products.find(p =>
+          p.name.trim().toLocaleLowerCase('pt-BR') ===
+          name.toLocaleLowerCase('pt-BR')
+        );
+
+        if (!product) {
+          product = {
+            id: uid(),
+            name,
+            category: 'Outros',
+            unit: 'un',
+            ...packageInfo(name, 'un'),
+            barcode: '',
+            photo: '',
+            photoPath: '',
+            active: true
+          };
+
+          db.products.push(product);
+        }
+
+        addProductToCurrentList(
+          product,
+          Number($('#addProductQty').value) || 1
+        );
+      };
+
+    } else if (mode.value === 'category') {
+      area.innerHTML = `
+        <div class="field">
+          <label>Selecione a categoria</label>
+          <select id="addProductCategory">
+            <option value="">Todas as categorias</option>
+            ${db.categories.map(c => `
+              <option value="${esc(c)}">${esc(c)}</option>
+            `).join('')}
+          </select>
+        </div>
+      `;
+
+      const select = $('#addProductCategory');
+
+      function searchCategory() {
+        showProducts(availableProducts().filter(p =>
+          !select.value || p.category === select.value
+        ));
+      }
+
+      select.addEventListener('change', searchCategory);
+      searchCategory();
+
+    } else {
+      area.innerHTML = `
+        <div class="field">
+          <label>Código de barras (EAN/GTIN)</label>
+          <input id="addProductBarcode"
+            inputmode="numeric"
+            placeholder="Digite ou escaneie o código">
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn secondary"
+            id="scanNewProductBarcode">
+            ▣ Ler com a câmera
+          </button>
+          <button type="button" class="btn primary"
+            id="lookupNewProductBarcode">
+            Consultar código
+          </button>
+        </div>
+        <div id="addBarcodeCamera" class="camera-box"
+          style="display:none"></div>
+      `;
+
+      $('#lookupNewProductBarcode').onclick = async () => {
+        const code = $('#addProductBarcode').value.trim();
+
+        if (!code) {
+          toast('Informe o código de barras.');
+          return;
+        }
+
+        const button = $('#lookupNewProductBarcode');
+        button.disabled = true;
+        button.textContent = 'Consultando...';
+
+        try {
+          let product = db.products.find(p => p.barcode === code);
+
+          if (!product) {
+            const response = await fetch(
+              `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`
+            );
+
+            if (!response.ok) throw new Error('Falha na consulta.');
+
+            const data = await response.json();
+            const prod = data.product;
+
+            if (data.status !== 1 || !prod) {
+              toast('Produto não encontrado. Cadastre pelo nome.');
+              return;
+            }
+
+            product = {
+              id: uid(),
+              name: prod.product_name_pt || prod.product_name || `Produto ${code}`,
+              category: 'Outros',
+              unit: 'un',
+              ...packageInfo(prod.product_name || '', 'un'),
+              barcode: code,
+              photo: prod.image_url || '',
+              photoPath: '',
+              active: true
+            };
+
+            db.products.push(product);
+          }
+
+          addProductToCurrentList(
+            product,
+            Number($('#addProductQty').value) || 1
+          );
+
+        } catch (error) {
+          console.error(error);
+          toast('Não foi possível consultar o código.');
+        } finally {
+          if ($('#lookupNewProductBarcode')) {
+            $('#lookupNewProductBarcode').disabled = false;
+            $('#lookupNewProductBarcode').textContent = 'Consultar código';
+          }
+        }
+      };
+
+      $('#scanNewProductBarcode').onclick = async () => {
+        const cameraBox = $('#addBarcodeCamera');
+        const button = $('#scanNewProductBarcode');
+
+        let controls = null;
+
+        try {
+          if (!navigator.mediaDevices?.getUserMedia) {
+            throw new Error('A câmera exige acesso HTTPS pelo Safari.');
+          }
+
+          cameraBox.style.display = 'block';
+          cameraBox.innerHTML = '<video autoplay muted playsinline style="width:100%"></video>';
+          button.disabled = true;
+
+          if (!window.ZXingBrowser) {
+            let script = document.querySelector('script[data-superlist-zxing]');
+
+            if (!script) {
+              script = document.createElement('script');
+              script.src = 'https://unpkg.com/@zxing/browser@latest';
+              script.dataset.superlistZxing = 'true';
+              document.head.appendChild(script);
+            }
+
+            await new Promise((resolve, reject) => {
+              if (window.ZXingBrowser) return resolve();
+              script.addEventListener('load', resolve, { once: true });
+              script.addEventListener('error', reject, { once: true });
+            });
+          }
+
+          const reader = new ZXingBrowser.BrowserMultiFormatReader();
+          const video = cameraBox.querySelector('video');
+
+          controls = await reader.decodeFromConstraints(
+            {
+              audio: false,
+              video: { facingMode: { ideal: 'environment' } }
+            },
+            video,
+            (result) => {
+              if (!result) return;
+
+              $('#addProductBarcode').value = result.getText();
+
+              if (controls) controls.stop();
+
+              cameraBox.style.display = 'none';
+              button.disabled = false;
+              toast('Código identificado. Toque em Consultar código.');
+            }
+          );
+
+        } catch (error) {
+          console.error(error);
+          if (controls) controls.stop();
+          cameraBox.style.display = 'none';
+          button.disabled = false;
+          toast('Não foi possível iniciar a câmera.');
+        }
+      };
+    }
+  }
+
+  mode.addEventListener('change', renderMode);
+
+  results.addEventListener('click', e => {
+    const button = e.target.closest('[data-add-catalog]');
+    if (!button) return;
+
+    const product = db.products.find(p =>
+      p.id === button.dataset.addCatalog
+    );
+
+    if (product) {
+      addProductToCurrentList(
+        product,
+        Number($('#addProductQty').value) || 1
+      );
+    }
+  });
+
+  renderMode();
+}
+
 
 function removeShoppingItem(itemId) {
   if (!currentList) return;
