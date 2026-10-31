@@ -64,6 +64,21 @@ let db = loadDB();
 let currentList = null;
 let activeCategory = 'all';
 
+
+// Padroniza nomes de produtos e marcas em formato Título, mantendo conectores em minúsculas.
+function formatDisplayName(value) {
+  const minorWords = new Set(['de','da','do','das','dos','e','em','no','na','nos','nas','por','para','com']);
+  const capitalize = (part, isFirst) => {
+    if (!part) return part;
+    const lower = part.toLocaleLowerCase('pt-BR');
+    if (!isFirst && minorWords.has(lower)) return lower;
+    return lower.charAt(0).toLocaleUpperCase('pt-BR') + lower.slice(1);
+  };
+  return String(value || '').trim().replace(/\s+/g, ' ').split(' ').map((word, index) =>
+    word.split('-').map((part, subIndex) => capitalize(part, index === 0 && subIndex === 0)).join('-')
+  ).join(' ');
+}
+
 function loadDB() {
   try {
     let d = JSON.parse(localStorage.getItem(KEY));
@@ -75,6 +90,10 @@ function loadDB() {
       d.lists ||= [];
       d.prices ||= [];
       d.purchases ||= [];
+      // Padroniza também registros antigos, sem alterar IDs ou relacionamentos.
+      d.products.forEach(p => { p.name = formatDisplayName(p.name); });
+      d.lists.forEach(list => (list.items || []).forEach(item => { item.name = formatDisplayName(item.name); item.brand = formatDisplayName(item.brand); }));
+      d.prices.forEach(price => { price.productName = formatDisplayName(price.productName); price.brand = formatDisplayName(price.brand); });
 
       return d;
     }
@@ -627,7 +646,7 @@ function addProductModal(product = null) {
       const d = formData(form);
       const file = fileInput.files[0];
 
-      d.name = d.name.trim();
+      d.name = formatDisplayName(d.name);
       d.netAmount = Number(d.netAmount) || 1;
 
       const barcode = d.barcode.trim();
@@ -794,8 +813,8 @@ function editShoppingItem(itemId) {
       return;
     }
 
-item.name = d.name.trim();
-item.brand = String(d.brand || '').trim();
+item.name = formatDisplayName(d.name);
+item.brand = formatDisplayName(d.brand);
 item.category = d.category;
 item.unit = d.unit;
 
@@ -838,7 +857,7 @@ function findOrCreateProduct(item) {
   if (!product) {
     product = {
       id: uid(),
-      name: item.name.trim(),
+      name: formatDisplayName(item.name),
       category: item.category || 'Outros',
       unit: item.unit || 'un',
       ...packageInfo(item.name, item.unit || 'un'),
@@ -851,6 +870,7 @@ function findOrCreateProduct(item) {
     db.products.push(product);
   }
 
+  product.name = formatDisplayName(product.name);
   item.productId = product.id;
   item.name = product.name;
   item.category = product.category;
@@ -878,7 +898,7 @@ function addProductToCurrentList(product, qty = 1, brand = '') {
       id: uid(),
       productId: product.id,
       name: product.name,
-      brand: String(brand || '').trim(),
+      brand: formatDisplayName(brand),
       category: product.category || 'Outros',
       unit: product.unit || 'un',
       qty,
@@ -1328,7 +1348,7 @@ function savePrice(item) {
     listId:currentList.id,
     productId:item.productId,
     productName:item.name,
-    brand:String(item.brand || '').trim(),
+    brand:formatDisplayName(item.brand),
     storeId:currentList.storeId,
     date:today(),
     price:Number(item.price),
@@ -1899,7 +1919,7 @@ function openPurchaseModal() {
       receiptRows = items.map(item => {
         const matched = item.catalog_match_id ? db.products.find(p => String(p.id) === String(item.catalog_match_id)) : null;
         return {
-          id: uid(), name: matched?.name || item.name || 'Produto não identificado', brand: String(item.brand || '').trim(),
+          id: uid(), name: matched?.name || item.name || 'Produto não identificado', brand: formatDisplayName(item.brand),
           total: Number(item.paid_total ?? item.line_total) || 0,
           quantity: Number(item.quantity) || 1,
           unit: (() => { const raw = String(item.unit || matched?.unit || 'un').toLowerCase(); return ({und:'un',unid:'un',unidade:'un',lt:'l',litro:'l',litros:'l',grama:'g',gramas:'g',quilo:'kg',quilos:'kg',pacote:'pct',caixa:'cx'}[raw] || (['un','kg','g','l','ml','cx','pct'].includes(raw) ? raw : 'un')); })(),
@@ -1944,7 +1964,7 @@ function openPurchaseModal() {
     if (!approvedRows.length) return toast('Aprove pelo menos um produto para registrar a compra.');
 
     const parsed = approvedRows.map(row => ({
-      name: String(row.name || '').trim(), brand: String(row.brand || '').trim(),
+      name: formatDisplayName(row.name), brand: formatDisplayName(row.brand),
       qty: parseReceiptDecimal(row.quantity),
       total: parseReceiptDecimal(row.total),
       unit: String(row.unit || 'un').toLowerCase(),
