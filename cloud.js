@@ -51,53 +51,32 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
   async function signOut(){if(!client)return;await client.auth.signOut();householdId=null;if(channel)client.removeChannel(channel);emit('Somente neste dispositivo','')}
   async function getInviteCode(){if(!client||!householdId)throw new Error('Entre em um espaço primeiro.');let {data,error}=await client.from('households').select('invite_code').eq('id',householdId).single();if(error)throw error;return data.invite_code}
   async function join(code){if(!client)throw new Error('Configure o Supabase primeiro.');let {data,error}=await client.rpc('join_household',{invite_code_input:code});if(error)throw error;householdId=data;await loadIntoApp()}
-  async function analyzeReceipt(file, products = []) {
+
+  async function analyzeImage(file, mode='receipt', products=[]) {
     if (!client) throw new Error('Supabase não está configurado.');
     const { data: { session } } = await client.auth.getSession();
-    if (!session?.access_token) throw new Error('Entre na sua conta antes de analisar a nota.');
-
-    if (!file || !file.type || !file.type.startsWith('image/')) {
-      throw new Error('Selecione uma imagem válida da nota.');
-    }
-    if (file.size > 12 * 1024 * 1024) {
-      throw new Error('A imagem excede 12 MB. Reduza o tamanho e tente novamente.');
-    }
-
+    if (!session?.access_token) throw new Error('Entre na sua conta antes de analisar a imagem.');
+    if (!file || !file.type || !file.type.startsWith('image/')) throw new Error('Selecione uma imagem válida.');
+    if (file.size > 12 * 1024 * 1024) throw new Error('A imagem excede 12 MB. Reduza o tamanho e tente novamente.');
     const base64 = await new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        const value = String(reader.result || '');
-        const comma = value.indexOf(',');
-        resolve(comma >= 0 ? value.slice(comma + 1) : value);
-      };
+      reader.onload = () => { const value = String(reader.result || ''); const comma = value.indexOf(','); resolve(comma >= 0 ? value.slice(comma + 1) : value); };
       reader.onerror = () => reject(new Error('Não foi possível ler a imagem selecionada.'));
       reader.readAsDataURL(file);
     });
-
     const { data, error } = await client.functions.invoke('analyze-receipt', {
-      body: {
-        image_base64: base64,
-        mime_type: file.type,
-        products: products.slice(0, 500)
-      }
+      body: { mode, image_base64: base64, mime_type: file.type, products: products.slice(0, 500) }
     });
-
     if (error) {
-      let detail = error.message || 'Falha ao chamar a análise de nota.';
-      try {
-        const context = error.context;
-        if (context && typeof context.json === 'function') {
-          const body = await context.json();
-          if (body?.error) detail = body.error;
-        }
-      } catch (_) {}
+      let detail = error.message || 'Falha ao chamar a análise de imagem.';
+      try { const context = error.context; if (context && typeof context.json === 'function') { const body = await context.json(); if (body?.error) detail = body.error; } } catch (_) {}
       throw new Error(detail);
     }
-    if (!data || !Array.isArray(data.items)) {
-      throw new Error('A IA retornou uma resposta inesperada.');
-    }
+    if (!data || !Array.isArray(data.items)) throw new Error('A IA retornou uma resposta inesperada.');
     return data;
   }
+  async function analyzeReceipt(file, products = []) { return analyzeImage(file, 'receipt', products); }
+  async function analyzeListPhoto(file) { return analyzeImage(file, 'list'); }
 
   async function boot(appApi){
     app=appApi;
@@ -108,5 +87,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     client.auth.onAuthStateChange((event,session)=>{if(session&&event!=='TOKEN_REFRESHED')setTimeout(loadIntoApp,0);else if(!session){householdId=null;emit('Entre para sincronizar','')}});
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
   }
-  window.SuperlistCloud={boot,status,signIn,signUp,signOut,join,getInviteCode,scheduleSync,analyzeReceipt,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,signIn,signUp,signOut,join,getInviteCode,scheduleSync,analyzeReceipt,analyzeListPhoto,onStatus(fn){callback=fn},loadIntoApp};
 })();

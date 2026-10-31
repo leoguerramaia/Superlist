@@ -295,7 +295,7 @@ function renderPrices() {
     db.stores.map(s=>`<option value="${s.id}" ${store===s.id?'selected':''}>${esc(s.name)}</option>`).join('');
 
   let rows=db.prices
-    .filter(p=>(store==='all'||p.storeId===store)&&p.productName.toLowerCase().includes(q))
+    .filter(p=>(store==='all'||p.storeId===store)&&(p.productName+' '+(p.brand||'')).toLowerCase().includes(q))
     .sort((a,b)=>b.date.localeCompare(a.date));
 
   $('#priceSummary').innerHTML=
@@ -305,7 +305,7 @@ function renderPrices() {
 
   $('#priceRows').innerHTML=rows.length
     ? rows.map(p=>`<tr>
-        <td><strong>${esc(p.productName)}</strong></td>
+        <td><strong>${esc(p.productName)}</strong>${p.brand?`<small> · ${esc(p.brand)}</small>`:''}</td>
         <td>${esc(storeName(p.storeId))}</td>
         <td>${dateBR(p.date)}</td>
         <td><strong>${money(p.price)}</strong></td>
@@ -419,67 +419,44 @@ function esc(s='') {
 }
 
 function createListModal() {
-  if(!db.stores.length) {
-    toast('Cadastre pelo menos um supermercado primeiro.');
-    page('stores');
-    return;
-  }
-
+  if(!db.stores.length) { toast('Cadastre pelo menos um supermercado primeiro.'); page('stores'); return; }
   openModal('Criar nova lista',`<form id="modalForm">
-    <div class="field">
-      <label>Nome da lista</label>
-      <input name="name" required placeholder="Ex.: Compra do mês">
-    </div>
+    <div class="field"><label>Nome da lista</label><input name="name" required placeholder="Ex.: Compra do mês"></div>
     <div class="form-grid">
-      <div class="field">
-        <label>Supermercado</label>
-        <select name="storeId">${db.stores.map((s,i)=>`<option value="${s.id}" ${i===0?'selected':''}>${esc(s.name)}</option>`).join('')}</select>
-      </div>
-      <div class="field">
-        <label>Data de criação</label>
-        <input name="created" type="date" value="${today()}" required>
-      </div>
+      <div class="field"><label>Supermercado</label><select name="storeId">${db.stores.map((s,i)=>`<option value="${s.id}" ${i===0?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Data de criação</label><input name="created" type="date" value="${today()}" required></div>
     </div>
-    <div class="field">
-      <label>Importar itens por texto (opcional)</label>
-      <textarea name="text" placeholder="Ex.:
-2 arroz 5kg
-1 kg de banana
-Leite 3 unidades
-Carne moída 1,5 kg"></textarea>
-    </div>
+    <div class="field"><label>Importar itens por texto (opcional)</label><textarea name="text" id="newListText" placeholder="2 arroz 5kg&#10;1 kg de banana&#10;Leite 3 unidades"></textarea></div>
+    <div class="field"><label>Ou fotografar uma lista escrita à mão</label><input id="handwrittenListPhoto" type="file" accept="image/*" capture="environment"><small class="helper">Tire uma foto nítida da lista. A IA vai identificar os itens para você revisar antes de criar.</small></div>
+    <div class="form-actions"><button type="button" class="btn secondary" id="analyzeHandwrittenList">✨ Ler foto com IA</button></div>
+    <div id="handwrittenListStatus" class="helper" aria-live="polite"></div>
+    <div id="handwrittenListReview" style="display:none;margin-top:12px"></div>
     <p class="helper">Você também poderá adicionar produtos individualmente depois. Itens não reconhecidos serão incluídos em “Outros”.</p>
-    <div class="form-actions">
-      <button type="button" class="btn secondary" data-cancel>Cancelar</button>
-      <button class="btn primary">Criar lista</button>
-    </div>
+    <div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button class="btn primary">Criar lista</button></div>
   </form>`,'NOVA LISTA');
-
+  let recognizedRows=[];
+  const photoInput=$('#handwrittenListPhoto'), status=$('#handwrittenListStatus'), review=$('#handwrittenListReview');
+  $('#analyzeHandwrittenList').addEventListener('click',async()=>{
+    const file=photoInput.files?.[0];
+    if(!file)return toast('Selecione ou fotografe uma lista escrita à mão.');
+    if(!window.SuperlistCloud?.analyzeListPhoto)return toast('Atualize a integração com o Supabase para habilitar a leitura de listas.');
+    const button=$('#analyzeHandwrittenList');button.disabled=true;button.textContent='Analisando...';status.textContent='A IA está lendo a lista. Isso pode levar alguns segundos.';
+    try{
+      const result=await window.SuperlistCloud.analyzeListPhoto(file);
+      recognizedRows=(result.items||[]).map(x=>({name:String(x.name||'').trim(),brand:String(x.brand||'').trim(),quantity:Number(x.quantity)||1,unit:String(x.unit||'un').toLowerCase()})).filter(x=>x.name);
+      review.innerHTML=recognizedRows.length?`<strong>${recognizedRows.length} item(ns) identificado(s). Confira antes de criar a lista:</strong><div style="overflow-x:auto"><table class="receipt-items-table"><thead><tr><th>Produto</th><th>Marca (opcional)</th><th>Qtd.</th><th>Un.</th><th></th></tr></thead><tbody>${recognizedRows.map((r,i)=>`<tr data-hand-row="${i}"><td><input data-hand-field="name" value="${esc(r.name)}"></td><td><input data-hand-field="brand" value="${esc(r.brand)}" placeholder="Marca"></td><td><input data-hand-field="quantity" type="number" min="0.01" step="0.01" value="${r.quantity}"></td><td><select data-hand-field="unit">${['un','kg','g','l','ml','cx','pct'].map(u=>`<option ${r.unit===u?'selected':''}>${u}</option>`).join('')}</select></td><td><button type="button" data-hand-remove="${i}">×</button></td></tr>`).join('')}</tbody></table></div>`:'A IA não identificou itens. Tente uma foto mais nítida.';
+      review.style.display='block';status.textContent='Leitura concluída. Revise os itens acima; nada será salvo até clicar em “Criar lista”.';
+    }catch(err){console.error(err);status.textContent=err.message||'Não foi possível ler a foto.';toast(status.textContent)}
+    finally{button.disabled=false;button.textContent='✨ Ler foto com IA'}
+  });
+  review.addEventListener('change',e=>{const tr=e.target.closest('[data-hand-row]');if(!tr)return;const row=recognizedRows[Number(tr.dataset.handRow)];if(!row)return;row[e.target.dataset.handField]=e.target.dataset.handField==='quantity'?Number(e.target.value):e.target.value});
+  review.addEventListener('click',e=>{const b=e.target.closest('[data-hand-remove]');if(!b)return;recognizedRows.splice(Number(b.dataset.handRemove),1);review.innerHTML=recognizedRows.length?`<strong>${recognizedRows.length} item(ns) para revisar:</strong><div style="overflow-x:auto"><table class="receipt-items-table"><thead><tr><th>Produto</th><th>Marca</th><th>Qtd.</th><th>Un.</th><th></th></tr></thead><tbody>${recognizedRows.map((r,i)=>`<tr data-hand-row="${i}"><td><input data-hand-field="name" value="${esc(r.name)}"></td><td><input data-hand-field="brand" value="${esc(r.brand)}" placeholder="Marca"></td><td><input data-hand-field="quantity" type="number" min="0.01" step="0.01" value="${r.quantity}"></td><td><select data-hand-field="unit">${['un','kg','g','l','ml','cx','pct'].map(u=>`<option ${r.unit===u?'selected':''}>${u}</option>`).join('')}</select></td><td><button type="button" data-hand-remove="${i}">×</button></td></tr>`).join('')}</tbody></table></div>`:'Nenhum item na revisão.';});
   $('#modalForm').addEventListener('submit',e=>{
-    e.preventDefault();
-    let d=formData();
-    let storeId=d.storeId;
+    e.preventDefault();const d=formData(e.currentTarget);const storeId=d.storeId;
     let items=parseImported(d.text||'');
-
-    items.forEach(i=>{
-      let h=latestPrice(i.productId,storeId);
-      if(h)i.estimate=h.price;
-    });
-
-    let l={
-      id:uid(),
-      name:d.name,
-      storeId,
-      created:d.created,
-      done:false,
-      items
-    };
-
-    db.lists.push(l);
-    save();
-    closeModal();
-    openList(l.id);
-    toast('Lista criada com sucesso!');
+    recognizedRows.forEach(r=>{if(!r.name)return;const product=findOrCreateProduct({name:r.name,category:'Outros',unit:r.unit});items.push({id:uid(),productId:product.id,name:product.name,category:product.category||'Outros',unit:r.unit||product.unit||'un',qty:r.quantity||1,brand:r.brand||'',price:0,checked:false})});
+    items.forEach(i=>{let h=latestPrice(i.productId,storeId);if(h)i.estimate=h.price});
+    const l={id:uid(),name:d.name,storeId,created:d.created,done:false,items};db.lists.push(l);save();closeModal();openList(l.id);toast('Lista criada com sucesso!');
   });
 }
 
@@ -487,47 +464,11 @@ function parseImported(text) {
   return text.split(/\n|,/).map(line=>line.trim()).filter(Boolean).map(line=>{
     let qty=1,unit=null,name=line;
     let m=line.match(/^(\d+(?:[,.]\d+)?)\s*(kg|quilo[s]?|g|gramas?|l|litros?|ml|un(?:idade[s]?)?|x)?\s+(?:de\s+)?(.+)$/i);
-
-    if(m) {
-      qty=Number(m[1].replace(',','.'));
-      let u=(m[2]||'').toLowerCase();
-      name=m[3].trim();
-
-      if(/kg|quilo/.test(u))unit='kg';
-      else if(u==='g'||u.startsWith('gram'))unit='g';
-      else if(u==='l'||u.startsWith('litro'))unit='l';
-      else if(u==='ml')unit='ml';
-      else if(u.startsWith('un')||u==='x')unit='un';
-    }
-
-    let norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    let found=db.products.find(p=>norm(name).includes(norm(p.name))||norm(p.name).includes(norm(name)));
-    if (!found) {
-  found = {
-    id: uid(),
-    name: name,
-    category: 'Outros',
-    unit: unit || 'un',
-    ...packageInfo(name, unit || 'un'),
-    barcode: '',
-    photo: '',
-    photoPath: '',
-    active: true
-  };
-
-  db.products.push(found);
-}
-
-    return {
-      id:uid(),
-      productId:found?.id||null,
-      name:found?.name||name,
-      category:found?.category||'Outros',
-      unit:unit||found?.unit||'un',
-      qty,
-      price:0,
-      checked:false
-    };
+    if(m){qty=Number(m[1].replace(',','.'));let u=(m[2]||'').toLowerCase();name=m[3].trim();if(/kg|quilo/.test(u))unit='kg';else if(u==='g'||u.startsWith('gram'))unit='g';else if(u==='l'||u.startsWith('litro'))unit='l';else if(u==='ml')unit='ml';else if(u.startsWith('un')||u==='x')unit='un'}
+    const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    let found=db.products.find(p=>norm(name)===norm(p.name));
+    if(!found){found={id:uid(),name,category:'Outros',unit:unit||'un',...packageInfo(name,unit||'un'),barcode:'',photo:'',photoPath:'',active:true};db.products.push(found)}
+    return {id:uid(),productId:found.id,name:found.name,category:found.category||'Outros',unit:unit||found.unit||'un',qty,brand:'',price:0,checked:false};
   });
 }
 
@@ -774,6 +715,11 @@ function editShoppingItem(itemId) {
       </div>
 
       <div class="field">
+        <label>Marca (opcional)</label>
+        <input name="brand" placeholder="Ex.: Marca A" value="${esc(item.brand || '')}">
+      </div>
+
+      <div class="field">
         <label>Categoria</label>
         <select name="category">
           ${categories.map(c => `
@@ -825,6 +771,7 @@ function editShoppingItem(itemId) {
     }
 
 item.name = d.name.trim();
+item.brand = String(d.brand || '').trim();
 item.category = d.category;
 item.unit = d.unit;
 
@@ -890,11 +837,11 @@ function findOrCreateProduct(item) {
 
 
 
-function addProductToCurrentList(product, qty = 1) {
+function addProductToCurrentList(product, qty = 1, brand = '') {
   if (!currentList || !product) return;
 
   const already = currentList.items.find(
-    i => i.productId === product.id
+    i => i.productId === product.id && String(i.brand || '').toLocaleLowerCase('pt-BR') === String(brand || '').trim().toLocaleLowerCase('pt-BR')
   );
 
   if (already) {
@@ -907,6 +854,7 @@ function addProductToCurrentList(product, qty = 1) {
       id: uid(),
       productId: product.id,
       name: product.name,
+      brand: String(brand || '').trim(),
       category: product.category || 'Outros',
       unit: product.unit || 'un',
       qty,
@@ -942,6 +890,11 @@ function addCatalogProductToList() {
       <label>Quantidade</label>
       <input id="addProductQty" type="number"
         min="0.01" step="0.01" value="1">
+    </div>
+
+    <div class="field">
+      <label>Marca (opcional)</label>
+      <input id="addProductBrand" placeholder="Ex.: Marca A">
     </div>
 
     <div id="addProductResults"></div>
@@ -1043,7 +996,8 @@ function addCatalogProductToList() {
 
         addProductToCurrentList(
           product,
-          Number($('#addProductQty').value) || 1
+          Number($('#addProductQty').value) || 1,
+          $('#addProductBrand')?.value || ''
         );
       };
 
@@ -1140,7 +1094,8 @@ function addCatalogProductToList() {
 
           addProductToCurrentList(
             product,
-            Number($('#addProductQty').value) || 1
+            Number($('#addProductQty').value) || 1,
+            $('#addProductBrand')?.value || ''
           );
 
         } catch (error) {
@@ -1232,7 +1187,8 @@ function addCatalogProductToList() {
     if (product) {
       addProductToCurrentList(
         product,
-        Number($('#addProductQty').value) || 1
+        Number($('#addProductQty').value) || 1,
+        $('#addProductBrand')?.value || ''
       );
     }
   });
@@ -1285,7 +1241,7 @@ let cats=[...new Set(visibleItems.map(i=>i.category||'Outros'))];
           ${its.map(i=>`<div class="shop-item">
             <input type="checkbox" data-check="${i.id}" ${i.checked?'checked':''}>
             <div class="shop-name ${i.checked?'checked':''}">
-              <strong>${esc(i.name)}</strong>
+              <strong>${esc(i.name)}${i.brand ? ` · ${esc(i.brand)}` : ''}</strong>
               <small>
                 ${unitLabel(i.unit)}
                 ${i.productId?'· cadastrado':'· revisar produto'}
@@ -1348,6 +1304,7 @@ function savePrice(item) {
     listId:currentList.id,
     productId:item.productId,
     productName:item.name,
+    brand:String(item.brand || '').trim(),
     storeId:currentList.storeId,
     date:today(),
     price:Number(item.price),
@@ -1725,7 +1682,7 @@ function openPurchaseModal() {
         <div id="receiptItemsEmpty" class="empty-state">Envie uma foto para a IA identificar os produtos ou adicione um item manualmente.</div>
         <div id="receiptItemsTableWrap" class="receipt-table-wrap" style="display:none">
           <table class="receipt-items-table">
-            <thead><tr><th>Produto</th><th>Preço total (R$)</th><th>Unidade</th><th>Ação</th></tr></thead>
+            <thead><tr><th>Produto</th><th>Marca</th><th>Preço total (R$)</th><th>Unidade</th><th>Ação</th></tr></thead>
             <tbody id="receiptItemsBody"></tbody>
           </table>
         </div>
@@ -1799,6 +1756,7 @@ function openPurchaseModal() {
     itemsBody.innerHTML = receiptRows.map(row => `
       <tr data-receipt-row="${esc(row.id)}" class="${row.approved ? 'receipt-row-approved' : ''}">
         <td><input class="receipt-product-input" data-receipt-field="name" value="${esc(row.name)}" aria-label="Produto"></td>
+        <td><input data-receipt-field="brand" value="${esc(row.brand || '')}" placeholder="Marca" aria-label="Marca"></td>
         <td><input data-receipt-field="total" inputmode="decimal" value="${esc(String(row.total).replace('.', ','))}" aria-label="Preço total"></td>
         <td><div class="receipt-unit-cell"><input data-receipt-field="quantity" type="number" min="0.001" step="0.001" value="${esc(String(row.quantity).replace('.', ','))}" aria-label="Quantidade"><select data-receipt-field="unit" aria-label="Unidade">${['un','kg','g','l','ml','cx','pct'].map(u => `<option value="${u}" ${row.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div></td>
         <td><div class="receipt-row-actions"><button type="button" data-receipt-approve="${esc(row.id)}" class="${row.approved ? 'is-approved' : ''}">${row.approved ? '✓ Aprovado' : 'Aprovar'}</button><button type="button" class="receipt-delete" data-receipt-delete="${esc(row.id)}" aria-label="Excluir produto">Excluir</button></div></td>
@@ -1826,7 +1784,7 @@ function openPurchaseModal() {
   });
 
   $('#addReceiptItemBtn').addEventListener('click', () => {
-    receiptRows.push({ id: uid(), name: '', total: '', quantity: 1, unit: 'un', approved: false, catalogMatchId: null });
+    receiptRows.push({ id: uid(), name: '', brand: '', total: '', quantity: 1, unit: 'un', approved: false, catalogMatchId: null });
     renderReceiptRows();
     itemsBody.querySelector('tr:last-child input')?.focus();
   });
@@ -1917,7 +1875,7 @@ function openPurchaseModal() {
       receiptRows = items.map(item => {
         const matched = item.catalog_match_id ? db.products.find(p => String(p.id) === String(item.catalog_match_id)) : null;
         return {
-          id: uid(), name: matched?.name || item.name || 'Produto não identificado',
+          id: uid(), name: matched?.name || item.name || 'Produto não identificado', brand: String(item.brand || '').trim(),
           total: Number(item.paid_total ?? item.line_total) || 0,
           quantity: Number(item.quantity) || 1,
           unit: (() => { const raw = String(item.unit || matched?.unit || 'un').toLowerCase(); return ({und:'un',unid:'un',unidade:'un',lt:'l',litro:'l',litros:'l',grama:'g',gramas:'g',quilo:'kg',quilos:'kg',pacote:'pct',caixa:'cx'}[raw] || (['un','kg','g','l','ml','cx','pct'].includes(raw) ? raw : 'un')); })(),
@@ -1962,7 +1920,7 @@ function openPurchaseModal() {
     if (!approvedRows.length) return toast('Aprove pelo menos um produto para registrar a compra.');
 
     const parsed = approvedRows.map(row => ({
-      name: String(row.name || '').trim(),
+      name: String(row.name || '').trim(), brand: String(row.brand || '').trim(),
       qty: parseReceiptDecimal(row.quantity),
       total: parseReceiptDecimal(row.total),
       unit: String(row.unit || 'un').toLowerCase(),
@@ -1999,7 +1957,7 @@ function openPurchaseModal() {
       // Mantém a unidade identificada/editada na linha da nota para o histórico.
       db.prices.push({
         id: uid(), purchaseId, listId: null,
-        productId: product.id, productName: product.name,
+        productId: product.id, productName: product.name, brand: item.brand,
         storeId: store.id, date: data.date,
         price: item.total / item.qty, totalPaid: item.total,
         quantity: item.qty, unit: item.unit,
