@@ -1361,64 +1361,17 @@ function savePrice(item) {
 }
 
 
-// Carrega OpenCV apenas quando a leitura da nota for solicitada.
-function loadOpenCV() {
-  if (window.cv && window.cv.Mat) return Promise.resolve(window.cv);
-
-  if (window.__superlistOpenCVPromise) return window.__superlistOpenCVPromise;
-
-  window.__superlistOpenCVPromise = new Promise((resolve, reject) => {
-    const existing = document.querySelector('script[data-superlist-opencv]');
-    const script = existing || document.createElement('script');
-
-    const timeout = setTimeout(
-      () => reject(new Error('O processamento de imagem demorou demais para carregar.')),
-      30000
-    );
-
-    const finish = () => {
-      if (window.cv && window.cv.Mat) {
-        clearTimeout(timeout);
-        resolve(window.cv);
-      }
-    };
-
-    script.addEventListener('error', () => {
-      clearTimeout(timeout);
-      reject(new Error('Não foi possível carregar o processador de imagem.'));
-    }, { once: true });
-
-    if (!existing) {
-      script.src = 'https://docs.opencv.org/4.x/opencv.js';
-      script.async = true;
-      script.dataset.superlistOpencv = 'true';
-      document.head.appendChild(script);
-    }
-
-    if (window.cv && window.cv.Mat) {
-      finish();
-    } else {
-      script.addEventListener('load', () => {
-        if (window.cv && window.cv.Mat) finish();
-        else if (window.cv) {
-          window.cv.onRuntimeInitialized = finish;
-        }
-      }, { once: true });
-
-      if (window.cv) window.cv.onRuntimeInitialized = finish;
-    }
-  });
-
-  return window.__superlistOpenCVPromise;
-}
-
-// Detecta o maior contorno quadrilateral (a nota) e corrige a perspectiva.
-// Se não encontrar um contorno confiável, aplica apenas melhoria de contraste.
+// Melhoria leve da imagem usando apenas recursos nativos do navegador.
+// Não depende de OpenCV, evitando carregamento pesado e travamentos.
 async function enhanceReceiptImage(file, status) {
-  const cv = await loadOpenCV();
-  status.textContent = 'Corrigindo enquadramento, inclinação e contraste...';
+  status.textContent = 'Preparando e melhorando a imagem...';
+
+  if (!file || !file.type || !file.type.startsWith('image/')) {
+    throw new Error('Selecione uma imagem válida da nota.');
+  }
 
   const imageUrl = URL.createObjectURL(file);
+
   try {
     const image = await new Promise((resolve, reject) => {
       const img = new Image();
@@ -1427,135 +1380,26 @@ async function enhanceReceiptImage(file, status) {
       img.src = imageUrl;
     });
 
-    const maxSide = 2200;
+    // Limita a resolução para reduzir o uso de memória e processamento.
+    const maxSide = 1600;
     const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
-    const inputCanvas = document.createElement('canvas');
-    inputCanvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-    inputCanvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-    inputCanvas.getContext('2d').drawImage(image, 0, 0, inputCanvas.width, inputCanvas.height);
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
 
-    const source = cv.imread(inputCanvas);
-    const gray = new cv.Mat();
-    const blurred = new cv.Mat();
-    const edges = new cv.Mat();
-    let warped = null;
-    let output = null;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
 
-    try {
-      cv.cvtColor(source, gray, cv.COLOR_RGBA2GRAY);
-      cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
-      cv.Canny(blurred, edges, 50, 150);
+    const context = canvas.getContext('2d', { willReadFrequently: false });
+    if (!context) throw new Error('Não foi possível preparar a imagem neste navegador.');
 
-      const contours = new cv.MatVector();
-      const hierarchy = new cv.Mat();
-      cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+    // Grayscale + contraste moderado: melhora a leitura sem operações pesadas.
+    context.filter = 'grayscale(1) contrast(1.35) brightness(1.08)';
+    context.drawImage(image, 0, 0, width, height);
+    context.filter = 'none';
 
-      let best = null;
-      let bestArea = 0;
-      const imageArea = source.cols * source.rows;
-
-      for (let i = 0; i < contours.size(); i++) {
-        const contour = contours.get(i);
-        const perimeter = cv.arcLength(contour, true);
-        const approx = new cv.Mat();
-        cv.approxPolyDP(contour, approx, 0.02 * perimeter, true);
-        const area = Math.abs(cv.contourArea(approx));
-
-        if (approx.rows === 4 && area > imageArea * 0.08 && area > bestArea) {
-          bestArea = area;
-          if (best) best.delete();
-          best = approx;
-        } else {
-          approx.delete();
-        }
-        contour.delete();
-      }
-
-      if (best) {
-        const pts = [];
-        for (let i = 0; i < 4; i++) {
-          pts.push({ x: best.intAt(i, 0), y: best.intAt(i, 1) });
-        }
-        best.delete();
-
-        const sum = p => p.x + p.y;
-        const diff = p => p.y - p.x;
-        const ordered = [
-          pts.reduce((a,b) => sum(a) < sum(b) ? a : b),
-          pts.reduce((a,b) => diff(a) < diff(b) ? a : b),
-          pts.reduce((a,b) => sum(a) > sum(b) ? a : b),
-          pts.reduce((a,b) => diff(a) > diff(b) ? a : b)
-        ];
-
-        const [tl, tr, br, bl] = ordered;
-        const width = Math.max(
-          Math.hypot(br.x - bl.x, br.y - bl.y),
-          Math.hypot(tr.x - tl.x, tr.y - tl.y)
-        );
-        const height = Math.max(
-          Math.hypot(tr.x - br.x, tr.y - br.y),
-          Math.hypot(tl.x - bl.x, tl.y - bl.y)
-        );
-
-        if (width > 100 && height > 100) {
-          const srcPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
-            tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
-          ]);
-          const dstPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
-            0, 0, width - 1, 0, width - 1, height - 1, 0, height - 1
-          ]);
-          const transform = cv.getPerspectiveTransform(srcPoints, dstPoints);
-          warped = new cv.Mat();
-          cv.warpPerspective(source, warped, transform, new cv.Size(
-            Math.round(width), Math.round(height)
-          ));
-          srcPoints.delete();
-          dstPoints.delete();
-          transform.delete();
-        }
-      }
-
-      contours.delete();
-      hierarchy.delete();
-
-      const base = warped || source;
-      const grayFinal = new cv.Mat();
-      const enlarged = new cv.Mat();
-      const enhanced = new cv.Mat();
-
-      cv.cvtColor(base, grayFinal, cv.COLOR_RGBA2GRAY);
-      const factor = Math.min(2.5, 1800 / Math.max(grayFinal.cols, grayFinal.rows));
-      cv.resize(grayFinal, enlarged, new cv.Size(
-        Math.round(grayFinal.cols * factor),
-        Math.round(grayFinal.rows * factor)
-      ), 0, 0, cv.INTER_CUBIC);
-
-      const clahe = cv.createCLAHE(2.5, new cv.Size(8, 8));
-      clahe.apply(enlarged, enhanced);
-      output = new cv.Mat();
-      cv.adaptiveThreshold(
-        enhanced, output, 255,
-        cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv.THRESH_BINARY, 31, 11
-      );
-
-      const resultCanvas = document.createElement('canvas');
-      cv.imshow(resultCanvas, output);
-
-      grayFinal.delete();
-      enlarged.delete();
-      enhanced.delete();
-      clahe.delete();
-
-      return resultCanvas;
-    } finally {
-      source.delete();
-      gray.delete();
-      blurred.delete();
-      edges.delete();
-      if (warped) warped.delete();
-      if (output) output.delete();
-    }
+    status.textContent = 'Imagem preparada. Iniciando reconhecimento do texto...';
+    return canvas;
   } finally {
     URL.revokeObjectURL(imageUrl);
   }
