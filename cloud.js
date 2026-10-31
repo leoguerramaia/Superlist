@@ -1,7 +1,6 @@
-
 // ======================================================
 // SUPERLIST - INTEGRAÇÃO COM SUPABASE
-// Utilize somente a chave pública (anon).
+// Utilize somente a chave pública (anon/publishable).
 // Nunca coloque a service_role key neste arquivo.
 // ======================================================
 
@@ -23,6 +22,8 @@ window.SUPERLIST_CONFIG = {
   let channel = null;
   let syncing = false;
   let onlineMembers = 0;
+  let currentUser = null;
+  let authListener = null;
 
   const localKey = "superlist-v1";
 
@@ -36,24 +37,65 @@ window.SUPERLIST_CONFIG = {
       cfg.supabaseUrl &&
       cfg.supabaseUrl.startsWith("https://") &&
       cfg.supabaseAnonKey &&
-      cfg.supabaseAnonKey.length > 30
+      cfg.supabaseAnonKey.length > 20 &&
+      !cfg.supabaseAnonKey.includes("COLE_AQUI")
     );
   }
 
   function emit(label, state = "") {
-    if (callback) {
+    if (typeof callback === "function") {
       callback({
         label,
         state,
-        onlineMembers
+        onlineMembers,
+        userEmail: currentUser ? currentUser.email : null
       });
     }
   }
 
   function status() {
-    return client
-      ? "Supabase conectado — entre para sincronizar"
-      : "Configure o Supabase para ativar a nuvem";
+    if (!client) {
+      return "Configure o Supabase para ativar a nuvem";
+    }
+
+    if (currentUser) {
+      return "Conectado como " + currentUser.email;
+    }
+
+    return "Supabase conectado — entre para sincronizar";
+  }
+
+  function onStatus(fn) {
+    callback = fn;
+
+    emit(
+      currentUser
+        ? "Conectado como " + currentUser.email
+        : "Entre para sincronizar",
+      currentUser ? "online" : ""
+    );
+  }
+
+  // ------------------------------------------------------
+  // IDENTIFICAÇÃO DO USUÁRIO
+  // ------------------------------------------------------
+
+  async function refreshUser() {
+    if (!client) {
+      currentUser = null;
+      return null;
+    }
+
+    const {
+      data: { user },
+      error
+    } = await client.auth.getUser();
+
+    if (error) throw error;
+
+    currentUser = user || null;
+
+    return currentUser;
   }
 
   // ------------------------------------------------------
@@ -61,12 +103,7 @@ window.SUPERLIST_CONFIG = {
   // ------------------------------------------------------
 
   async function requireHousehold() {
-    const {
-      data: { user },
-      error: userError
-    } = await client.auth.getUser();
-
-    if (userError) throw userError;
+    const user = await refreshUser();
 
     if (!user) {
       throw new Error("Faça login primeiro.");
@@ -126,9 +163,17 @@ window.SUPERLIST_CONFIG = {
     if (sessionError) throw sessionError;
 
     if (!session) {
+      currentUser = null;
+      householdId = null;
+
       emit("Entre para sincronizar", "");
+
       return;
     }
+
+    currentUser = session.user;
+
+    emit("Preparando sincronização", "pending");
 
     try {
       await requireHousehold();
@@ -147,7 +192,7 @@ window.SUPERLIST_CONFIG = {
         emit("Sincronizado", "online");
 
       } else {
-        emit("Preparando sincronização", "pending");
+        emit("Preparando primeira sincronização", "pending");
 
         await syncNow();
       }
@@ -262,20 +307,14 @@ window.SUPERLIST_CONFIG = {
       channel = null;
     }
 
-    const {
-      data: { user: currentUser },
-      error
-    } = await client.auth.getUser();
-
-    if (error) throw error;
+    const user = await refreshUser();
 
     channel = client.channel(
       "household-" + householdId,
       {
         config: {
           presence: {
-            key: currentUser?.id ||
-              "guest-" + Math.random().toString(36).slice(2)
+            key: user?.id || "member"
           }
         }
       }
@@ -343,9 +382,7 @@ window.SUPERLIST_CONFIG = {
 
     channel.subscribe(async status => {
       if (status === "SUBSCRIBED") {
-        const {
-          data: { user }
-        } = await client.auth.getUser();
+        const user = await refreshUser();
 
         await channel.track({
           user_id: user?.id || "member",
@@ -368,14 +405,20 @@ window.SUPERLIST_CONFIG = {
       throw new Error("Supabase não está inicializado.");
     }
 
-    const { error } = await client.auth.signInWithPassword({
+    const { data, error } = await client.auth.signInWithPassword({
       email: email.trim(),
       password
     });
 
     if (error) throw error;
 
+    currentUser = data.user;
+
+    emit("Login realizado", "online");
+
     await loadIntoApp();
+
+    return data;
   }
 
   async function signUp(email, password) {
@@ -398,6 +441,11 @@ window.SUPERLIST_CONFIG = {
 
     if (error) throw error;
 
+    if (data.user && data.session) {
+      currentUser = data.user;
+      await loadIntoApp();
+    }
+
     return data;
   }
 
@@ -408,8 +456,11 @@ window.SUPERLIST_CONFIG = {
 
     if (error) throw error;
 
+    currentUser = null;
     householdId = null;
     onlineMembers = 0;
+
+    clearTimeout(timer);
 
     if (channel) {
       await client.removeChannel(channel);
@@ -444,6 +495,12 @@ window.SUPERLIST_CONFIG = {
       throw new Error("Supabase não está inicializado.");
     }
 
+    const user = await refreshUser();
+
+    if (!user) {
+      throw new Error("Faça login primeiro.");
+    }
+
     const { data, error } = await client.rpc(
       "join_household",
       {
@@ -455,7 +512,8 @@ window.SUPERLIST_CONFIG = {
 
     householdId = data;
 
-    await loadIntoApp();
+    // O app.js chama loadIntoApp() depois de join().
+    return data;
   }
 
   // ------------------------------------------------------
@@ -494,6 +552,38 @@ window.SUPERLIST_CONFIG = {
         }
       );
 
+      // Atualiza o estado visual quando a sessão muda.
+      // O carregamento inicial é feito logo abaixo,
+      // evitando duas cargas simultâneas no início.
+
+      authListener = client.auth.onAuthStateChange(
+        (event, session) => {
+          currentUser = session?.user || null;
+
+          if (event === "SIGNED_OUT" || !session) {
+            householdId = null;
+            onlineMembers = 0;
+            clearTimeout(timer);
+
+            if (channel) {
+              client.removeChannel(channel);
+              channel = null;
+            }
+
+            emit("Entre para sincronizar", "");
+
+            return;
+          }
+
+          emit(
+            currentUser
+              ? "Conectado como " + currentUser.email
+              : "Entre para sincronizar",
+            currentUser ? "online" : ""
+          );
+        }
+      );
+
       const {
         data: { session },
         error
@@ -502,25 +592,13 @@ window.SUPERLIST_CONFIG = {
       if (error) throw error;
 
       if (session) {
+        currentUser = session.user;
         await loadIntoApp();
+
       } else {
+        currentUser = null;
         emit("Entre para sincronizar", "");
       }
-
-      client.auth.onAuthStateChange((event, session) => {
-        if (session && event !== "TOKEN_REFRESHED") {
-          setTimeout(() => {
-            loadIntoApp().catch(error => {
-              console.error("Erro ao carregar sessão:", error);
-            });
-          }, 0);
-
-        } else if (!session) {
-          householdId = null;
-
-          emit("Entre para sincronizar", "");
-        }
-      });
 
       window.addEventListener("online", () => {
         if (app && householdId) {
@@ -536,10 +614,14 @@ window.SUPERLIST_CONFIG = {
 
     } catch (error) {
       client = null;
+      currentUser = null;
 
       emit("Erro ao conectar ao Supabase", "pending");
 
-      console.error("Falha na inicialização do Supabase:", error);
+      console.error(
+        "Falha na inicialização do Supabase:",
+        error
+      );
     }
   }
 
@@ -556,10 +638,12 @@ window.SUPERLIST_CONFIG = {
     join,
     getInviteCode,
     scheduleSync,
-    onStatus(fn) {
-      callback = fn;
-    },
-    loadIntoApp
+    onStatus,
+    loadIntoApp,
+
+    getCurrentUser() {
+      return currentUser;
+    }
   };
 
 })();
