@@ -773,11 +773,19 @@ function renderShopping() {
   $('#shoppingMeta').textContent=`Criada em ${dateBR(l.created)} · ${l.items.length} produtos`;
   $('#shoppingStore').textContent=storeName(l.storeId);
 
-  let cats=[...new Set(l.items.map(i=>i.category||'Outros'))];
+  const search = ($('#shoppingSearch')?.value || '')
+  .trim()
+  .toLocaleLowerCase('pt-BR');
+
+const visibleItems = l.items.filter(i =>
+  i.name.toLocaleLowerCase('pt-BR').includes(search)
+);
+
+let cats=[...new Set(visibleItems.map(i=>i.category||'Outros'))];
 
   $('#shoppingItems').innerHTML=cats.length
     ? cats.map(cat=>{
-        let its=l.items.filter(i=>(i.category||'Outros')===cat);
+        let its=visibleItems.filter(i=>(i.category||'Outros')===cat);
         let subtotal=its.reduce((s,i)=>s+(Number(i.qty)||0)*(Number(i.price)||0),0);
 
         return `<section class="shopping-category">
@@ -799,7 +807,14 @@ function renderShopping() {
             <input type="number" min="0" step="${i.unit==='kg'||i.unit==='l'?'.01':'1'}" data-qty="${i.id}" value="${i.qty}" aria-label="Quantidade">
             <input type="number" min="0" step=".01" data-price="${i.id}" value="${i.price||''}" placeholder="Preço (R$)" aria-label="Preço">
             <span class="shop-total">${money((Number(i.qty)||0)*(Number(i.price)||0))}</span>
-            <button class="scan-btn" data-scan="${i.id}" title="Associar código de barras">▥</button>
+            <button class="scan-btn" data-scan="${i.id}"
+  title="Associar código de barras">▥</button>
+
+<button class="scan-btn" data-edit-shopping-item="${i.id}"
+  title="Editar item">✎</button>
+
+<button class="scan-btn" data-remove-shopping-item="${i.id}"
+  title="Retirar da compra">×</button>
           </div>`).join('')}
         </section>`;
       }).join('')
@@ -1427,7 +1442,22 @@ function init() {
       renderProducts();
       return;
     }
+const editShopping = e.target.closest('[data-edit-shopping-item]');
+if (editShopping) {
+  editShoppingItem(editShopping.dataset.editShoppingItem);
+  return;
+}
 
+const removeShopping = e.target.closest('[data-remove-shopping-item]');
+if (removeShopping) {
+  removeShoppingItem(removeShopping.dataset.removeShoppingItem);
+  return;
+}
+
+if (e.target.closest('#addShoppingProduct')) {
+  addCatalogProductToList();
+  return;
+}
     let scan=e.target.closest('[data-scan]');
 
     if(scan) {
@@ -1435,7 +1465,7 @@ function init() {
       return;
     }
   });
-
+$('#shoppingSearch').addEventListener('input', renderShopping);
   $('#closeModal').onclick=closeModal;
 
   $('#modalBackdrop').addEventListener('click',e=>{
