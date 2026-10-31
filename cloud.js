@@ -516,6 +516,71 @@ window.SUPERLIST_CONFIG = {
     return data;
   }
 
+  // ======================================================
+  // FOTOS DOS PRODUTOS - SUPABASE STORAGE
+  // ======================================================
+
+  async function uploadProductPhoto(file) {
+    if (!client) {
+      throw new Error("Supabase não inicializado.");
+    }
+
+    if (!file || !file.type.startsWith("image/")) {
+      throw new Error("Selecione uma imagem válida.");
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error("A imagem deve ter no máximo 5 MB.");
+    }
+
+    const house = await requireHousehold();
+    const user = await refreshUser();
+
+    const extension = (
+      file.type.split("/")[1] || "jpg"
+    ).replace("jpeg", "jpg");
+
+    const filePath =
+      `${house}/${user.id}/${Date.now()}-${Math.random()
+        .toString(36).slice(2)}.${extension}`;
+
+    const { data, error } = await client.storage
+      .from("produtos")
+      .upload(filePath, file, {
+        contentType: file.type,
+        upsert: false
+      });
+
+    if (error) throw error;
+
+    return data.path;
+  }
+
+  async function getProductPhotoUrl(path) {
+    if (!client || !path) return "";
+
+    const { data, error } = await client.storage
+      .from("produtos")
+      .createSignedUrl(path, 3600);
+
+    if (error) {
+      console.error("Erro ao carregar foto:", error);
+      return "";
+    }
+
+    return data.signedUrl;
+  }
+
+  async function deleteProductPhoto(path) {
+    if (!client || !path) return;
+
+    const { error } = await client.storage
+      .from("produtos")
+      .remove([path]);
+
+    if (error) throw error;
+  }
+
   // ------------------------------------------------------
   // INICIALIZAÇÃO
   // ------------------------------------------------------
