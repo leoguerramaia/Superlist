@@ -1689,26 +1689,18 @@ function openPurchaseModal() {
         <small class="muted">Tire uma foto ou escolha uma imagem da galeria. A imagem será ajustada antes da leitura.</small>
         <div id="receiptPreview" style="margin-top:10px"></div>
         <div class="form-actions">
-          <button type="button" class="btn secondary" id="readReceiptBtn">✨ Analisar nota com IA</button>
-          <button type="button" class="btn secondary" id="readReceiptQrBtn">▦ Ler QR Code pela câmera</button>
-          <button type="button" class="btn secondary" id="stopReceiptQrBtn" disabled>Parar câmera</button>
-          <button type="button" class="btn secondary" id="readReceiptQrPhotoBtn">Ler QR de uma foto (opcional)</button>
+          <button type="button" class="btn primary" id="readReceiptBtn">✨ Analisar nota com IA</button>
         </div>
-        <div id="receiptQrCameraBox" style="display:none;margin-top:10px;background:#111;border-radius:10px;overflow:hidden">
-          <video id="receiptQrVideo" autoplay muted playsinline style="width:100%;max-height:300px;object-fit:contain"></video>
-        </div>
-        <input type="file" id="receiptQrPhotoInput" accept="image/*" hidden>
-        <div class="form-actions">
+        <div id="receiptProgress" class="receipt-progress" style="display:none" aria-live="polite">
+          <div class="receipt-progress-top"><span class="receipt-spinner"></span><strong id="receiptProgressMessage">Preparando a análise...</strong></div>
+          <div class="receipt-progress-track"><span></span></div>
+          <small class="muted">Isso pode levar alguns instantes. Não feche esta janela.</small>
         </div>
         <p id="receiptOcrStatus" class="muted" aria-live="polite"></p>
         <div id="receiptAiReview" class="invite-box" style="display:none"></div>
         <div class="field">
           <label>Texto reconhecido na nota</label>
-          <textarea id="receiptOcrText" rows="7" placeholder="O texto identificado aparecerá aqui..."></textarea>
-        </div>
-        <div class="field">
-          <label>Conteúdo do QR Code (NFC-e), se identificado</label>
-          <textarea id="receiptQrText" rows="3" placeholder="O endereço ou conteúdo do QR Code aparecerá aqui..." readonly></textarea>
+          <textarea id="receiptOcrText" rows="5" placeholder="O texto identificado aparecerá aqui..."></textarea>
         </div>
       </div>
 
@@ -1726,188 +1718,188 @@ function openPurchaseModal() {
       </div>
 
       <div class="field">
-        <label>Itens da nota fiscal</label>
-        <textarea name="items" rows="7" required placeholder="Um produto por linha:
-Arroz 5 kg; 1; 25,90
-Leite integral; 2; 9,98
-Banana; 1,5; 8,50"></textarea>
-        <small class="muted">Formato: produto; quantidade; valor total pago pelo item. Confira os valores antes de registrar.</small>
-      </div>
-
-      <div class="field">
-        <label>Produtos que ainda não existem no catálogo</label>
-        <label style="display:flex;gap:8px;align-items:center">
-          <input type="checkbox" name="approveNew">
-          Aprovo cadastrar os novos produtos identificados
-        </label>
+        <div class="receipt-items-heading">
+          <div><label>Itens da nota fiscal</label><small class="muted">Edite os dados e aprove individualmente cada produto.</small></div>
+          <button type="button" class="btn secondary" id="addReceiptItemBtn">＋ Adicionar item</button>
+        </div>
+        <div id="receiptItemsEmpty" class="empty-state">Envie uma foto para a IA identificar os produtos ou adicione um item manualmente.</div>
+        <div id="receiptItemsTableWrap" class="receipt-table-wrap" style="display:none">
+          <table class="receipt-items-table">
+            <thead><tr><th>Produto</th><th>Preço total (R$)</th><th>Unidade</th><th>Ação</th></tr></thead>
+            <tbody id="receiptItemsBody"></tbody>
+          </table>
+        </div>
+        <div id="receiptApprovedSummary" class="receipt-approved-summary" aria-live="polite"></div>
       </div>
 
       <div class="form-actions">
         <button type="button" class="btn secondary" data-cancel>Cancelar</button>
-        <button type="submit" class="btn primary">Conferir e registrar compra</button>
+        <button type="submit" class="btn primary">Registrar produtos aprovados</button>
       </div>
     </form>
   `, 'COMPRA AVULSA');
 
+  // Estilos locais: a melhoria fica restrita ao modal de registro de compra.
+  if (!document.getElementById('receiptReviewStyles')) {
+    const style = document.createElement('style');
+    style.id = 'receiptReviewStyles';
+    style.textContent = `
+      .receipt-progress{margin:14px 0;padding:13px;border:1px solid #dce8e2;border-radius:12px;background:#f7fbf8}
+      .receipt-progress-top{display:flex;align-items:center;gap:9px;margin-bottom:11px;color:#245b43;font-size:13px}
+      .receipt-spinner{width:17px;height:17px;border:2px solid #c9ddd1;border-top-color:#23835d;border-radius:50%;animation:receiptSpin .8s linear infinite;flex:none}
+      .receipt-progress-track{height:7px;overflow:hidden;border-radius:99px;background:#e1ebe5;margin-bottom:8px}
+      .receipt-progress-track span{display:block;width:38%;height:100%;border-radius:99px;background:#23835d;animation:receiptSlide 1.35s ease-in-out infinite}
+      @keyframes receiptSpin{to{transform:rotate(360deg)}}
+      @keyframes receiptSlide{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
+      .receipt-items-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+      .receipt-items-heading label{display:block;margin-bottom:3px}
+      .receipt-table-wrap{width:100%;overflow-x:auto;border:1px solid #e3e9e5;border-radius:10px}
+      .receipt-items-table{width:100%;min-width:650px;border-collapse:collapse;font-size:13px}
+      .receipt-items-table th{padding:10px 8px;text-align:left;background:#f5f8f6;color:#53645a;font-weight:600;white-space:nowrap}
+      .receipt-items-table td{padding:8px;border-top:1px solid #edf0ee;vertical-align:middle}
+      .receipt-items-table input,.receipt-items-table select{width:100%;min-width:90px;box-sizing:border-box;padding:9px 8px;border:1px solid #dce3df;border-radius:7px;background:#fff;color:#24342b;font:inherit}
+      .receipt-items-table .receipt-product-input{min-width:190px}
+      .receipt-unit-cell{display:flex;gap:6px;min-width:145px}
+      .receipt-unit-cell input{width:72px;min-width:65px}
+      .receipt-unit-cell select{min-width:65px}
+      .receipt-row-actions{display:flex;gap:5px;white-space:nowrap}
+      .receipt-row-actions button{padding:7px 9px;border:1px solid #dce3df;border-radius:7px;background:#fff;cursor:pointer;font:inherit}
+      .receipt-row-actions .is-approved{background:#e8f5ed;border-color:#9bc9aa;color:#17663b}
+      .receipt-row-actions .receipt-delete{color:#a52c2c}
+      .receipt-row-approved{background:#fbfefc}
+      .receipt-approved-summary{font-size:12px;color:#64736a;margin-top:8px}
+      @media(max-width:600px){.receipt-items-heading{align-items:flex-start}.receipt-items-heading .btn{width:100%}}
+    `;
+    document.head.appendChild(style);
+  }
+
   const receiptInput = $('#receiptPhoto');
   const preview = $('#receiptPreview');
   const status = $('#receiptOcrStatus');
-  let enhancedCanvas = null;
-  let originalFile = null;
+  const progress = $('#receiptProgress');
+  const progressMessage = $('#receiptProgressMessage');
+  const review = $('#receiptAiReview');
+  const itemsBody = $('#receiptItemsBody');
+  const itemsWrap = $('#receiptItemsTableWrap');
+  const itemsEmpty = $('#receiptItemsEmpty');
+  const approvedSummary = $('#receiptApprovedSummary');
   let aiReceiptAnalysis = null;
+  let receiptRows = [];
+  let progressTimer = null;
+
+  const parseReceiptDecimal = value => {
+    const raw = String(value ?? '').trim().replace(/\s/g, '');
+    if (!raw) return NaN;
+    return raw.includes(',') ? Number(raw.replace(/\./g, '').replace(',', '.')) : Number(raw);
+  };
+
+  function renderReceiptRows() {
+    itemsWrap.style.display = receiptRows.length ? 'block' : 'none';
+    itemsEmpty.style.display = receiptRows.length ? 'none' : 'block';
+    itemsBody.innerHTML = receiptRows.map(row => `
+      <tr data-receipt-row="${esc(row.id)}" class="${row.approved ? 'receipt-row-approved' : ''}">
+        <td><input class="receipt-product-input" data-receipt-field="name" value="${esc(row.name)}" aria-label="Produto"></td>
+        <td><input data-receipt-field="total" inputmode="decimal" value="${esc(String(row.total).replace('.', ','))}" aria-label="Preço total"></td>
+        <td><div class="receipt-unit-cell"><input data-receipt-field="quantity" type="number" min="0.001" step="0.001" value="${esc(String(row.quantity).replace('.', ','))}" aria-label="Quantidade"><select data-receipt-field="unit" aria-label="Unidade">${['un','kg','g','l','ml','cx','pct'].map(u => `<option value="${u}" ${row.unit === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div></td>
+        <td><div class="receipt-row-actions"><button type="button" data-receipt-approve="${esc(row.id)}" class="${row.approved ? 'is-approved' : ''}">${row.approved ? '✓ Aprovado' : 'Aprovar'}</button><button type="button" class="receipt-delete" data-receipt-delete="${esc(row.id)}" aria-label="Excluir produto">Excluir</button></div></td>
+      </tr>
+    `).join('');
+    const approved = receiptRows.filter(r => r.approved).length;
+    approvedSummary.textContent = `${approved} de ${receiptRows.length} produto(s) aprovado(s) para registro.`;
+  }
 
   receiptInput.addEventListener('change', () => {
     const file = receiptInput.files[0];
-    enhancedCanvas = null;
-    originalFile = file || null;
-
-    if (!file) {
-      preview.innerHTML = '';
-      return;
-    }
+    aiReceiptAnalysis = null;
+    receiptRows = [];
+    renderReceiptRows();
+    if (!file) { preview.innerHTML = ''; return; }
     if (!file.type.startsWith('image/')) {
       toast('Selecione uma imagem válida.');
       receiptInput.value = '';
       preview.innerHTML = '';
       return;
     }
-
     const url = URL.createObjectURL(file);
     preview.innerHTML = `<img src="${url}" alt="Foto original da nota" style="width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid #ddd">`;
-    status.textContent = 'Foto carregada. Você pode melhorar a imagem e iniciar a leitura.';
+    status.textContent = 'Foto carregada. Clique em “Analisar nota com IA”.';
   });
 
-  let receiptQrControls = null;
-  let receiptQrStarting = false;
+  $('#addReceiptItemBtn').addEventListener('click', () => {
+    receiptRows.push({ id: uid(), name: '', total: '', quantity: 1, unit: 'un', approved: false, catalogMatchId: null });
+    renderReceiptRows();
+    itemsBody.querySelector('tr:last-child input')?.focus();
+  });
 
-  const stopReceiptQrCamera = () => {
-    if (receiptQrControls) {
-      try { receiptQrControls.stop(); } catch (e) {}
-      receiptQrControls = null;
-    }
-    const video = $('#receiptQrVideo');
-    if (video?.srcObject) {
-      video.srcObject.getTracks().forEach(track => track.stop());
-      video.srcObject = null;
-    }
-    const box = $('#receiptQrCameraBox');
-    if (box) box.style.display = 'none';
-    const stopButton = $('#stopReceiptQrBtn');
-    if (stopButton) stopButton.disabled = true;
-    const startButton = $('#readReceiptQrBtn');
-    if (startButton) {
-      startButton.disabled = false;
-      startButton.textContent = '▦ Ler QR Code pela câmera';
-    }
-  };
+  itemsBody.addEventListener('input', e => {
+    const field = e.target.dataset.receiptField;
+    if (!field) return;
+    const tr = e.target.closest('[data-receipt-row]');
+    const row = receiptRows.find(r => r.id === tr?.dataset.receiptRow);
+    if (row) row[field] = e.target.value;
+  });
 
-  $('#readReceiptQrBtn').addEventListener('click', async () => {
-    if (receiptQrStarting || receiptQrControls) return;
-    const button = $('#readReceiptQrBtn');
-    const video = $('#receiptQrVideo');
-    const box = $('#receiptQrCameraBox');
-    const stopButton = $('#stopReceiptQrBtn');
+  itemsBody.addEventListener('change', e => {
+    const field = e.target.dataset.receiptField;
+    if (!field) return;
+    const tr = e.target.closest('[data-receipt-row]');
+    const row = receiptRows.find(r => r.id === tr?.dataset.receiptRow);
+    if (row) row[field] = e.target.value;
+  });
 
-    if (!navigator.mediaDevices?.getUserMedia) {
-      status.textContent = 'A câmera exige acesso por HTTPS e permissão do navegador.';
-      return toast('Câmera indisponível. Abra o site em HTTPS e permita o acesso.');
-    }
-
-    receiptQrStarting = true;
-    button.disabled = true;
-    button.textContent = 'Abrindo câmera...';
-    box.style.display = 'block';
-    status.textContent = 'Solicitando acesso à câmera...';
-
-    try {
-      receiptQrControls = await startReceiptQrCamera(video, status, value => {
-        $('#receiptQrText').value = value;
-        status.textContent = 'QR Code lido com sucesso! O conteúdo foi preenchido abaixo.';
-        stopReceiptQrCamera();
-        toast('QR Code identificado!');
-      });
-      stopButton.disabled = false;
-    } catch (error) {
-      console.error('Erro ao iniciar câmera para QR Code:', error);
-      stopReceiptQrCamera();
-      status.textContent = error.message || 'Não foi possível iniciar a câmera.';
-      toast(error.name === 'NotAllowedError'
-        ? 'Permita o acesso à câmera nas configurações do navegador.'
-        : 'Não foi possível abrir a câmera. Verifique se o site está em HTTPS.');
-    } finally {
-      receiptQrStarting = false;
-      if (!receiptQrControls) {
-        button.disabled = false;
-        button.textContent = '▦ Ler QR Code pela câmera';
+  itemsBody.addEventListener('click', e => {
+    const approveButton = e.target.closest('[data-receipt-approve]');
+    const deleteButton = e.target.closest('[data-receipt-delete]');
+    if (approveButton) {
+      const row = receiptRows.find(r => r.id === approveButton.dataset.receiptApprove);
+      if (!row) return;
+      const price = parseReceiptDecimal(row.total);
+      const qty = parseReceiptDecimal(row.quantity);
+      if (!row.name.trim() || !Number.isFinite(price) || price < 0 || !Number.isFinite(qty) || qty <= 0) {
+        return toast('Preencha produto, preço e quantidade/unidade corretamente antes de aprovar.');
       }
+      row.approved = !row.approved;
+      renderReceiptRows();
     }
-  });
-
-  $('#stopReceiptQrBtn').addEventListener('click', () => {
-    stopReceiptQrCamera();
-    status.textContent = 'Leitura pela câmera interrompida.';
-  });
-
-  $('#readReceiptQrPhotoBtn').addEventListener('click', () => {
-    $('#receiptQrPhotoInput').click();
-  });
-
-  $('#receiptQrPhotoInput').addEventListener('change', async e => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const button = $('#readReceiptQrPhotoBtn');
-    button.disabled = true;
-    status.textContent = 'Tentando ler o QR Code da imagem...';
-
-    try {
-      const value = await readReceiptQr(file, status);
-      if (value) {
-        $('#receiptQrText').value = value;
-        status.textContent = 'QR Code identificado na imagem!';
-        toast('QR Code identificado!');
-      } else {
-        status.textContent = 'QR Code não encontrado. Tente enquadrar o código inteiro, sem reflexos e sem cortar as bordas.';
-        toast('Não foi possível identificar o QR Code nessa imagem.');
-      }
-    } finally {
-      button.disabled = false;
-      e.target.value = '';
+    if (deleteButton) {
+      receiptRows = receiptRows.filter(r => r.id !== deleteButton.dataset.receiptDelete);
+      renderReceiptRows();
     }
-  });
-
-  // Encerra a câmera ao fechar a janela de compra.
-  $('#closeModal').addEventListener('click', stopReceiptQrCamera);
-  $('#modalBackdrop').addEventListener('click', e => {
-    if (e.target.id === 'modalBackdrop') stopReceiptQrCamera();
   });
 
   $('#readReceiptBtn').addEventListener('click', async () => {
     const file = receiptInput.files[0];
     if (!file) return toast('Selecione ou fotografe a nota fiscal.');
-
     if (!window.SuperlistCloud?.analyzeReceipt) {
-      return toast('Integração OpenAI ainda não configurada. Configure o Supabase e publique a Edge Function.');
+      return toast('Integração de IA não disponível. Verifique a configuração do Supabase.');
     }
 
     const button = $('#readReceiptBtn');
     const output = $('#receiptOcrText');
-    const review = $('#receiptAiReview');
     button.disabled = true;
-    button.textContent = 'Analisando com IA...';
-    status.textContent = 'Enviando a imagem com segurança para a IA...';
+    button.textContent = 'Analisando...';
+    progress.style.display = 'block';
+    progressMessage.textContent = 'Enviando a imagem com segurança...';
+    status.textContent = 'A IA está processando a nota fiscal.';
     review.style.display = 'none';
     review.innerHTML = '';
 
+    const progressMessages = [
+      'Enviando a imagem com segurança...',
+      'A IA está identificando os produtos e quantidades...',
+      'Conferindo preços, descontos e totais...',
+      'Organizando os produtos para sua revisão...'
+    ];
+    let progressIndex = 0;
+    progressTimer = setInterval(() => {
+      progressIndex = (progressIndex + 1) % progressMessages.length;
+      progressMessage.textContent = progressMessages[progressIndex];
+    }, 4500);
+
     try {
       const analysis = await window.SuperlistCloud.analyzeReceipt(file, (db.products || []).map(p => ({
-        id: p.id,
-        name: p.name,
-        category: p.category || 'Outros',
-        unit: p.unit || 'un',
-        netAmount: p.netAmount || 1,
-        netUnit: p.netUnit || p.unit || 'un',
-        barcode: p.barcode || ''
+        id: p.id, name: p.name, category: p.category || 'Outros', unit: p.unit || 'un',
+        netAmount: p.netAmount || 1, netUnit: p.netUnit || p.unit || 'un', barcode: p.barcode || ''
       })));
 
       aiReceiptAnalysis = analysis;
@@ -1916,72 +1908,45 @@ Banana; 1,5; 8,50"></textarea>
 
       const storeSelect = $('#purchaseForm [name="storeId"]');
       if (analysis.store_name && storeSelect) {
-        const storeMatch = (db.stores || []).find(s =>
-          normalizeReceiptText(s.name) === normalizeReceiptText(analysis.store_name)
-        );
+        const storeMatch = (db.stores || []).find(s => normalizeReceiptText(s.name) === normalizeReceiptText(analysis.store_name));
         if (storeMatch) storeSelect.value = storeMatch.id;
       }
-
       const dateInput = $('#purchaseForm [name="date"]');
-      if (analysis.invoice_date && /^\d{4}-\d{2}-\d{2}$/.test(analysis.invoice_date) && dateInput) {
-        dateInput.value = analysis.invoice_date;
-      }
+      if (analysis.invoice_date && /^\d{4}-\d{2}-\d{2}$/.test(analysis.invoice_date) && dateInput) dateInput.value = analysis.invoice_date;
 
-      const lines = items.map(item => {
-        const matched = item.catalog_match_id
-          ? db.products.find(p => String(p.id) === String(item.catalog_match_id))
-          : null;
-        const label = matched ? matched.name : (item.name || 'Produto não identificado');
-        const qty = Number(item.quantity) || 1;
-        const total = Number(item.paid_total ?? item.line_total) || 0;
-        return `${label}; ${String(qty).replace('.', ',')}; ${total.toFixed(2).replace('.', ',')}`;
+      receiptRows = items.map(item => {
+        const matched = item.catalog_match_id ? db.products.find(p => String(p.id) === String(item.catalog_match_id)) : null;
+        return {
+          id: uid(), name: matched?.name || item.name || 'Produto não identificado',
+          total: Number(item.paid_total ?? item.line_total) || 0,
+          quantity: Number(item.quantity) || 1,
+          unit: (() => { const raw = String(item.unit || matched?.unit || 'un').toLowerCase(); return ({und:'un',unid:'un',unidade:'un',lt:'l',litro:'l',litros:'l',grama:'g',gramas:'g',quilo:'kg',quilos:'kg',pacote:'pct',caixa:'cx'}[raw] || (['un','kg','g','l','ml','cx','pct'].includes(raw) ? raw : 'un')); })(),
+          approved: false,
+          catalogMatchId: matched?.id || item.catalog_match_id || null
+        };
       });
+      renderReceiptRows();
 
-      const itemsField = $('#purchaseForm [name="items"]');
-      if (itemsField) itemsField.value = lines.join('\n');
-
-      const matchedCount = items.filter(x => x.catalog_match_id && db.products.some(p => String(p.id) === String(x.catalog_match_id))).length;
-      const unmatchedCount = items.length - matchedCount;
-      const rows = items.map((item, index) => {
-        const matched = item.catalog_match_id
-          ? db.products.find(p => String(p.id) === String(item.catalog_match_id))
-          : null;
-        const conf = item.match_confidence || 'low';
-        const badgeColor = conf === 'high' ? '#16794b' : conf === 'medium' ? '#9a6700' : '#b42318';
-        return `<tr>
-          <td style="padding:6px 4px">${esc(item.name || 'Não identificado')}</td>
-          <td style="padding:6px 4px">${esc(matched?.name || 'Novo / revisar')}</td>
-          <td style="padding:6px 4px;text-align:right">${esc(String(item.quantity ?? ''))} ${esc(item.unit || '')}</td>
-          <td style="padding:6px 4px;text-align:right">${money(Number(item.paid_total ?? item.line_total) || 0)}</td>
-          <td style="padding:6px 4px;color:${badgeColor};font-weight:600">${esc(conf)}</td>
-        </tr>`;
-      }).join('');
-
-      review.innerHTML = `
-        <strong>Análise da IA — confira antes de salvar</strong>
-        <p class="muted">${items.length} item(ns) · ${matchedCount} associado(s) ao catálogo · ${unmatchedCount} para revisar/cadastrar</p>
-        <div style="overflow:auto">
-          <table style="width:100%;font-size:12px;border-collapse:collapse">
-            <thead><tr><th style="text-align:left">Na nota</th><th style="text-align:left">Catálogo</th><th>Qtd.</th><th>Total</th><th>Confiança</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-        <p class="muted">A IA pode cometer erros. Confira nomes, quantidades, descontos e valores na imagem original.</p>`;
+      const matchedCount = receiptRows.filter(r => r.catalogMatchId).length;
+      const unmatchedCount = receiptRows.length - matchedCount;
+      review.innerHTML = `<strong>Análise da IA concluída — confira cada linha</strong><p class="muted">${items.length} item(ns) identificado(s) · ${matchedCount} associado(s) ao catálogo · ${unmatchedCount} para revisar/cadastrar.</p><p class="muted">A IA pode cometer erros. Edite os campos e aprove somente os produtos conferidos.</p>`;
       review.style.display = 'block';
 
       if (analysis.invoice_total != null) {
-        status.textContent = `Leitura concluída. Total informado na nota: ${money(analysis.invoice_total)}. Total dos itens interpretados: ${money(items.reduce((sum, x) => sum + (Number(x.paid_total ?? x.line_total) || 0), 0))}. Confira antes de registrar.`;
+        status.textContent = `Leitura concluída. Total informado na nota: ${money(analysis.invoice_total)}. Confira os itens antes de registrar.`;
       } else {
         status.textContent = `Leitura concluída: ${items.length} item(ns) extraído(s). Confira os dados antes de registrar.`;
       }
-
+      progressMessage.textContent = 'Análise concluída!';
       toast(`${items.length} item(ns) analisado(s) pela IA.`);
-
     } catch (error) {
       console.error('Erro na análise IA da nota:', error);
       status.textContent = error.message || 'Não foi possível analisar a nota.';
       toast(error.message || 'Falha na análise da nota.');
     } finally {
+      if (progressTimer) clearInterval(progressTimer);
+      progressTimer = null;
+      progress.style.display = 'none';
       button.disabled = false;
       button.textContent = '✨ Analisar nota com IA';
     }
@@ -1989,76 +1954,63 @@ Banana; 1,5; 8,50"></textarea>
 
   $('#purchaseForm').addEventListener('submit', e => {
     e.preventDefault();
-
     const data = formData(e.target);
-    const lines = String(data.items || '').split(/\r?\n/)
-      .map(line => line.trim()).filter(Boolean);
     const store = db.stores.find(s => s.id === data.storeId);
-
     if (!store) return toast('Selecione um supermercado cadastrado.');
 
-    const parsed = lines.map(line => {
-      const parts = line.split(';').map(x => x.trim());
-      if (parts.length < 3) return null;
-      const name = parts[0];
-      const qty = Number(parts[1].replace(',', '.'));
-      const total = Number(parts[2].replace(/\./g, '').replace(',', '.'));
-      if (!name || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(total) || total < 0) return null;
-      return { name, qty, total };
-    });
+    const approvedRows = receiptRows.filter(row => row.approved);
+    if (!approvedRows.length) return toast('Aprove pelo menos um produto para registrar a compra.');
 
-    if (!parsed.length || parsed.some(x => !x)) {
-      return toast('Revise os itens. Use produto; quantidade; valor total.');
-    }
-
-    const unknown = parsed.filter(item => !findReceiptCatalogMatch(item.name));
-
-    if (unknown.length && !data.approveNew) {
-      return toast('Há produtos novos. Marque a aprovação para cadastrá-los.');
+    const parsed = approvedRows.map(row => ({
+      name: String(row.name || '').trim(),
+      qty: parseReceiptDecimal(row.quantity),
+      total: parseReceiptDecimal(row.total),
+      unit: String(row.unit || 'un').toLowerCase(),
+      catalogMatchId: row.catalogMatchId
+    }));
+    if (parsed.some(item => !item.name || !Number.isFinite(item.qty) || item.qty <= 0 || !Number.isFinite(item.total) || item.total < 0)) {
+      return toast('Revise os produtos aprovados: nome, preço e quantidade precisam ser válidos.');
     }
 
     const purchaseId = uid();
     db.purchases ||= [];
     db.purchases.push({
-      id: purchaseId,
-      storeId: store.id,
-      date: data.date,
+      id: purchaseId, storeId: store.id, date: data.date,
       total: parsed.reduce((sum, item) => sum + item.total, 0),
-      itemCount: parsed.length,
-      createdAt: new Date().toISOString(),
-      receiptQr: $('#receiptQrText')?.value || ''
+      itemCount: parsed.length, createdAt: new Date().toISOString(), receiptQr: ''
     });
 
-    parsed.forEach((item, itemIndex) => {
-      const aiItem = aiReceiptAnalysis?.items?.[itemIndex] || null;
-      const exactAiMatch = aiItem?.catalog_match_id
-        ? db.products.find(p => String(p.id) === String(aiItem.catalog_match_id))
+    parsed.forEach(item => {
+      const exactMatch = item.catalogMatchId
+        ? db.products.find(p => String(p.id) === String(item.catalogMatchId))
         : null;
-      const catalogMatch = exactAiMatch ? { product: exactAiMatch, score: 1 } : findReceiptCatalogMatch(item.name);
+      const catalogMatch = exactMatch ? { product: exactMatch, score: 1 } : findReceiptCatalogMatch(item.name);
       let product = catalogMatch?.product || null;
 
       if (!product) {
         product = {
-          id: uid(), name: item.name, category: 'Outros', unit: 'un',
-          netAmount: 1, netUnit: 'un', barcode: '', photo: '', active: true
+          id: uid(), name: item.name, category: 'Outros', unit: item.unit,
+          netAmount: 1, netUnit: ['kg','g','l','ml'].includes(item.unit) ? item.unit : 'un',
+          barcode: '', photo: '', active: true
         };
         db.products.push(product);
       }
 
+      // Mantém a unidade identificada/editada na linha da nota para o histórico.
       db.prices.push({
         id: uid(), purchaseId, listId: null,
         productId: product.id, productName: product.name,
         storeId: store.id, date: data.date,
         price: item.total / item.qty, totalPaid: item.total,
-        quantity: item.qty, unit: product.unit,
+        quantity: item.qty, unit: item.unit,
         netAmount: product.netAmount || 1,
-        netUnit: product.netUnit || product.unit
+        netUnit: product.netUnit || item.unit
       });
     });
 
     save();
     closeModal();
-    toast('Compra registrada e histórico de preços atualizado!');
+    toast('Compra registrada com os produtos aprovados!');
   });
 }
 
