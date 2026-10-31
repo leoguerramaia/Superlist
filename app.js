@@ -1417,27 +1417,104 @@ async function loadTesseract() {
   return window.Tesseract;
 }
 
-async function readReceiptQr(file, status) {
-  if (!('BarcodeDetector' in window)) {
-    status.textContent = 'Leitura automática do QR Code não disponível neste navegador.';
-    return '';
-  }
+async function loadZXingLibrary() {
+  if (window.ZXingBrowser?.BrowserMultiFormatReader) return window.ZXingBrowser;
 
-  try {
-    const detector = new BarcodeDetector({ formats: ['qr_code'] });
-    const bitmap = await createImageBitmap(file);
-    const codes = await detector.detect(bitmap);
-    bitmap.close?.();
-    const value = codes.find(code => code.rawValue)?.rawValue || '';
-    if (value) {
-      $('#receiptQrText').value = value;
-      status.textContent = 'QR Code identificado. O conteúdo foi exibido para conferência.';
+  if (window.__superlistZXingPromise) return window.__superlistZXingPromise;
+
+  window.__superlistZXingPromise = new Promise((resolve, reject) => {
+    let script = document.querySelector('script[data-superlist-zxing]');
+    if (!script) {
+      script = document.createElement('script');
+      script.src = 'https://unpkg.com/@zxing/browser@latest';
+      script.async = true;
+      script.dataset.superlistZxing = 'true';
+      document.head.appendChild(script);
     }
-    return value;
+
+    const timer = setTimeout(() => reject(new Error('O leitor de QR Code demorou para carregar.')), 20000);
+
+    const check = () => {
+      if (window.ZXingBrowser?.BrowserMultiFormatReader) {
+        clearTimeout(timer);
+        resolve(window.ZXingBrowser);
+      }
+    };
+
+    script.addEventListener('load', check, { once: true });
+    script.addEventListener('error', () => {
+      clearTimeout(timer);
+      reject(new Error('Não foi possível carregar o leitor de QR Code.'));
+    }, { once: true });
+
+    check();
+  });
+
+  return window.__superlistZXingPromise;
+}
+
+// Leitura de QR em uma imagem já existente: tenta BarcodeDetector e depois ZXing,
+// com ampliações para ajudar quando o QR está pequeno na foto.
+async function readReceiptQr(file, status) {
+  if (!file) return '';
+
+  const imageUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('Não foi possível abrir a imagem do QR Code.'));
+      image.src = imageUrl;
+    });
+
+    if ('BarcodeDetector' in window) {
+      try {
+        const detector = new BarcodeDetector({ formats: ['qr_code'] });
+        for (const factor of [1, 1.5, 2]) {
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.min(2400, Math.round(img.naturalWidth * factor));
+          canvas.height = Math.min(2400, Math.round(img.naturalHeight * factor));
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const results = await detector.detect(canvas);
+          const value = results.find(x => x.rawValue)?.rawValue;
+          if (value) return value;
+        }
+      } catch (err) {
+        console.warn('BarcodeDetector não conseguiu ler a imagem; tentando ZXing.', err);
+      }
+    }
+
+    const ZXing = await loadZXingLibrary();
+    const reader = new ZXing.BrowserMultiFormatReader();
+    const result = await reader.decodeFromImageElement(img);
+    return result?.getText?.() || '';
   } catch (error) {
-    console.warn('Falha ao ler QR Code da nota:', error);
+    console.warn('Falha na leitura do QR Code da imagem:', error);
     return '';
+  } finally {
+    URL.revokeObjectURL(imageUrl);
   }
+}
+
+// Leitura ao vivo pela câmera, sem exigir foto da nota.
+async function startReceiptQrCamera(video, status, onFound) {
+  const ZXing = await loadZXingLibrary();
+  const reader = new ZXing.BrowserMultiFormatReader();
+
+  const controls = await reader.decodeFromVideoDevice(
+    undefined,
+    video,
+    (result, error) => {
+      if (result) {
+        const value = result.getText();
+        if (value) onFound(value);
+      }
+    }
+  );
+
+  status.textContent = 'Aponte a câmera para o QR Code da nota fiscal.';
+  return controls;
 }
 
 function openPurchaseModal() {
@@ -1454,7 +1531,15 @@ function openPurchaseModal() {
         <div id="receiptPreview" style="margin-top:10px"></div>
         <div class="form-actions">
           <button type="button" class="btn secondary" id="readReceiptBtn">✨ Melhorar foto e ler nota</button>
-          <button type="button" class="btn secondary" id="readReceiptQrBtn">▦ Ler QR Code</button>
+          <button type="button" class="btn secondary" id="readReceiptQrBtn">▦ Ler QR Code pela câmera</button>
+          <button type="button" class="btn secondary" id="stopReceiptQrBtn" disabled>Parar câmera</button>
+          <button type="button" class="btn secondary" id="readReceiptQrPhotoBtn">Ler QR de uma foto (opcional)</button>
+        </div>
+        <div id="receiptQrCameraBox" style="display:none;margin-top:10px;background:#111;border-radius:10px;overflow:hidden">
+          <video id="receiptQrVideo" autoplay muted playsinline style="width:100%;max-height:300px;object-fit:contain"></video>
+        </div>
+        <input type="file" id="receiptQrPhotoInput" accept="image/*" hidden>
+        <div class="form-actions">
         </div>
         <p id="receiptOcrStatus" class="muted" aria-live="polite"></p>
         <div class="field">
@@ -1531,18 +1616,109 @@ Banana; 1,5; 8,50"></textarea>
     status.textContent = 'Foto carregada. Você pode melhorar a imagem e iniciar a leitura.';
   });
 
+  let receiptQrControls = null;
+  let receiptQrStarting = false;
+
+  const stopReceiptQrCamera = () => {
+    if (receiptQrControls) {
+      try { receiptQrControls.stop(); } catch (e) {}
+      receiptQrControls = null;
+    }
+    const video = $('#receiptQrVideo');
+    if (video?.srcObject) {
+      video.srcObject.getTracks().forEach(track => track.stop());
+      video.srcObject = null;
+    }
+    const box = $('#receiptQrCameraBox');
+    if (box) box.style.display = 'none';
+    const stopButton = $('#stopReceiptQrBtn');
+    if (stopButton) stopButton.disabled = true;
+    const startButton = $('#readReceiptQrBtn');
+    if (startButton) {
+      startButton.disabled = false;
+      startButton.textContent = '▦ Ler QR Code pela câmera';
+    }
+  };
+
   $('#readReceiptQrBtn').addEventListener('click', async () => {
-    const file = receiptInput.files[0];
-    if (!file) return toast('Selecione a foto da nota primeiro.');
+    if (receiptQrStarting || receiptQrControls) return;
     const button = $('#readReceiptQrBtn');
+    const video = $('#receiptQrVideo');
+    const box = $('#receiptQrCameraBox');
+    const stopButton = $('#stopReceiptQrBtn');
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      status.textContent = 'A câmera exige acesso por HTTPS e permissão do navegador.';
+      return toast('Câmera indisponível. Abra o site em HTTPS e permita o acesso.');
+    }
+
+    receiptQrStarting = true;
     button.disabled = true;
-    status.textContent = 'Procurando QR Code...';
+    button.textContent = 'Abrindo câmera...';
+    box.style.display = 'block';
+    status.textContent = 'Solicitando acesso à câmera...';
+
+    try {
+      receiptQrControls = await startReceiptQrCamera(video, status, value => {
+        $('#receiptQrText').value = value;
+        status.textContent = 'QR Code lido com sucesso! O conteúdo foi preenchido abaixo.';
+        stopReceiptQrCamera();
+        toast('QR Code identificado!');
+      });
+      stopButton.disabled = false;
+    } catch (error) {
+      console.error('Erro ao iniciar câmera para QR Code:', error);
+      stopReceiptQrCamera();
+      status.textContent = error.message || 'Não foi possível iniciar a câmera.';
+      toast(error.name === 'NotAllowedError'
+        ? 'Permita o acesso à câmera nas configurações do navegador.'
+        : 'Não foi possível abrir a câmera. Verifique se o site está em HTTPS.');
+    } finally {
+      receiptQrStarting = false;
+      if (!receiptQrControls) {
+        button.disabled = false;
+        button.textContent = '▦ Ler QR Code pela câmera';
+      }
+    }
+  });
+
+  $('#stopReceiptQrBtn').addEventListener('click', () => {
+    stopReceiptQrCamera();
+    status.textContent = 'Leitura pela câmera interrompida.';
+  });
+
+  $('#readReceiptQrPhotoBtn').addEventListener('click', () => {
+    $('#receiptQrPhotoInput').click();
+  });
+
+  $('#receiptQrPhotoInput').addEventListener('change', async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const button = $('#readReceiptQrPhotoBtn');
+    button.disabled = true;
+    status.textContent = 'Tentando ler o QR Code da imagem...';
+
     try {
       const value = await readReceiptQr(file, status);
-      if (!value) status.textContent = 'QR Code não identificado. Tente aproximar e enquadrar melhor a nota.';
+      if (value) {
+        $('#receiptQrText').value = value;
+        status.textContent = 'QR Code identificado na imagem!';
+        toast('QR Code identificado!');
+      } else {
+        status.textContent = 'QR Code não encontrado. Tente enquadrar o código inteiro, sem reflexos e sem cortar as bordas.';
+        toast('Não foi possível identificar o QR Code nessa imagem.');
+      }
     } finally {
       button.disabled = false;
+      e.target.value = '';
     }
+  });
+
+  // Encerra a câmera ao fechar a janela de compra.
+  $('#closeModal').addEventListener('click', stopReceiptQrCamera);
+  $('#modalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'modalBackdrop') stopReceiptQrCamera();
   });
 
   $('#readReceiptBtn').addEventListener('click', async () => {
