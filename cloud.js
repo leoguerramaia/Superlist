@@ -7,7 +7,7 @@
 
 window.SUPERLIST_CONFIG = {
   supabaseUrl: "https://frhbocaxymxviltuvmox.supabase.co",
-  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJmcmhib2NheW14bXh2aWx0dXZtb3h4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0MzEzNzgsImV4cCI6MjEwOTAwNzM3OH0.qjbLMwYzDOi3fqItGyL2yT2SX9E4YsylSvMD3yrFsgs"
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyaGJvY2F4eW14dmlsdHV2bW94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0MzEzNzgsImV4cCI6MjEwOTAwNzM3OH0.qjbLMwYzDOi3fqItGyL2yT2SX9E4YsylSvMD3yrFsgs",
 };
 
 (function () {
