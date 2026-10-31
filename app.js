@@ -1398,11 +1398,76 @@ async function enhanceReceiptImage(file, status) {
     context.drawImage(image, 0, 0, width, height);
     context.filter = 'none';
 
-    status.textContent = 'Imagem preparada. Iniciando reconhecimento do texto...';
+    status.textContent = 'Localizando QR Code para evitar que ele atrapalhe o OCR...';
+    const qrMasked = await maskQrCodeForOcr(canvas);
+    status.textContent = qrMasked
+      ? 'QR Code isolado. Iniciando leitura dos textos da nota...'
+      : 'Imagem preparada. Iniciando reconhecimento dos textos...';
     return canvas;
   } finally {
     URL.revokeObjectURL(imageUrl);
   }
+}
+
+// Tenta localizar o QR Code na imagem e cobrir somente essa região antes do OCR.
+async function maskQrCodeForOcr(canvas) {
+  if (!('BarcodeDetector' in window)) return false;
+
+  try {
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    const found = await detector.detect(canvas);
+    if (!found.length) return false;
+
+    const ctx = canvas.getContext('2d');
+    found.forEach(code => {
+      const box = code.boundingBox;
+      if (!box) return;
+      const margin = Math.max(8, Math.round(Math.max(box.width, box.height) * 0.08));
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(
+        Math.max(0, box.x - margin),
+        Math.max(0, box.y - margin),
+        Math.min(canvas.width - box.x + margin, box.width + margin * 2),
+        Math.min(canvas.height - box.y + margin, box.height + margin * 2)
+      );
+    });
+    return true;
+  } catch (error) {
+    console.warn('Não foi possível localizar o QR Code para excluí-lo do OCR:', error);
+    return false;
+  }
+}
+
+// Extrai sugestões conservadoras de linhas de itens de NFC-e.
+// Os valores continuam editáveis e precisam ser conferidos pelo usuário.
+function suggestReceiptItems(ocrText) {
+  const suggestions = [];
+  const lines = String(ocrText || '').split(/\r?\n/);
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\s+/g, ' ').trim();
+    if (!line || /CNPJ|CPF|CHAVE|CONSULTA|PROTOCOLO|TOTAL|TRIBUT|DESCONTO|PAGAMENTO|CONSUMIDOR/i.test(line)) continue;
+
+    // Formato comum: descrição ... quantidade unidade valor unitário valor total.
+    const match = line.match(/^(.*?)\s+(\d+(?:[,.]\d+)?)\s*(UN|UND|KG|G|L|LT|ML|CX|PC)?\s+(\d{1,6}[,.]\d{2})\s+(\d{1,7}[,.]\d{2})$/i);
+    if (!match) continue;
+
+    let name = match[1]
+      .replace(/^\d{1,4}\s+/, '')
+      .replace(/^\d{4,}\s+/, '')
+      .replace(/[|*_]+/g, '')
+      .trim();
+
+    if (name.length < 3 || !/[A-Za-zÀ-ÿ]/.test(name)) continue;
+
+    const qty = Number(match[2].replace(',', '.'));
+    const total = Number(match[5].replace(/\./g, '').replace(',', '.'));
+    if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(total) || total < 0) continue;
+
+    suggestions.push(`${name}; ${qty}; ${total.toFixed(2).replace('.', ',')}`);
+  }
+
+  return [...new Set(suggestions)];
 }
 
 async function loadTesseract() {
@@ -1757,8 +1822,17 @@ Banana; 1,5; 8,50"></textarea>
       if (!recognizedText) throw new Error('Nenhum texto foi identificado. Tente outra foto, com boa iluminação e a nota inteira visível.');
 
       output.value = recognizedText;
-      status.textContent = 'Leitura concluída. Confira o texto e transcreva/corrija os itens e valores no campo abaixo.';
-      toast('Texto da nota extraído. Confira os dados antes de salvar.');
+
+      const suggestions = suggestReceiptItems(recognizedText);
+      const itemsField = $('#purchaseForm [name="items"]');
+      if (suggestions.length && itemsField) {
+        itemsField.value = suggestions.join('\\n');
+        status.textContent = `${suggestions.length} possível(is) item(ns) identificado(s). Confira nomes, quantidades e valores antes de registrar.`;
+        toast(`${suggestions.length} sugestão(ões) de item extraída(s). Revise antes de salvar.`);
+      } else {
+        status.textContent = 'Texto reconhecido. Não foi possível identificar linhas de itens com segurança; confira a nota e preencha os itens manualmente.';
+        toast('Texto extraído. Os itens precisam ser conferidos/preenchidos manualmente.');
+      }
 
     } catch (error) {
       console.error('Erro no processamento da nota:', error);
