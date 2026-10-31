@@ -253,7 +253,6 @@ function renderStores() {
       </article>`).join('')
     : '<div class="empty-state">Cadastre os supermercados onde você costuma comprar.</div>';
 }
-
 function renderProducts() {
   let q=($('#productSearch')?.value||'').toLowerCase();
   let cat=$('#categoryFilter')?.value||'all';
@@ -503,20 +502,20 @@ function parseImported(text) {
     let norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     let found=db.products.find(p=>norm(name).includes(norm(p.name))||norm(p.name).includes(norm(name)));
     if (!found) {
-  found = {
-    id: uid(),
-    name: name,
-    category: 'Outros',
-    unit: unit || 'un',
-    ...packageInfo(name, unit || 'un'),
-    barcode: '',
-    photo: '',
-    photoPath: '',
-    active: true
-  };
+      found = {
+        id: uid(),
+        name: name,
+        category: 'Outros',
+        unit: unit || 'un',
+        ...packageInfo(name, unit || 'un'),
+        barcode: '',
+        photo: '',
+        photoPath: '',
+        active: true
+      };
 
-  db.products.push(found);
-}
+      db.products.push(found);
+    }
 
     return {
       id:uid(),
@@ -556,8 +555,6 @@ function addStoreModal() {
     toast('Supermercado cadastrado!');
   });
 }
-
-
 function addProductModal(product = null) {
   const p = product || {};
   const photoPath = p.photoPath || '';
@@ -603,8 +600,7 @@ function addProductModal(product = null) {
 
       <div class="field">
         <label>Foto pela câmera ou galeria</label>
-        <input id="productPhotoFile"
-          accept="image/*">
+        <input id="productPhotoFile" type="file" accept="image/*">
         <small class="helper">
           No celular, você poderá escolher a câmera ou uma foto da galeria.
           Limite de 5 MB.
@@ -723,7 +719,6 @@ function addProductModal(product = null) {
   });
 }
 
-
 function addCategory() {
   openModal('Nova categoria',`<form id="modalForm">
     <div class="field">
@@ -750,6 +745,7 @@ function addCategory() {
     toast('Categoria criada!');
   });
 }
+
 function openList(id) {
   currentList=db.lists.find(l=>l.id===id);
   if(!currentList)return;
@@ -824,18 +820,18 @@ function editShoppingItem(itemId) {
       return;
     }
 
-item.name = d.name.trim();
-item.category = d.category;
-item.unit = d.unit;
+    item.name = d.name.trim();
+    item.category = d.category;
+    item.unit = d.unit;
 
-const product = findOrCreateProduct(item);
-Object.assign(product, {
-  name: item.name,
-  category: item.category,
-  unit: item.unit
-});
+    const product = findOrCreateProduct(item);
+    Object.assign(product, {
+      name: item.name,
+      category: item.category,
+      unit: item.unit
+    });
 
-item.price = price;
+    item.price = price;
     item.estimate = price;
 
     savePrice(item);
@@ -845,570 +841,558 @@ item.price = price;
     toast('Item atualizado!');
   });
 }
+function addProductModal(product = null) {
+  const p = product || {};
+  const photoPath = p.photoPath || '';
+  const photoUrl = p.photo || '';
 
+  openModal(product ? 'Editar produto' : 'Novo produto', `
+    <form id="modalForm">
+      <div class="field">
+        <label>Nome do produto</label>
+        <input name="name" required
+          placeholder="Ex.: Arroz tipo 1 — 5 kg"
+          value="${esc(p.name || '')}">
+      </div>
 
-function findOrCreateProduct(item) {
-  let product = item.productId
-    ? db.products.find(p => p.id === item.productId)
-    : null;
+      <div class="form-grid">
+        ${selectField('Categoria', 'category', db.categories,
+          p.category || 'Mercearia')}
+        ${selectField('Unidade de compra', 'unit',
+          ['un','kg','g','l','ml'], p.unit || 'un')}
+      </div>
 
-  if (!product) {
-    const normalize = value => String(value || '')
-      .trim()
-      .toLocaleLowerCase('pt-BR')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
+      <div class="form-grid">
+        ${field('Conteúdo da embalagem', 'netAmount',
+          'Ex.: 5', 'number',
+          p.netAmount ?? packageInfo(p.name || '', p.unit || 'un').amount)}
+        ${selectField('Unidade do conteúdo', 'netUnit',
+          ['un','kg','l'],
+          p.netUnit || packageInfo(p.name || '', p.unit || 'un').unit)}
+      </div>
 
-    product = db.products.find(p =>
-      normalize(p.name) === normalize(item.name)
-    );
-  }
+      <div class="field">
+        <label>Código de barras (EAN/GTIN)</label>
+        <input name="barcode" placeholder="Digite o código"
+          value="${esc(p.barcode || '')}">
+      </div>
 
-  if (!product) {
-    product = {
-      id: uid(),
-      name: item.name.trim(),
-      category: item.category || 'Outros',
-      unit: item.unit || 'un',
-      ...packageInfo(item.name, item.unit || 'un'),
-      barcode: '',
-      photo: '',
-      photoPath: '',
-      active: true
-    };
+      <div class="field">
+        <label>Foto por URL</label>
+        <input name="photo" type="url"
+          placeholder="https://..."
+          value="${esc(photoUrl)}">
+      </div>
 
-    db.products.push(product);
-  }
+      <div class="field">
+        <label>Foto pela câmera ou galeria</label>
+        <input id="productPhotoFile" type="file" accept="image/*">
+        <small class="helper">
+          No celular, você poderá escolher a câmera ou uma foto da galeria.
+          Limite de 5 MB.
+        </small>
+      </div>
 
-  item.productId = product.id;
-  item.name = product.name;
-  item.category = product.category;
-  item.unit = product.unit;
+      <div id="productPhotoPreview" class="field">
+        ${photoUrl
+          ? `<img src="${esc(photoUrl)}" alt="Foto do produto"
+              style="max-width:130px;max-height:130px;object-fit:contain">`
+          : photoPath
+            ? '<span class="helper">Foto armazenada no Supabase.</span>'
+            : '<span class="helper">Nenhuma foto selecionada.</span>'}
+      </div>
 
-  return product;
-}
-
-
-
-function addProductToCurrentList(product, qty = 1) {
-  if (!currentList || !product) return;
-
-  const already = currentList.items.find(
-    i => i.productId === product.id
-  );
-
-  if (already) {
-    already.qty = (Number(already.qty) || 0) + qty;
-    toast('Quantidade atualizada na compra.');
-  } else {
-    const previous = latestPrice(product.id, currentList.storeId);
-
-    currentList.items.push({
-      id: uid(),
-      productId: product.id,
-      name: product.name,
-      category: product.category || 'Outros',
-      unit: product.unit || 'un',
-      qty,
-      price: 0,
-      estimate: previous?.price || 0,
-      checked: false
-    });
-
-    toast('Produto adicionado à compra!');
-  }
-
-  save();
-  closeModal();
-  renderShopping();
-}
-
-function addCatalogProductToList() {
-  if (!currentList) return;
-
-  openModal('Adicionar produto à compra', `
-    <div class="field">
-      <label>Como deseja localizar?</label>
-      <select id="addProductMode">
-        <option value="name">Buscar pelo nome</option>
-        <option value="category">Buscar por categoria</option>
-        <option value="barcode">Código de barras</option>
-      </select>
-    </div>
-
-    <div id="addProductSearchArea"></div>
-
-    <div class="field">
-      <label>Quantidade</label>
-      <input id="addProductQty" type="number"
-        min="0.01" step="0.01" value="1">
-    </div>
-
-    <div id="addProductResults"></div>
-
-    <div class="form-actions">
-      <button type="button" class="btn secondary" data-cancel>
-        Fechar
-      </button>
-    </div>
+      <div class="form-actions">
+        <button type="button" class="btn secondary" data-cancel>
+          Cancelar
+        </button>
+        <button class="btn primary">Salvar produto</button>
+      </div>
+    </form>
   `);
 
-  const mode = $('#addProductMode');
-  const area = $('#addProductSearchArea');
-  const results = $('#addProductResults');
+  const form = $('#modalForm');
+  const fileInput = $('#productPhotoFile');
 
-  function availableProducts() {
-    return db.products.filter(p => p.active !== false);
-  }
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
 
-  function showProducts(products) {
-    results.innerHTML = products.length
-      ? products.map(p => `
-          <button type="button" class="product-row"
-            data-add-catalog="${p.id}"
-            style="width:100%;text-align:left">
-            <div class="product-thumb">
-              ${p.photo ? '▧' : '◈'}
-            </div>
-            <div>
-              <strong>${esc(p.name)}</strong>
-              <small>${esc(p.category || 'Outros')} · ${unitLabel(p.unit)}</small>
-            </div>
-            <span>＋</span>
-          </button>
-        `).join('')
-      : '<div class="empty-state">Nenhum produto encontrado.</div>';
-  }
-
-  function renderMode() {
-    results.innerHTML = '';
-
-    if (mode.value === 'name') {
-      area.innerHTML = `
-        <div class="field">
-          <label>Nome do produto</label>
-          <input id="addProductNameSearch"
-            placeholder="Digite o nome do produto">
-        </div>
-        <button type="button" class="btn secondary"
-          id="createProductFromSearch">
-          ＋ Cadastrar este produto
-        </button>
-      `;
-
-      const input = $('#addProductNameSearch');
-
-      function searchName() {
-        const q = input.value.trim().toLocaleLowerCase('pt-BR');
-
-        showProducts(q
-          ? availableProducts().filter(p =>
-              p.name.toLocaleLowerCase('pt-BR').includes(q)
-            )
-          : availableProducts()
-        );
-      }
-
-      input.addEventListener('input', searchName);
-      searchName();
-
-      $('#createProductFromSearch').onclick = () => {
-        const name = input.value.trim();
-
-        if (!name) {
-          toast('Digite o nome do produto.');
-          return;
-        }
-
-        let product = db.products.find(p =>
-          p.name.trim().toLocaleLowerCase('pt-BR') ===
-          name.toLocaleLowerCase('pt-BR')
-        );
-
-        if (!product) {
-          product = {
-            id: uid(),
-            name,
-            category: 'Outros',
-            unit: 'un',
-            ...packageInfo(name, 'un'),
-            barcode: '',
-            photo: '',
-            photoPath: '',
-            active: true
-          };
-
-          db.products.push(product);
-        }
-
-        addProductToCurrentList(
-          product,
-          Number($('#addProductQty').value) || 1
-        );
-      };
-
-    } else if (mode.value === 'category') {
-      area.innerHTML = `
-        <div class="field">
-          <label>Selecione a categoria</label>
-          <select id="addProductCategory">
-            <option value="">Todas as categorias</option>
-            ${db.categories.map(c => `
-              <option value="${esc(c)}">${esc(c)}</option>
-            `).join('')}
-          </select>
-        </div>
-      `;
-
-      const select = $('#addProductCategory');
-
-      function searchCategory() {
-        showProducts(availableProducts().filter(p =>
-          !select.value || p.category === select.value
-        ));
-      }
-
-      select.addEventListener('change', searchCategory);
-      searchCategory();
-
-    } else {
-      area.innerHTML = `
-        <div class="field">
-          <label>Código de barras (EAN/GTIN)</label>
-          <input id="addProductBarcode"
-            inputmode="numeric"
-            placeholder="Digite ou escaneie o código">
-        </div>
-        <div class="form-actions">
-          <button type="button" class="btn secondary"
-            id="scanNewProductBarcode">
-            ▣ Ler com a câmera
-          </button>
-          <button type="button" class="btn primary"
-            id="lookupNewProductBarcode">
-            Consultar código
-          </button>
-        </div>
-        <div id="addBarcodeCamera" class="camera-box"
-          style="display:none"></div>
-      `;
-
-      $('#lookupNewProductBarcode').onclick = async () => {
-        const code = $('#addProductBarcode').value.trim();
-
-        if (!code) {
-          toast('Informe o código de barras.');
-          return;
-        }
-
-        const button = $('#lookupNewProductBarcode');
-        button.disabled = true;
-        button.textContent = 'Consultando...';
-
-        try {
-          let product = db.products.find(p => p.barcode === code);
-
-          if (!product) {
-            const response = await fetch(
-              `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`
-            );
-
-            if (!response.ok) throw new Error('Falha na consulta.');
-
-            const data = await response.json();
-            const prod = data.product;
-
-            if (data.status !== 1 || !prod) {
-              toast('Produto não encontrado. Cadastre pelo nome.');
-              return;
-            }
-
-            product = {
-              id: uid(),
-              name: prod.product_name_pt || prod.product_name || `Produto ${code}`,
-              category: 'Outros',
-              unit: 'un',
-              ...packageInfo(prod.product_name || '', 'un'),
-              barcode: code,
-              photo: prod.image_url || '',
-              photoPath: '',
-              active: true
-            };
-
-            db.products.push(product);
-          }
-
-          addProductToCurrentList(
-            product,
-            Number($('#addProductQty').value) || 1
-          );
-
-        } catch (error) {
-          console.error(error);
-          toast('Não foi possível consultar o código.');
-        } finally {
-          if ($('#lookupNewProductBarcode')) {
-            $('#lookupNewProductBarcode').disabled = false;
-            $('#lookupNewProductBarcode').textContent = 'Consultar código';
-          }
-        }
-      };
-
-      $('#scanNewProductBarcode').onclick = async () => {
-        const cameraBox = $('#addBarcodeCamera');
-        const button = $('#scanNewProductBarcode');
-
-        let controls = null;
-
-        try {
-          if (!navigator.mediaDevices?.getUserMedia) {
-            throw new Error('A câmera exige acesso HTTPS pelo Safari.');
-          }
-
-          cameraBox.style.display = 'block';
-          cameraBox.innerHTML = '<video autoplay muted playsinline style="width:100%"></video>';
-          button.disabled = true;
-
-          if (!window.ZXingBrowser) {
-            let script = document.querySelector('script[data-superlist-zxing]');
-
-            if (!script) {
-              script = document.createElement('script');
-              script.src = 'https://unpkg.com/@zxing/browser@latest';
-              script.dataset.superlistZxing = 'true';
-              document.head.appendChild(script);
-            }
-
-            await new Promise((resolve, reject) => {
-              if (window.ZXingBrowser) return resolve();
-              script.addEventListener('load', resolve, { once: true });
-              script.addEventListener('error', reject, { once: true });
-            });
-          }
-
-          const reader = new ZXingBrowser.BrowserMultiFormatReader();
-          const video = cameraBox.querySelector('video');
-
-          controls = await reader.decodeFromConstraints(
-            {
-              audio: false,
-              video: { facingMode: { ideal: 'environment' } }
-            },
-            video,
-            (result) => {
-              if (!result) return;
-
-              $('#addProductBarcode').value = result.getText();
-
-              if (controls) controls.stop();
-
-              cameraBox.style.display = 'none';
-              button.disabled = false;
-              toast('Código identificado. Toque em Consultar código.');
-            }
-          );
-
-        } catch (error) {
-          console.error(error);
-          if (controls) controls.stop();
-          cameraBox.style.display = 'none';
-          button.disabled = false;
-          toast('Não foi possível iniciar a câmera.');
-        }
-      };
+    if (file.size > 5 * 1024 * 1024) {
+      fileInput.value = '';
+      toast('A imagem deve ter no máximo 5 MB.');
+      return;
     }
-  }
 
-  mode.addEventListener('change', renderMode);
+    const preview = $('#productPhotoPreview');
+    const url = URL.createObjectURL(file);
 
-  results.addEventListener('click', e => {
-    const button = e.target.closest('[data-add-catalog]');
-    if (!button) return;
-
-    const product = db.products.find(p =>
-      p.id === button.dataset.addCatalog
-    );
-
-    if (product) {
-      addProductToCurrentList(
-        product,
-        Number($('#addProductQty').value) || 1
-      );
-    }
+    preview.innerHTML = `
+      <img src="${url}" alt="Prévia da foto"
+        style="max-width:130px;max-height:130px;object-fit:contain">
+    `;
   });
 
-  renderMode();
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+
+    const button = form.querySelector('button[type="submit"], button.primary');
+    button.disabled = true;
+    button.textContent = 'Salvando...';
+
+    try {
+      const d = formData(form);
+      const file = fileInput.files[0];
+
+      d.name = d.name.trim();
+      d.netAmount = Number(d.netAmount) || 1;
+
+      const barcode = d.barcode.trim();
+
+      const duplicate = db.products.find(x =>
+        x.id !== p.id &&
+        barcode &&
+        x.barcode === barcode
+      );
+
+      if (duplicate) {
+        throw new Error('Esse código de barras já está cadastrado em outro produto.');
+      }
+
+      let newPhotoPath = photoPath;
+      let photo = d.photo.trim();
+
+      if (file) {
+        if (!window.SuperlistCloud?.uploadProductPhoto) {
+          throw new Error('A integração de fotos não está disponível.');
+        }
+
+        newPhotoPath = await window.SuperlistCloud.uploadProductPhoto(file);
+        photo = '';
+      }
+
+      const productData = {
+        name: d.name,
+        category: d.category,
+        unit: d.unit,
+        netAmount: d.netAmount,
+        netUnit: d.netUnit,
+        barcode,
+        photo,
+        photoPath: newPhotoPath,
+        active: true
+      };
+
+      if (product) {
+        Object.assign(product, productData);
+      } else {
+        db.products.push({
+          id: uid(),
+          ...productData
+        });
+      }
+
+      save();
+      closeModal();
+      toast('Produto salvo com sucesso!');
+
+    } catch (error) {
+      console.error(error);
+      toast(error.message || 'Não foi possível salvar o produto.');
+      button.disabled = false;
+      button.textContent = 'Salvar produto';
+    }
+  });
 }
 
+function addCategory() {
+  openModal('Nova categoria',`<form id="modalForm">
+    <div class="field">
+      <label>Nome da categoria</label>
+      <input name="name" required placeholder="Ex.: Bebê">
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn secondary" data-cancel>Cancelar</button>
+      <button class="btn primary">Criar categoria</button>
+    </div>
+  </form>`);
 
-function removeShoppingItem(itemId) {
-  if (!currentList) return;
+  $('#modalForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    let n=formData().name.trim();
 
-  const item = currentList.items.find(i => i.id === itemId);
+    if(db.categories.some(c=>c.toLowerCase()===n.toLowerCase())) {
+      return toast('Essa categoria já existe.');
+    }
+
+    db.categories.push(n);
+    save();
+    closeModal();
+    toast('Categoria criada!');
+  });
+}
+
+function openList(id) {
+  currentList=db.lists.find(l=>l.id===id);
+  if(!currentList)return;
+  page('shopping');
+  renderShopping();
+}
+
+function editShoppingItem(itemId) {
+  const item = currentList?.items.find(i => i.id === itemId);
   if (!item) return;
 
-  if (!confirm(`Retirar "${item.name}" desta compra? O produto continuará no catálogo.`)) {
-    return;
-  }
+  const categories = [...new Set([
+    ...db.categories,
+    item.category || 'Outros'
+  ])];
 
-  currentList.items = currentList.items.filter(i => i.id !== itemId);
+  openModal('Editar item da compra', `
+    <form id="editShoppingItemForm">
+      <div class="field">
+        <label>Nome do produto</label>
+        <input name="name" required value="${esc(item.name)}">
+      </div>
 
-  save();
-  renderShopping();
-  toast('Item retirado da compra.');
-}
+      <div class="field">
+        <label>Categoria</label>
+        <select name="category">
+          ${categories.map(c => `
+            <option value="${esc(c)}"
+              ${c === item.category ? 'selected' : ''}>
+              ${esc(c)}
+            </option>
+          `).join('')}
+        </select>
+      </div>
 
-function renderShopping() {
-  let l=currentList;
+      <div class="field">
+        <label>Unidade</label>
+        <select name="unit">
+          ${['un','kg','g','l','ml'].map(u => `
+            <option value="${u}"
+              ${u === item.unit ? 'selected' : ''}>
+              ${u}
+            </option>
+          `).join('')}
+        </select>
+      </div>
 
-  $('#shoppingTitle').textContent=l.name;
-  $('#shoppingMeta').textContent=`Criada em ${dateBR(l.created)} · ${l.items.length} produtos`;
-  $('#shoppingStore').textContent=storeName(l.storeId);
+      <div class="field">
+        <label>Preço (R$)</label>
+        <input name="price" inputmode="decimal"
+          value="${String(item.price || '').replace('.', ',')}">
+      </div>
 
-  const search = ($('#shoppingSearch')?.value || '')
-  .trim()
-  .toLocaleLowerCase('pt-BR');
+      <div class="form-actions">
+        <button type="button" class="btn secondary"
+          data-cancel>Cancelar</button>
+        <button class="btn primary">Salvar alterações</button>
+      </div>
+    </form>
+  `);
 
-const visibleItems = l.items.filter(i =>
-  i.name.toLocaleLowerCase('pt-BR').includes(search)
-);
+  $('#editShoppingItemForm').addEventListener('submit', e => {
+    e.preventDefault();
 
-let cats=[...new Set(visibleItems.map(i=>i.category||'Outros'))];
+    const d = formData(e.currentTarget);
+    const price = Number(
+      String(d.price).replace(',', '.')
+    );
 
-  $('#shoppingItems').innerHTML=cats.length
-    ? cats.map(cat=>{
-        let its=visibleItems.filter(i=>(i.category||'Outros')===cat);
-        let subtotal=its.reduce((s,i)=>s+(Number(i.qty)||0)*(Number(i.price)||0),0);
+    if (!Number.isFinite(price) || price < 0) {
+      toast('Informe um preço válido.');
+      return;
+    }
 
-        return `<section class="shopping-category">
-          <h3>${esc(cat)} <small>${money(subtotal)}</small></h3>
-          ${its.map(i=>`<div class="shop-item">
-            <input type="checkbox" data-check="${i.id}" ${i.checked?'checked':''}>
-            <div class="shop-name ${i.checked?'checked':''}">
-              <strong>${esc(i.name)}</strong>
-              <small>
-                ${unitLabel(i.unit)}
-                ${i.productId?'· cadastrado':'· revisar produto'}
-                ${i.estimate?' · previsão '+money(i.estimate):''}
-                ${(()=>{
-                  let p=db.products.find(p=>p.id===i.productId);
-                  return p&&p.netAmount>1?' · embalagem '+p.netAmount+' '+p.netUnit:'';
-                })()}
-              </small>
-            </div>
-            <input type="number" min="0" step="${i.unit==='kg'||i.unit==='l'?'.01':'1'}" data-qty="${i.id}" value="${i.qty}" aria-label="Quantidade">
-            <input type="number" min="0" step=".01" data-price="${i.id}" value="${i.price||''}" placeholder="Preço (R$)" aria-label="Preço">
-            <span class="shop-total">${money((Number(i.qty)||0)*(Number(i.price)||0))}</span>
-            <button class="scan-btn" data-scan="${i.id}"
-  title="Associar código de barras">▥</button>
+    item.name = d.name.trim();
+    item.category = d.category;
+    item.unit = d.unit;
 
-<button class="scan-btn" data-edit-shopping-item="${i.id}"
-  title="Editar item">✎</button>
+    const product = findOrCreateProduct(item);
+    Object.assign(product, {
+      name: item.name,
+      category: item.category,
+      unit: item.unit
+    });
 
-<button class="scan-btn" data-remove-shopping-item="${i.id}"
-  title="Retirar da compra">×</button>
-          </div>`).join('')}
-        </section>`;
-      }).join('')
-    : '<div class="empty-state">Sua lista está vazia. Adicione produtos para começar.</div>';
+    item.price = price;
+    item.estimate = price;
 
-  updateSummary();
-}
-
-function updateSummary() {
-  let l=currentList;
-  if(!l)return;
-
-  let total=listTotal(l);
-  let estimate=l.items.reduce((s,i)=>s+(Number(i.qty)||0)*(Number(i.estimate)||Number(i.price)||0),0);
-
-  $('#summaryItems').textContent=l.items.length;
-  $('#summaryChecked').textContent=l.items.filter(i=>i.checked).length;
-  $('#summaryEstimate').textContent=money(estimate);
-  $('#summaryTotal').textContent=money(total);
-
-  $('#shoppingItems').querySelectorAll('.shopping-category').forEach(section=>{
-    let cat=section.querySelector('h3').childNodes[0].textContent.trim();
-    let sum=l.items
-      .filter(i=>i.category===cat)
-      .reduce((s,i)=>s+(Number(i.qty)||0)*(Number(i.price)||0),0);
-
-    section.querySelector('h3 small').textContent=money(sum);
+    savePrice(item);
+    save();
+    closeModal();
+    renderShopping();
+    toast('Item atualizado!');
   });
 }
+// Carrega OpenCV apenas quando a leitura da nota for solicitada.
+function loadOpenCV() {
+  if (window.cv && window.cv.Mat) return Promise.resolve(window.cv);
 
-function savePrice(item) {
-  if(!item.price||!item.productId)return;
+  if (window.__superlistOpenCVPromise) return window.__superlistOpenCVPromise;
 
-  let existing=db.prices.find(p=>p.listId===currentList.id&&p.productId===item.productId);
-  let product=db.products.find(p=>p.id===item.productId)||{};
+  window.__superlistOpenCVPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-superlist-opencv]');
+    const script = existing || document.createElement('script');
 
-  let row={
-    id:existing?.id||uid(),
-    listId:currentList.id,
-    productId:item.productId,
-    productName:item.name,
-    storeId:currentList.storeId,
-    date:today(),
-    price:Number(item.price),
-    unit:item.unit,
-    netAmount:product.netAmount||1,
-    netUnit:product.netUnit||item.unit
-  };
+    const timeout = setTimeout(
+      () => reject(new Error('O processamento de imagem demorou demais para carregar.')),
+      30000
+    );
 
-  if(existing)Object.assign(existing,row);
-  else db.prices.push(row);
+    const finish = () => {
+      if (window.cv && window.cv.Mat) {
+        clearTimeout(timeout);
+        resolve(window.cv);
+      }
+    };
+
+    script.addEventListener('error', () => {
+      clearTimeout(timeout);
+      reject(new Error('Não foi possível carregar o processador de imagem.'));
+    }, { once: true });
+
+    if (!existing) {
+      script.src = 'https://docs.opencv.org/4.x/opencv.js';
+      script.async = true;
+      script.dataset.superlistOpencv = 'true';
+      document.head.appendChild(script);
+    }
+
+    if (window.cv && window.cv.Mat) {
+      finish();
+    } else {
+      script.addEventListener('load', () => {
+        if (window.cv && window.cv.Mat) finish();
+        else if (window.cv) {
+          window.cv.onRuntimeInitialized = finish;
+        }
+      }, { once: true });
+
+      if (window.cv) window.cv.onRuntimeInitialized = finish;
+    }
+  });
+
+  return window.__superlistOpenCVPromise;
 }
 
+// Detecta o maior contorno quadrilateral (a nota) e corrige a perspectiva.
+// Se não encontrar um contorno confiável, aplica apenas melhoria de contraste.
+async function enhanceReceiptImage(file, status) {
+  const cv = await loadOpenCV();
+  status.textContent = 'Corrigindo enquadramento, inclinação e contraste...';
+
+  const imageUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Não foi possível abrir a foto da nota.'));
+      img.src = imageUrl;
+    });
+
+    const maxSide = 2200;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    const inputCanvas = document.createElement('canvas');
+    inputCanvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    inputCanvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    inputCanvas.getContext('2d').drawImage(image, 0, 0, inputCanvas.width, inputCanvas.height);
+
+    const source = cv.imread(inputCanvas);
+    const gray = new cv.Mat();
+    const blurred = new cv.Mat();
+    const edges = new cv.Mat();
+    let warped = null;
+    let output = null;
+
+    try {
+      cv.cvtColor(source, gray, cv.COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+      cv.Canny(blurred, edges, 50, 150);
+
+      const contours = new cv.MatVector();
+      const hierarchy = new cv.Mat();
+      cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+      let best = null;
+      let bestArea = 0;
+      const imageArea = source.cols * source.rows;
+
+      for (let i = 0; i < contours.size(); i++) {
+        const contour = contours.get(i);
+        const perimeter = cv.arcLength(contour, true);
+        const approx = new cv.Mat();
+        cv.approxPolyDP(contour, approx, 0.02 * perimeter, true);
+        const area = Math.abs(cv.contourArea(approx));
+
+        if (approx.rows === 4 && area > imageArea * 0.08 && area > bestArea) {
+          bestArea = area;
+          if (best) best.delete();
+          best = approx;
+        } else {
+          approx.delete();
+        }
+        contour.delete();
+      }
+
+      if (best) {
+        const pts = [];
+        for (let i = 0; i < 4; i++) {
+          pts.push({ x: best.intAt(i, 0), y: best.intAt(i, 1) });
+        }
+        best.delete();
+
+        const sum = p => p.x + p.y;
+        const diff = p => p.y - p.x;
+        const ordered = [
+          pts.reduce((a,b) => sum(a) < sum(b) ? a : b),
+          pts.reduce((a,b) => diff(a) < diff(b) ? a : b),
+          pts.reduce((a,b) => sum(a) > sum(b) ? a : b),
+          pts.reduce((a,b) => diff(a) > diff(b) ? a : b)
+        ];
+
+        const [tl, tr, br, bl] = ordered;
+        const width = Math.max(
+          Math.hypot(br.x - bl.x, br.y - bl.y),
+          Math.hypot(tr.x - tl.x, tr.y - tl.y)
+        );
+        const height = Math.max(
+          Math.hypot(tr.x - br.x, tr.y - br.y),
+          Math.hypot(tl.x - bl.x, tl.y - bl.y)
+        );
+
+        if (width > 100 && height > 100) {
+          const srcPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
+            tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
+          ]);
+          const dstPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
+            0, 0, width - 1, 0, width - 1, height - 1, 0, height - 1
+          ]);
+          const transform = cv.getPerspectiveTransform(srcPoints, dstPoints);
+          warped = new cv.Mat();
+          cv.warpPerspective(source, warped, transform, new cv.Size(
+            Math.round(width), Math.round(height)
+          ));
+          srcPoints.delete();
+          dstPoints.delete();
+          transform.delete();
+        }
+      }
+
+      contours.delete();
+      hierarchy.delete();
+
+      const base = warped || source;
+      const grayFinal = new cv.Mat();
+      const enlarged = new cv.Mat();
+      const enhanced = new cv.Mat();
+
+      cv.cvtColor(base, grayFinal, cv.COLOR_RGBA2GRAY);
+      const factor = Math.min(2.5, 1800 / Math.max(grayFinal.cols, grayFinal.rows));
+      cv.resize(grayFinal, enlarged, new cv.Size(
+        Math.round(grayFinal.cols * factor),
+        Math.round(grayFinal.rows * factor)
+      ), 0, 0, cv.INTER_CUBIC);
+
+      const clahe = cv.createCLAHE(2.5, new cv.Size(8, 8));
+      clahe.apply(enlarged, enhanced);
+      output = new cv.Mat();
+      cv.adaptiveThreshold(
+        enhanced, output, 255,
+        cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv.THRESH_BINARY, 31, 11
+      );
+
+      const resultCanvas = document.createElement('canvas');
+      cv.imshow(resultCanvas, output);
+
+      grayFinal.delete();
+      enlarged.delete();
+      enhanced.delete();
+      clahe.delete();
+
+      return resultCanvas;
+    } finally {
+      source.delete();
+      gray.delete();
+      blurred.delete();
+      edges.delete();
+      if (warped) warped.delete();
+      if (output) output.delete();
+    }
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
+async function loadTesseract() {
+  if (window.Tesseract) return window.Tesseract;
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('Não foi possível carregar o leitor OCR.'));
+    document.head.appendChild(script);
+  });
+  return window.Tesseract;
+}
+
+async function readReceiptQr(file, status) {
+  if (!('BarcodeDetector' in window)) {
+    status.textContent = 'Leitura automática do QR Code não disponível neste navegador.';
+    return '';
+  }
+
+  try {
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    const bitmap = await createImageBitmap(file);
+    const codes = await detector.detect(bitmap);
+    bitmap.close?.();
+    const value = codes.find(code => code.rawValue)?.rawValue || '';
+    if (value) {
+      $('#receiptQrText').value = value;
+      status.textContent = 'QR Code identificado. O conteúdo foi exibido para conferência.';
+    }
+    return value;
+  } catch (error) {
+    console.warn('Falha ao ler QR Code da nota:', error);
+    return '';
+  }
+}
 function openPurchaseModal() {
   const storeOptions = db.stores.map(s =>
     `<option value="${esc(s.id)}">${esc(s.name)}</option>`
   ).join('');
 
-  const categoryOptions = db.categories.map(c =>
-    `<option value="${esc(c)}">${esc(c)}</option>`
-  ).join('');
-
   openModal('Registrar compra realizada', `
     <form id="purchaseForm">
-      <div class="form-grid">
       <div class="field">
-  <label>Foto da nota fiscal</label>
- <input
-  type="file"
-  id="receiptPhoto"
-  name="receiptPhoto"
-  accept="image/*"
->
-  <small class="muted">
-    Tire uma foto da nota ou escolha uma imagem da galeria.
-  </small>
-  <div id="receiptPreview" style="margin-top:10px"></div>
-  <button
-  type="button"
-  class="btn secondary"
-  id="readReceiptBtn"
-  style="margin-top:10px"
->
-  ✨ Ler texto da nota
-</button>
+        <label>Foto da nota fiscal</label>
+        <input type="file" id="receiptPhoto" name="receiptPhoto" accept="image/*">
+        <small class="muted">Tire uma foto ou escolha uma imagem da galeria. A imagem será ajustada antes da leitura.</small>
+        <div id="receiptPreview" style="margin-top:10px"></div>
+        <div class="form-actions">
+          <button type="button" class="btn secondary" id="readReceiptBtn">✨ Melhorar foto e ler nota</button>
+          <button type="button" class="btn secondary" id="readReceiptQrBtn">▦ Ler QR Code</button>
+        </div>
+        <p id="receiptOcrStatus" class="muted" aria-live="polite"></p>
+        <div class="field">
+          <label>Texto reconhecido na nota</label>
+          <textarea id="receiptOcrText" rows="7" placeholder="O texto identificado aparecerá aqui..."></textarea>
+        </div>
+        <div class="field">
+          <label>Conteúdo do QR Code (NFC-e), se identificado</label>
+          <textarea id="receiptQrText" rows="3" placeholder="O endereço ou conteúdo do QR Code aparecerá aqui..." readonly></textarea>
+        </div>
+      </div>
 
-<p id="receiptOcrStatus" class="muted"></p>
-
-<div class="field">
-  <label>Texto reconhecido na nota</label>
-  <textarea
-    id="receiptOcrText"
-    rows="8"
-    placeholder="O texto identificado aparecerá aqui..."
-  ></textarea>
-</div>
-</div>
+      <div class="form-grid">
         <div class="field">
           <label>Supermercado</label>
           <select name="storeId" required>
-            <option value="">Selecione</option>
-            ${storeOptions}
+            <option value="">Selecione</option>${storeOptions}
           </select>
         </div>
         <div class="field">
@@ -1419,14 +1403,11 @@ function openPurchaseModal() {
 
       <div class="field">
         <label>Itens da nota fiscal</label>
-        <textarea name="items" rows="7" required
-          placeholder="Informe um produto por linha, neste formato:
+        <textarea name="items" rows="7" required placeholder="Um produto por linha:
 Arroz 5 kg; 1; 25,90
 Leite integral; 2; 9,98
 Banana; 1,5; 8,50"></textarea>
-        <small class="muted">
-          Formato: produto; quantidade; valor total pago pelo item.
-        </small>
+        <small class="muted">Formato: produto; quantidade; valor total pago pelo item. Confira os valores antes de registrar.</small>
       </div>
 
       <div class="field">
@@ -1438,160 +1419,135 @@ Banana; 1,5; 8,50"></textarea>
       </div>
 
       <div class="form-actions">
-        <button type="button" class="btn secondary" data-cancel>
-          Cancelar
-        </button>
-        <button type="submit" class="btn primary">
-          Conferir e registrar compra
-        </button>
+        <button type="button" class="btn secondary" data-cancel>Cancelar</button>
+        <button type="submit" class="btn primary">Conferir e registrar compra</button>
       </div>
     </form>
   `, 'COMPRA AVULSA');
-const receiptInput = $('#receiptPhoto');
 
-receiptInput.addEventListener('change', () => {
-  const file = receiptInput.files[0];
+  const receiptInput = $('#receiptPhoto');
   const preview = $('#receiptPreview');
-
-  if (!file) {
-    preview.innerHTML = '';
-    return;
-  }
-
-  if (!file.type.startsWith('image/')) {
-    toast('Selecione uma imagem válida.');
-    receiptInput.value = '';
-    preview.innerHTML = '';
-    return;
-  }
-
-  const imageUrl = URL.createObjectURL(file);
-
-  preview.innerHTML = `
-    <img
-      src="${imageUrl}"
-      alt="Foto da nota fiscal"
-      style="width:100%;max-height:240px;object-fit:contain;border-radius:10px;border:1px solid #ddd"
-    >
-  `;
-});
-  $('#readReceiptBtn').addEventListener('click', async () => {
-  const file = receiptInput.files[0];
-
-  if (!file) {
-    toast('Tire uma foto ou selecione a imagem da nota.');
-    return;
-  }
-
-  const button = $('#readReceiptBtn');
   const status = $('#receiptOcrStatus');
-  const output = $('#receiptOcrText');
+  let enhancedCanvas = null;
+  let originalFile = null;
 
-  button.disabled = true;
-  button.textContent = 'Lendo nota...';
-  status.textContent = 'Preparando reconhecimento de texto...';
+  receiptInput.addEventListener('change', () => {
+    const file = receiptInput.files[0];
+    enhancedCanvas = null;
+    originalFile = file || null;
 
-  try {
-    if (!window.Tesseract) {
-      await new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-
-        script.src =
-          'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-
-        script.onload = resolve;
-        script.onerror = () =>
-          reject(new Error('Não foi possível carregar o leitor OCR.'));
-
-        document.head.appendChild(script);
-      });
+    if (!file) {
+      preview.innerHTML = '';
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      toast('Selecione uma imagem válida.');
+      receiptInput.value = '';
+      preview.innerHTML = '';
+      return;
     }
 
-    status.textContent = 'Reconhecendo os textos. Isso pode levar alguns segundos...';
+    const url = URL.createObjectURL(file);
+    preview.innerHTML = `<img src="${url}" alt="Foto original da nota" style="width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid #ddd">`;
+    status.textContent = 'Foto carregada. Você pode melhorar a imagem e iniciar a leitura.';
+  });
 
-    const result = await Tesseract.recognize(
-      file,
-      'por',
-      {
+  $('#readReceiptQrBtn').addEventListener('click', async () => {
+    const file = receiptInput.files[0];
+    if (!file) return toast('Selecione a foto da nota primeiro.');
+    const button = $('#readReceiptQrBtn');
+    button.disabled = true;
+    status.textContent = 'Procurando QR Code...';
+    try {
+      const value = await readReceiptQr(file, status);
+      if (!value) status.textContent = 'QR Code não identificado. Tente aproximar e enquadrar melhor a nota.';
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('#readReceiptBtn').addEventListener('click', async () => {
+    const file = receiptInput.files[0];
+    if (!file) return toast('Tire uma foto ou selecione a imagem da nota.');
+
+    const button = $('#readReceiptBtn');
+    const output = $('#receiptOcrText');
+    button.disabled = true;
+    button.textContent = 'Processando...';
+    status.textContent = 'Preparando a imagem para leitura...';
+
+    try {
+      try {
+        enhancedCanvas = await enhanceReceiptImage(file, status);
+        preview.innerHTML += `<div style="margin-top:10px"><strong>Imagem tratada para leitura</strong><img id="receiptEnhancedPreview" alt="Nota corrigida e melhorada" style="width:100%;max-height:300px;object-fit:contain;border-radius:10px;border:1px solid #23835d"></div>`;
+        $('#receiptEnhancedPreview').src = enhancedCanvas.toDataURL('image/png');
+      } catch (imageError) {
+        console.warn('Não foi possível processar a imagem; será usada a original:', imageError);
+        enhancedCanvas = null;
+        status.textContent = 'Não foi possível corrigir a imagem automaticamente. Tentando ler a foto original...';
+      }
+
+      const T = await loadTesseract();
+      status.textContent = 'Reconhecendo os textos...';
+      const imageForOcr = enhancedCanvas || file;
+      const result = await T.recognize(imageForOcr, 'por', {
         logger: message => {
           if (message.status === 'recognizing text') {
-            status.textContent =
-              `Lendo nota: ${Math.round(message.progress * 100)}%`;
+            status.textContent = `Lendo nota: ${Math.round(message.progress * 100)}%`;
           }
         }
-      }
-    );
+      });
 
-    const recognizedText = result.data.text.trim();
+      const recognizedText = (result.data.text || '').trim();
+      if (!recognizedText) throw new Error('Nenhum texto foi identificado. Tente outra foto, com boa iluminação e a nota inteira visível.');
 
-    if (!recognizedText) {
-      throw new Error('Nenhum texto foi identificado na imagem.');
+      output.value = recognizedText;
+      status.textContent = 'Leitura concluída. Confira o texto e transcreva/corrija os itens e valores no campo abaixo.';
+      toast('Texto da nota extraído. Confira os dados antes de salvar.');
+
+    } catch (error) {
+      console.error('Erro no processamento da nota:', error);
+      status.textContent = error.message || 'Erro ao ler a nota.';
+      toast('Não foi possível reconhecer o texto da nota.');
+    } finally {
+      button.disabled = false;
+      button.textContent = '✨ Melhorar foto e ler nota';
     }
+  });
 
-    output.value = recognizedText;
-    status.textContent =
-      'Leitura concluída! Confira o texto reconhecido.';
-
-    toast('Texto da nota extraído com sucesso!');
-
-  } catch (error) {
-    console.error('Erro no OCR:', error);
-    status.textContent = error.message || 'Erro ao ler a nota.';
-    toast('Não foi possível reconhecer o texto da nota.');
-
-  } finally {
-    button.disabled = false;
-    button.textContent = '✨ Ler texto da nota';
-  }
-});
   $('#purchaseForm').addEventListener('submit', e => {
     e.preventDefault();
 
     const data = formData(e.target);
-    const lines = data.items.split('\\n')
-      .map(line => line.trim())
-      .filter(Boolean);
-
+    const lines = String(data.items || '').split(/\r?\n/)
+      .map(line => line.trim()).filter(Boolean);
     const store = db.stores.find(s => s.id === data.storeId);
 
-    if (!store) {
-      toast('Selecione um supermercado cadastrado.');
-      return;
-    }
+    if (!store) return toast('Selecione um supermercado cadastrado.');
 
     const parsed = lines.map(line => {
       const parts = line.split(';').map(x => x.trim());
-
       if (parts.length < 3) return null;
-
       const name = parts[0];
       const qty = Number(parts[1].replace(',', '.'));
       const total = Number(parts[2].replace(/\./g, '').replace(',', '.'));
-
-      if (!name || !Number.isFinite(qty) || qty <= 0 ||
-          !Number.isFinite(total) || total < 0) return null;
-
+      if (!name || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(total) || total < 0) return null;
       return { name, qty, total };
     });
 
     if (!parsed.length || parsed.some(x => !x)) {
-      toast('Revise os itens. Use produto; quantidade; valor total.');
-      return;
+      return toast('Revise os itens. Use produto; quantidade; valor total.');
     }
 
     const unknown = parsed.filter(item =>
-      !db.products.some(p =>
-        p.name.toLowerCase() === item.name.toLowerCase()
-      )
+      !db.products.some(p => p.name.trim().toLocaleLowerCase('pt-BR') === item.name.trim().toLocaleLowerCase('pt-BR'))
     );
 
     if (unknown.length && !data.approveNew) {
-      toast('Há produtos novos. Marque a aprovação para cadastrá-los.');
-      return;
+      return toast('Há produtos novos. Marque a aprovação para cadastrá-los.');
     }
 
     const purchaseId = uid();
-
     db.purchases ||= [];
     db.purchases.push({
       id: purchaseId,
@@ -1599,44 +1555,29 @@ receiptInput.addEventListener('change', () => {
       date: data.date,
       total: parsed.reduce((sum, item) => sum + item.total, 0),
       itemCount: parsed.length,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      receiptQr: $('#receiptQrText')?.value || ''
     });
 
     parsed.forEach(item => {
       let product = db.products.find(p =>
-        p.name.toLowerCase() === item.name.toLowerCase()
+        p.name.trim().toLocaleLowerCase('pt-BR') === item.name.trim().toLocaleLowerCase('pt-BR')
       );
 
       if (!product) {
         product = {
-          id: uid(),
-          name: item.name,
-          category: 'Outros',
-          unit: 'un',
-          netAmount: 1,
-          netUnit: 'un',
-          barcode: '',
-          photo: '',
-          active: true
+          id: uid(), name: item.name, category: 'Outros', unit: 'un',
+          netAmount: 1, netUnit: 'un', barcode: '', photo: '', active: true
         };
-
         db.products.push(product);
       }
 
-      const unitPrice = item.total / item.qty;
-
       db.prices.push({
-        id: uid(),
-        purchaseId,
-        listId: null,
-        productId: product.id,
-        productName: product.name,
-        storeId: store.id,
-        date: data.date,
-        price: unitPrice,
-        totalPaid: item.total,
-        quantity: item.qty,
-        unit: product.unit,
+        id: uid(), purchaseId, listId: null,
+        productId: product.id, productName: product.name,
+        storeId: store.id, date: data.date,
+        price: item.total / item.qty, totalPaid: item.total,
+        quantity: item.qty, unit: product.unit,
         netAmount: product.netAmount || 1,
         netUnit: product.netUnit || product.unit
       });
@@ -1647,284 +1588,251 @@ receiptInput.addEventListener('change', () => {
     toast('Compra registrada e histórico de preços atualizado!');
   });
 }
+// Leitor de código de barras compatível
+function scanBarcode(itemId) {
+  const item = currentList?.items.find(i => i.id === itemId);
+  if (!item) return;
 
-// Leitor de código de barras compatível com Safari e outros navegadores.
-async function scanBarcode(itemId) {
-  let item=currentList?.items.find(i=>i.id===itemId);
+  let stopped = false;
+  let reader = null;
+  let controls = null;
+  let lookupStarted = false;
 
-  if(!item) {
-    toast('Item não encontrado.');
-    return;
-  }
-
-  openModal(
-    'Ler código de barras',
-    `<div class="field">
-      <label>Código de barras</label>
-      <input id="barcodeInput" placeholder="Digite ou cole o código EAN">
-    </div>
-    <div class="camera-box" id="cameraBox">
-      Aponte a câmera para o código de barras
-    </div>
-    <div class="camera-controls">
-      <button type="button" class="btn secondary" id="startCamera">▣ Abrir câmera</button>
-      <button type="button" class="btn secondary" id="stopCamera">Parar câmera</button>
-      <button type="button" class="btn primary" id="lookupBarcode">Consultar código</button>
-    </div>
-    <p class="helper">
-      A leitura utiliza a câmera traseira. Permita o acesso quando o Safari solicitar.
-      Se não funcionar, digite o código manualmente.
-    </p>`,
-    'SUPERLIST'
-  );
-
-  let controls=null;
-  let reader=null;
-  let stopped=false;
-  let lookupStarted=false;
-
-  const stop=()=>{
-    stopped=true;
-
-    if(controls) {
-      try {
-        controls.stop();
-      } catch(e) {
-        console.warn('Erro ao parar leitor:',e);
-      }
-      controls=null;
+  const stop = () => {
+    stopped = true;
+    if (controls) {
+      controls.stop();
+      controls = null;
     }
-
-    const video=$('#cameraBox')?.querySelector('video');
-
-    if(video?.srcObject) {
-      video.srcObject.getTracks().forEach(track=>track.stop());
-      video.srcObject=null;
+    if (reader) {
+      try { reader.reset(); } catch (e) {}
+      reader = null;
     }
-
-    reader=null;
   };
 
-  const loadZXing=()=>new Promise((resolve,reject)=>{
-    if(window.ZXingBrowser) {
-      resolve(window.ZXingBrowser);
-      return;
-    }
+  openModal('Ler código de barras', `
+    <div class="field">
+      <label>Código do produto</label>
+      <input id="barcodeInput" placeholder="Digite ou leia o código" autocomplete="off">
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn secondary" id="startCamera">Abrir câmera</button>
+      <button type="button" class="btn secondary" id="stopCamera">Desligar câmera</button>
+    </div>
+    <div id="cameraBox" style="min-height:180px;background:#111;border-radius:12px;display:flex;align-items:center;justify-content:center;color:white;margin:12px 0">
+      A câmera será exibida aqui.
+    </div>
+    <button type="button" class="btn primary" id="lookupBarcode">Consultar código</button>
+  `, 'LEITOR DE PRODUTOS');
 
-    const existing=document.querySelector('script[data-superlist-zxing]');
+  const loadZXing = () => new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-superlist-zxing]');
 
-    if(existing) {
-      if(existing.dataset.loaded==='true'&&window.ZXingBrowser) {
+    if (existing) {
+      if (window.ZXingBrowser) {
         resolve(window.ZXingBrowser);
         return;
       }
 
-      existing.addEventListener('load',()=>{
+      existing.addEventListener('load', () => {
         window.ZXingBrowser
           ? resolve(window.ZXingBrowser)
           : reject(new Error('Não foi possível carregar o leitor.'));
-      },{once:true});
+      }, { once: true });
 
-      existing.addEventListener('error',()=>{
+      existing.addEventListener('error', () => {
         reject(new Error('Falha ao carregar a biblioteca de leitura.'));
-      },{once:true});
+      }, { once: true });
 
       return;
     }
 
-    const script=document.createElement('script');
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/@zxing/browser@latest';
+    script.async = true;
+    script.dataset.superlistZxing = 'true';
 
-    script.src='https://unpkg.com/@zxing/browser@latest';
-    script.async=true;
-    script.dataset.superlistZxing='true';
+    script.onload = () => {
+      script.dataset.loaded = 'true';
 
-    script.onload=()=>{
-      script.dataset.loaded='true';
-
-      if(window.ZXingBrowser) {
+      if (window.ZXingBrowser) {
         resolve(window.ZXingBrowser);
       } else {
         reject(new Error('Biblioteca de leitura indisponível.'));
       }
     };
 
-    script.onerror=()=>{
+    script.onerror = () => {
       reject(new Error('Não foi possível baixar o leitor. Verifique sua conexão.'));
     };
 
     document.head.appendChild(script);
   });
 
-  $('#stopCamera').onclick=()=>{
+  $('#stopCamera').onclick = () => {
     stop();
-    const button=$('#startCamera');
-    if(button)button.textContent='Abrir câmera novamente';
+    const button = $('#startCamera');
+    if (button) button.textContent = 'Abrir câmera novamente';
 
-    const box=$('#cameraBox');
-    if(box)box.textContent='Câmera desligada.';
+    const box = $('#cameraBox');
+    if (box) box.textContent = 'Câmera desligada.';
   };
 
-  $('#startCamera').onclick=async()=>{
-    const button=$('#startCamera');
-    const box=$('#cameraBox');
+  $('#startCamera').onclick = async () => {
+    const button = $('#startCamera');
+    const box = $('#cameraBox');
 
     try {
       stop();
-      stopped=false;
+      stopped = false;
 
-      if(!navigator.mediaDevices?.getUserMedia) {
+      if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error(
           'A câmera não está disponível. Acesse o Superlist pelo endereço HTTPS no Safari.'
         );
       }
 
-      button.disabled=true;
-      button.textContent='Carregando leitor...';
+      button.disabled = true;
+      button.textContent = 'Carregando leitor...';
 
-      const ZXing=await loadZXing();
+      const ZXing = await loadZXing();
 
-      if(stopped||!$('#cameraBox'))return;
+      if (stopped || !$('#cameraBox')) return;
 
-      if(!ZXing.BrowserMultiFormatReader) {
+      if (!ZXing.BrowserMultiFormatReader) {
         throw new Error('O leitor de códigos não foi carregado corretamente.');
       }
 
-      reader=new ZXing.BrowserMultiFormatReader();
+      reader = new ZXing.BrowserMultiFormatReader();
 
-      const video=document.createElement('video');
+      const video = document.createElement('video');
+      video.setAttribute('autoplay', '');
+      video.setAttribute('muted', '');
+      video.setAttribute('playsinline', '');
+      video.playsInline = true;
+      video.muted = true;
+      video.style.width = '100%';
+      video.style.height = '100%';
+      video.style.objectFit = 'contain';
 
-      video.setAttribute('autoplay','');
-      video.setAttribute('muted','');
-      video.setAttribute('playsinline','');
-      video.playsInline=true;
-      video.muted=true;
-      video.style.width='100%';
-      video.style.height='100%';
-      video.style.objectFit='contain';
-
-      box.innerHTML='';
+      box.innerHTML = '';
       box.appendChild(video);
+      button.textContent = 'Câmera aberta';
 
-      button.textContent='Câmera aberta';
-
-      controls=await reader.decodeFromConstraints(
+      controls = await reader.decodeFromConstraints(
         {
-          audio:false,
-          video:{
-            facingMode:{ideal:'environment'}
-          }
+          audio: false,
+          video: { facingMode: { ideal: 'environment' } }
         },
         video,
-        (result,error)=>{
-          if(stopped||!result)return;
+        (result, error) => {
+          if (stopped || !result) return;
 
-          const code=result.getText();
+          const code = result.getText();
 
-          if(code) {
-            $('#barcodeInput').value=code;
-            box.textContent='Código lido: '+code;
+          if (code) {
+            $('#barcodeInput').value = code;
+            box.textContent = 'Código lido: ' + code;
 
             stop();
-
-            button.textContent='Abrir câmera novamente';
-            button.disabled=false;
+            button.textContent = 'Abrir câmera novamente';
+            button.disabled = false;
 
             toast('Código de barras identificado!');
           }
         }
       );
 
-      if(stopped&&controls) {
+      if (stopped && controls) {
         controls.stop();
-        controls=null;
+        controls = null;
       }
 
-    } catch(e) {
-      console.error('Erro na câmera:',e);
-
+    } catch (e) {
+      console.error('Erro na câmera:', e);
       stop();
 
-      if(box)box.textContent='Não foi possível iniciar a câmera.';
+      if (box) box.textContent = 'Não foi possível iniciar a câmera.';
 
-      button.disabled=false;
-      button.textContent='Abrir câmera';
+      button.disabled = false;
+      button.textContent = 'Abrir câmera';
 
-      let message=e.message||'Não foi possível abrir a câmera.';
+      let message = e.message || 'Não foi possível abrir a câmera.';
 
-      if(e.name==='NotAllowedError') {
-        message='Acesso à câmera negado. Verifique as permissões do Safari.';
-      } else if(e.name==='NotFoundError') {
-        message='Nenhuma câmera foi encontrada neste dispositivo.';
-      } else if(e.name==='NotReadableError') {
-        message='A câmera está sendo utilizada por outro aplicativo.';
+      if (e.name === 'NotAllowedError') {
+        message = 'Acesso à câmera negado. Verifique as permissões do Safari.';
+      } else if (e.name === 'NotFoundError') {
+        message = 'Nenhuma câmera foi encontrada neste dispositivo.';
+      } else if (e.name === 'NotReadableError') {
+        message = 'A câmera está sendo utilizada por outro aplicativo.';
       }
 
       toast(message);
 
     } finally {
-      button.disabled=false;
+      button.disabled = false;
 
-      if(button.textContent==='Carregando leitor...') {
-        button.textContent='Abrir câmera';
+      if (button.textContent === 'Carregando leitor...') {
+        button.textContent = 'Abrir câmera';
       }
     }
   };
 
-  $('#lookupBarcode').onclick=async()=>{
-    if(lookupStarted)return;
+  $('#lookupBarcode').onclick = async () => {
+    if (lookupStarted) return;
 
-    const code=$('#barcodeInput').value.trim();
+    const code = $('#barcodeInput').value.trim();
 
-    if(!code) {
+    if (!code) {
       toast('Informe o código de barras.');
       return;
     }
 
-    lookupStarted=true;
+    lookupStarted = true;
 
-    const lookupButton=$('#lookupBarcode');
-    lookupButton.disabled=true;
-    lookupButton.textContent='Consultando...';
+    const lookupButton = $('#lookupBarcode');
+    lookupButton.disabled = true;
+    lookupButton.textContent = 'Consultando...';
 
     try {
-      const response=await fetch(
+      const response = await fetch(
         `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`
       );
 
-      if(!response.ok) {
+      if (!response.ok) {
         throw new Error('Falha na consulta.');
       }
 
-      const data=await response.json();
-      const prod=data.product;
+      const data = await response.json();
+      const prod = data.product;
 
-      if(data.status===1&&prod) {
-        let match=
-          db.products.find(p=>p.barcode===code)||
-          db.products.find(p=>p.name.toLowerCase()===item.name.toLowerCase());
+      if (data.status === 1 && prod) {
+        let match =
+          db.products.find(p => p.barcode === code) ||
+          db.products.find(p => p.name.toLowerCase() === item.name.toLowerCase());
 
-        if(match) {
-          item.productId=match.id;
-          item.name=match.name;
-          item.category=match.category;
-          item.unit=match.unit;
-          match.barcode=code;
+        if (match) {
+          item.productId = match.id;
+          item.name = match.name;
+          item.category = match.category;
+          item.unit = match.unit;
+          match.barcode = code;
         } else {
-          let p={
-            id:uid(),
-            name:prod.product_name_pt||prod.product_name||item.name,
-            category:'Outros',
-            unit:item.unit,
-            barcode:code,
-            photo:prod.image_url||'',
-            active:true
+          let p = {
+            id: uid(),
+            name: prod.product_name_pt || prod.product_name || item.name,
+            category: 'Outros',
+            unit: item.unit,
+            barcode: code,
+            photo: prod.image_url || '',
+            active: true
           };
 
           db.products.push(p);
 
-          item.productId=p.id;
-          item.name=p.name;
-          item.category=p.category;
+          item.productId = p.id;
+          item.name = p.name;
+          item.category = p.category;
         }
 
         stop();
@@ -1937,32 +1845,33 @@ async function scanBarcode(itemId) {
         toast('Produto não encontrado no catálogo. Você pode cadastrá-lo manualmente.');
       }
 
-    } catch(e) {
-      console.error('Erro na consulta:',e);
+    } catch (e) {
+      console.error('Erro na consulta:', e);
       toast('Não foi possível consultar. Verifique sua conexão.');
 
     } finally {
-      lookupStarted=false;
+      lookupStarted = false;
 
-      if($('#lookupBarcode')) {
-        $('#lookupBarcode').disabled=false;
-        $('#lookupBarcode').textContent='Consultar código';
+      if ($('#lookupBarcode')) {
+        $('#lookupBarcode').disabled = false;
+        $('#lookupBarcode').textContent = 'Consultar código';
       }
     }
   };
 
   // Desliga a câmera ao fechar o modal.
-  $('#closeModal').addEventListener('click',stop);
+  $('#closeModal').addEventListener('click', stop);
 
-  $('#modalBackdrop').addEventListener('click',e=>{
-    if(e.target.id==='modalBackdrop')stop();
+  $('#modalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'modalBackdrop') stop();
   });
 }
-function finishList() {
-  if(!currentList)return;
 
-  let l=currentList;
-  l.done=true;
+function finishList() {
+  if (!currentList) return;
+
+  let l = currentList;
+  l.done = true;
   l.items.forEach(savePrice);
 
   save();
@@ -1971,11 +1880,11 @@ function finishList() {
 }
 
 function exportCSV() {
-  let rows=[
-    ['Produto','Supermercado','Data','Preço da embalagem','Unidade de compra','Conteúdo da embalagem','Unidade equivalente','Preço equivalente'],
-    ...db.prices.map(p=>{
-      let amount=Number(p.netAmount)||1;
-      let normalized=Number(p.price)/amount;
+  let rows = [
+    ['Produto', 'Supermercado', 'Data', 'Preço da embalagem', 'Unidade de compra', 'Conteúdo da embalagem', 'Unidade equivalente', 'Preço equivalente'],
+    ...db.prices.map(p => {
+      let amount = Number(p.netAmount) || 1;
+      let normalized = Number(p.price) / amount;
 
       return [
         p.productName,
@@ -1984,18 +1893,21 @@ function exportCSV() {
         p.price,
         p.unit,
         amount,
-        p.netUnit||p.unit,
+        p.netUnit || p.unit,
         normalized
       ];
     })
   ];
 
-  let csv=rows.map(r=>r.map(x=>'"'+String(x).replaceAll('"','""')+'"').join(';')).join('\n');
-  let blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
-  let a=document.createElement('a');
+  let csv = rows.map(r =>
+    r.map(x => '"' + String(x).replaceAll('"', '""') + '"').join(';')
+  ).join('\n');
 
-  a.href=URL.createObjectURL(blob);
-  a.download='superlist-historico-precos.csv';
+  let blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  let a = document.createElement('a');
+
+  a.href = URL.createObjectURL(blob);
+  a.download = 'superlist-historico-precos.csv';
   a.click();
 
   URL.revokeObjectURL(a.href);
@@ -2004,14 +1916,14 @@ function exportCSV() {
 
 // Conta e sincronização.
 function accountModal() {
-  let cloud=window.SuperlistCloud;
+  let cloud = window.SuperlistCloud;
 
-  if(!cloud) {
+  if (!cloud) {
     toast('Supabase não configurado ou não carregado.');
     return;
   }
 
-  let status=cloud.status();
+  let status = cloud.status();
 
   openModal(
     'Conta e sincronização',
@@ -2054,58 +1966,58 @@ function accountModal() {
     'MINHA CONTA'
   );
 
-  const authForm=$('#authForm');
+  const authForm = $('#authForm');
 
-  authForm.addEventListener('submit',async e=>{
+  authForm.addEventListener('submit', async e => {
     e.preventDefault();
 
-    if(!authForm.reportValidity())return;
+    if (!authForm.reportValidity()) return;
 
-    const d=formData(authForm);
+    const d = formData(authForm);
 
     try {
-      await cloud.signIn(d.email,d.password);
+      await cloud.signIn(d.email, d.password);
       closeModal();
       toast('Login realizado!');
 
-    } catch(err) {
-      console.error('Erro no login:',err);
-      toast(err.message||'Não foi possível entrar.');
+    } catch (err) {
+      console.error('Erro no login:', err);
+      toast(err.message || 'Não foi possível entrar.');
     }
   });
 
-  $('#signUpBtn').addEventListener('click',async()=>{
-    if(!authForm.reportValidity())return;
+  $('#signUpBtn').addEventListener('click', async () => {
+    if (!authForm.reportValidity()) return;
 
-    const d=formData(authForm);
+    const d = formData(authForm);
 
     try {
-      await cloud.signUp(d.email,d.password);
+      await cloud.signUp(d.email, d.password);
       toast('Conta criada! Verifique seu e-mail se a confirmação estiver ativada.');
 
-    } catch(err) {
-      console.error('Erro no cadastro:',err);
-      toast(err.message||'Não foi possível criar a conta.');
+    } catch (err) {
+      console.error('Erro no cadastro:', err);
+      toast(err.message || 'Não foi possível criar a conta.');
     }
   });
 
-  $('#signOutBtn').addEventListener('click',async()=>{
+  $('#signOutBtn').addEventListener('click', async () => {
     try {
       await cloud.signOut();
       closeModal();
       toast('Sessão encerrada.');
 
-    } catch(err) {
+    } catch (err) {
       console.error(err);
-      toast(err.message||'Erro ao sair.');
+      toast(err.message || 'Erro ao sair.');
     }
   });
 
-  $('#joinHousehold').addEventListener('click',async()=>{
+  $('#joinHousehold').addEventListener('click', async () => {
     try {
-      const code=$('#joinCode').value.trim();
+      const code = $('#joinCode').value.trim();
 
-      if(!code) {
+      if (!code) {
         toast('Informe o código de convite.');
         return;
       }
@@ -2115,188 +2027,191 @@ function accountModal() {
       await cloud.loadIntoApp();
       toast('Você entrou no espaço compartilhado!');
 
-    } catch(err) {
+    } catch (err) {
       console.error(err);
-      toast(err.message||'Erro ao entrar no espaço.');
+      toast(err.message || 'Erro ao entrar no espaço.');
     }
   });
 
-  $('#showInviteCode').addEventListener('click',async()=>{
+  $('#showInviteCode').addEventListener('click', async () => {
     try {
-      let code=await cloud.getInviteCode();
+      let code = await cloud.getInviteCode();
 
-      $('#inviteCodeDisplay').innerHTML=
+      $('#inviteCodeDisplay').innerHTML =
         `<div class="invite-code">${esc(code)}</div>
          <small>Compartilhe este código somente com pessoas de confiança.</small>`;
 
-    } catch(err) {
+    } catch (err) {
       console.error(err);
-      toast(err.message||'Erro ao obter convite.');
+      toast(err.message || 'Erro ao obter convite.');
     }
   });
 }
 
 function init() {
-  $('#todayLabel').textContent=new Date().toLocaleDateString(
+  $('#todayLabel').textContent = new Date().toLocaleDateString(
     'pt-BR',
-    {weekday:'short',day:'2-digit',month:'short'}
+    { weekday: 'short', day: '2-digit', month: 'short' }
   );
 
   renderAll();
 
-  document.addEventListener('click',e=>{
-    let nav=e.target.closest('[data-page]');
+  document.addEventListener('click', e => {
+    let nav = e.target.closest('[data-page]');
 
-    if(nav) {
+    if (nav) {
       e.preventDefault();
       page(nav.dataset.page);
       return;
     }
 
-    let go=e.target.closest('[data-goto]');
+    let go = e.target.closest('[data-goto]');
 
-    if(go) {
+    if (go) {
       page(go.dataset.goto);
       return;
     }
 
-    if(
-      e.target.closest('[data-action="new-list"]')||
-      e.target.id==='homeNewList'||
-      e.target.id==='newListBtn'
+    if (
+      e.target.closest('[data-action="new-list"]') ||
+      e.target.id === 'homeNewList' ||
+      e.target.id === 'newListBtn'
     ) {
       createListModal();
       return;
     }
 
-    let open=e.target.closest('[data-open-list]');
+    let open = e.target.closest('[data-open-list]');
 
-    if(open) {
+    if (open) {
       openList(open.dataset.openList);
       return;
     }
 
-    if(e.target.closest('[data-cancel]')) {
+    if (e.target.closest('[data-cancel]')) {
       closeModal();
       return;
     }
 
-    if(e.target.id==='addStoreBtn') {
+    if (e.target.id === 'addStoreBtn') {
       addStoreModal();
       return;
     }
 
-    if(e.target.id==='addProductBtn') {
+    if (e.target.id === 'addProductBtn') {
       addProductModal();
       return;
     }
 
-    if(e.target.id==='addCategoryBtn') {
+    if (e.target.id === 'addCategoryBtn') {
       addCategory();
       return;
     }
 
-    let edit=e.target.closest('[data-edit-product]');
+    let edit = e.target.closest('[data-edit-product]');
 
-    if(edit) {
+    if (edit) {
       addProductModal(
-        db.products.find(p=>p.id===edit.dataset.editProduct)
+        db.products.find(p => p.id === edit.dataset.editProduct)
       );
       return;
     }
 
-    let del=e.target.closest('[data-delete-store]');
+    let del = e.target.closest('[data-delete-store]');
 
-    if(del) {
-      if(confirm('Excluir este supermercado? Os registros de preço existentes serão mantidos.')) {
-        db.stores=db.stores.filter(s=>s.id!==del.dataset.deleteStore);
+    if (del) {
+      if (confirm('Excluir este supermercado? Os registros de preço existentes serão mantidos.')) {
+        db.stores = db.stores.filter(s => s.id !== del.dataset.deleteStore);
         save();
       }
       return;
     }
 
-    let cat=e.target.closest('[data-cat]');
+    let cat = e.target.closest('[data-cat]');
 
-    if(cat) {
-      activeCategory=cat.dataset.cat;
+    if (cat) {
+      activeCategory = cat.dataset.cat;
       renderProducts();
       return;
     }
-const editShopping = e.target.closest('[data-edit-shopping-item]');
-if (editShopping) {
-  editShoppingItem(editShopping.dataset.editShoppingItem);
-  return;
-}
 
-const removeShopping = e.target.closest('[data-remove-shopping-item]');
-if (removeShopping) {
-  removeShoppingItem(removeShopping.dataset.removeShoppingItem);
-  return;
-}
+    const editShopping = e.target.closest('[data-edit-shopping-item]');
+    if (editShopping) {
+      editShoppingItem(editShopping.dataset.editShoppingItem);
+      return;
+    }
 
-if (e.target.closest('#addShoppingProduct')) {
-  addCatalogProductToList();
-  return;
-}
-    let scan=e.target.closest('[data-scan]');
+    const removeShopping = e.target.closest('[data-remove-shopping-item]');
+    if (removeShopping) {
+      removeShoppingItem(removeShopping.dataset.removeShoppingItem);
+      return;
+    }
 
-    if(scan) {
+    if (e.target.closest('#addShoppingProduct')) {
+      addCatalogProductToList();
+      return;
+    }
+
+    let scan = e.target.closest('[data-scan]');
+
+    if (scan) {
       scanBarcode(scan.dataset.scan);
       return;
     }
   });
-$('#shoppingSearch').addEventListener('input', renderShopping);
-  $('#closeModal').onclick=closeModal;
 
-  $('#modalBackdrop').addEventListener('click',e=>{
-    if(e.target.id==='modalBackdrop') {
+  $('#shoppingSearch').addEventListener('input', renderShopping);
+  $('#closeModal').onclick = closeModal;
+
+  $('#modalBackdrop').addEventListener('click', e => {
+    if (e.target.id === 'modalBackdrop') {
       closeModal();
     }
   });
 
-  $('#mobileMenu').onclick=()=>{
+  $('#mobileMenu').onclick = () => {
     $('#sidebar').classList.toggle('open');
   };
 
-  $('#accountBtn').onclick=accountModal;
+  $('#accountBtn').onclick = accountModal;
 
-  $('#listSearch').addEventListener('input',renderLists);
-  $('#listFilter').addEventListener('change',renderLists);
+  $('#listSearch').addEventListener('input', renderLists);
+  $('#listFilter').addEventListener('change', renderLists);
 
-  $('#productSearch').addEventListener('input',renderProducts);
-  $('#categoryFilter').addEventListener('change',renderProducts);
+  $('#productSearch').addEventListener('input', renderProducts);
+  $('#categoryFilter').addEventListener('change', renderProducts);
 
-  $('#priceStoreFilter').addEventListener('change',renderPrices);
-  $('#priceSearch').addEventListener('input',renderPrices);
+  $('#priceStoreFilter').addEventListener('change', renderPrices);
+  $('#priceSearch').addEventListener('input', renderPrices);
 
-  $('#exportPrices').onclick=exportCSV;
-  $('#registerPurchaseBtn').onclick=openPurchaseModal;
+  $('#exportPrices').onclick = exportCSV;
+  $('#registerPurchaseBtn').onclick = openPurchaseModal;
 
-  $('#backToLists').onclick=()=>page('lists');
-  $('#finishList').onclick=finishList;
-  $('#finishListBottom').onclick=finishList;
+  $('#backToLists').onclick = () => page('lists');
+  $('#finishList').onclick = finishList;
+  $('#finishListBottom').onclick = finishList;
 
-  $('#shoppingItems').addEventListener('change',e=>{
-    let l=currentList;
-    if(!l)return;
+  $('#shoppingItems').addEventListener('change', e => {
+    let l = currentList;
+    if (!l) return;
 
-    let id=e.target.dataset.check||e.target.dataset.qty||e.target.dataset.price;
-    if(!id)return;
+    let id = e.target.dataset.check || e.target.dataset.qty || e.target.dataset.price;
+    if (!id) return;
 
-    let item=l.items.find(i=>i.id===id);
-    if(!item)return;
+    let item = l.items.find(i => i.id === id);
+    if (!item) return;
 
-    if(e.target.dataset.check) {
-      item.checked=e.target.checked;
+    if (e.target.dataset.check) {
+      item.checked = e.target.checked;
     }
 
-    if(e.target.dataset.qty) {
-      item.qty=Number(e.target.value)||0;
+    if (e.target.dataset.qty) {
+      item.qty = Number(e.target.value) || 0;
     }
 
-    if(e.target.dataset.price) {
-      item.price=Number(e.target.value)||0;
-      item.estimate=item.price;
+    if (e.target.dataset.price) {
+      item.price = Number(e.target.value) || 0;
+      item.estimate = item.price;
       savePrice(item);
     }
 
@@ -2307,34 +2222,34 @@ $('#shoppingSearch').addEventListener('input', renderShopping);
 
 init();
 
-if(window.SuperlistCloud) {
-  window.SuperlistCloud.onStatus(s=>{
-    let el=$('#syncStatus');
+if (window.SuperlistCloud) {
+  window.SuperlistCloud.onStatus(s => {
+    let el = $('#syncStatus');
 
-    if(el) {
-      el.textContent=s.label;
-      el.className='sync-status '+(s.state||'');
+    if (el) {
+      el.textContent = s.label;
+      el.className = 'sync-status ' + (s.state || '');
     }
 
-    const accountButton=$('#accountBtn');
+    const accountButton = $('#accountBtn');
 
-    if(accountButton&&s.userEmail) {
-      accountButton.textContent=s.userEmail;
-      accountButton.title='Conta conectada: '+s.userEmail;
+    if (accountButton && s.userEmail) {
+      accountButton.textContent = s.userEmail;
+      accountButton.title = 'Conta conectada: ' + s.userEmail;
 
-    } else if(accountButton&&s.userEmail===null) {
-      accountButton.textContent='Conta';
-      accountButton.title='Entrar ou criar conta';
+    } else if (accountButton && s.userEmail === null) {
+      accountButton.textContent = 'Conta';
+      accountButton.title = 'Entrar ou criar conta';
     }
   });
 
   window.SuperlistCloud.boot({
-    getData:()=>db,
-    setData:d=>{
-      db=d;
-      localStorage.setItem(KEY,JSON.stringify(db));
+    getData: () => db,
+    setData: d => {
+      db = d;
+      localStorage.setItem(KEY, JSON.stringify(db));
       renderAll();
     },
-    key:KEY
+    key: KEY
   });
 }
