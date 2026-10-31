@@ -1360,55 +1360,274 @@ function savePrice(item) {
   else db.prices.push(row);
 }
 
+
+// Carrega OpenCV apenas quando a leitura da nota for solicitada.
+function loadOpenCV() {
+  if (window.cv && window.cv.Mat) return Promise.resolve(window.cv);
+
+  if (window.__superlistOpenCVPromise) return window.__superlistOpenCVPromise;
+
+  window.__superlistOpenCVPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-superlist-opencv]');
+    const script = existing || document.createElement('script');
+
+    const timeout = setTimeout(
+      () => reject(new Error('O processamento de imagem demorou demais para carregar.')),
+      30000
+    );
+
+    const finish = () => {
+      if (window.cv && window.cv.Mat) {
+        clearTimeout(timeout);
+        resolve(window.cv);
+      }
+    };
+
+    script.addEventListener('error', () => {
+      clearTimeout(timeout);
+      reject(new Error('Não foi possível carregar o processador de imagem.'));
+    }, { once: true });
+
+    if (!existing) {
+      script.src = 'https://docs.opencv.org/4.x/opencv.js';
+      script.async = true;
+      script.dataset.superlistOpencv = 'true';
+      document.head.appendChild(script);
+    }
+
+    if (window.cv && window.cv.Mat) {
+      finish();
+    } else {
+      script.addEventListener('load', () => {
+        if (window.cv && window.cv.Mat) finish();
+        else if (window.cv) {
+          window.cv.onRuntimeInitialized = finish;
+        }
+      }, { once: true });
+
+      if (window.cv) window.cv.onRuntimeInitialized = finish;
+    }
+  });
+
+  return window.__superlistOpenCVPromise;
+}
+
+// Detecta o maior contorno quadrilateral (a nota) e corrige a perspectiva.
+// Se não encontrar um contorno confiável, aplica apenas melhoria de contraste.
+async function enhanceReceiptImage(file, status) {
+  const cv = await loadOpenCV();
+  status.textContent = 'Corrigindo enquadramento, inclinação e contraste...';
+
+  const imageUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Não foi possível abrir a foto da nota.'));
+      img.src = imageUrl;
+    });
+
+    const maxSide = 2200;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    const inputCanvas = document.createElement('canvas');
+    inputCanvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    inputCanvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    inputCanvas.getContext('2d').drawImage(image, 0, 0, inputCanvas.width, inputCanvas.height);
+
+    const source = cv.imread(inputCanvas);
+    const gray = new cv.Mat();
+    const blurred = new cv.Mat();
+    const edges = new cv.Mat();
+    let warped = null;
+    let output = null;
+
+    try {
+      cv.cvtColor(source, gray, cv.COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+      cv.Canny(blurred, edges, 50, 150);
+
+      const contours = new cv.MatVector();
+      const hierarchy = new cv.Mat();
+      cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+      let best = null;
+      let bestArea = 0;
+      const imageArea = source.cols * source.rows;
+
+      for (let i = 0; i < contours.size(); i++) {
+        const contour = contours.get(i);
+        const perimeter = cv.arcLength(contour, true);
+        const approx = new cv.Mat();
+        cv.approxPolyDP(contour, approx, 0.02 * perimeter, true);
+        const area = Math.abs(cv.contourArea(approx));
+
+        if (approx.rows === 4 && area > imageArea * 0.08 && area > bestArea) {
+          bestArea = area;
+          if (best) best.delete();
+          best = approx;
+        } else {
+          approx.delete();
+        }
+        contour.delete();
+      }
+
+      if (best) {
+        const pts = [];
+        for (let i = 0; i < 4; i++) {
+          pts.push({ x: best.intAt(i, 0), y: best.intAt(i, 1) });
+        }
+        best.delete();
+
+        const sum = p => p.x + p.y;
+        const diff = p => p.y - p.x;
+        const ordered = [
+          pts.reduce((a,b) => sum(a) < sum(b) ? a : b),
+          pts.reduce((a,b) => diff(a) < diff(b) ? a : b),
+          pts.reduce((a,b) => sum(a) > sum(b) ? a : b),
+          pts.reduce((a,b) => diff(a) > diff(b) ? a : b)
+        ];
+
+        const [tl, tr, br, bl] = ordered;
+        const width = Math.max(
+          Math.hypot(br.x - bl.x, br.y - bl.y),
+          Math.hypot(tr.x - tl.x, tr.y - tl.y)
+        );
+        const height = Math.max(
+          Math.hypot(tr.x - br.x, tr.y - br.y),
+          Math.hypot(tl.x - bl.x, tl.y - bl.y)
+        );
+
+        if (width > 100 && height > 100) {
+          const srcPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
+            tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y
+          ]);
+          const dstPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
+            0, 0, width - 1, 0, width - 1, height - 1, 0, height - 1
+          ]);
+          const transform = cv.getPerspectiveTransform(srcPoints, dstPoints);
+          warped = new cv.Mat();
+          cv.warpPerspective(source, warped, transform, new cv.Size(
+            Math.round(width), Math.round(height)
+          ));
+          srcPoints.delete();
+          dstPoints.delete();
+          transform.delete();
+        }
+      }
+
+      contours.delete();
+      hierarchy.delete();
+
+      const base = warped || source;
+      const grayFinal = new cv.Mat();
+      const enlarged = new cv.Mat();
+      const enhanced = new cv.Mat();
+
+      cv.cvtColor(base, grayFinal, cv.COLOR_RGBA2GRAY);
+      const factor = Math.min(2.5, 1800 / Math.max(grayFinal.cols, grayFinal.rows));
+      cv.resize(grayFinal, enlarged, new cv.Size(
+        Math.round(grayFinal.cols * factor),
+        Math.round(grayFinal.rows * factor)
+      ), 0, 0, cv.INTER_CUBIC);
+
+      const clahe = cv.createCLAHE(2.5, new cv.Size(8, 8));
+      clahe.apply(enlarged, enhanced);
+      output = new cv.Mat();
+      cv.adaptiveThreshold(
+        enhanced, output, 255,
+        cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv.THRESH_BINARY, 31, 11
+      );
+
+      const resultCanvas = document.createElement('canvas');
+      cv.imshow(resultCanvas, output);
+
+      grayFinal.delete();
+      enlarged.delete();
+      enhanced.delete();
+      clahe.delete();
+
+      return resultCanvas;
+    } finally {
+      source.delete();
+      gray.delete();
+      blurred.delete();
+      edges.delete();
+      if (warped) warped.delete();
+      if (output) output.delete();
+    }
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
+async function loadTesseract() {
+  if (window.Tesseract) return window.Tesseract;
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('Não foi possível carregar o leitor OCR.'));
+    document.head.appendChild(script);
+  });
+  return window.Tesseract;
+}
+
+async function readReceiptQr(file, status) {
+  if (!('BarcodeDetector' in window)) {
+    status.textContent = 'Leitura automática do QR Code não disponível neste navegador.';
+    return '';
+  }
+
+  try {
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    const bitmap = await createImageBitmap(file);
+    const codes = await detector.detect(bitmap);
+    bitmap.close?.();
+    const value = codes.find(code => code.rawValue)?.rawValue || '';
+    if (value) {
+      $('#receiptQrText').value = value;
+      status.textContent = 'QR Code identificado. O conteúdo foi exibido para conferência.';
+    }
+    return value;
+  } catch (error) {
+    console.warn('Falha ao ler QR Code da nota:', error);
+    return '';
+  }
+}
+
 function openPurchaseModal() {
   const storeOptions = db.stores.map(s =>
     `<option value="${esc(s.id)}">${esc(s.name)}</option>`
   ).join('');
 
-  const categoryOptions = db.categories.map(c =>
-    `<option value="${esc(c)}">${esc(c)}</option>`
-  ).join('');
-
   openModal('Registrar compra realizada', `
     <form id="purchaseForm">
-      <div class="form-grid">
       <div class="field">
-  <label>Foto da nota fiscal</label>
- <input
-  type="file"
-  id="receiptPhoto"
-  name="receiptPhoto"
-  accept="image/*"
->
-  <small class="muted">
-    Tire uma foto da nota ou escolha uma imagem da galeria.
-  </small>
-  <div id="receiptPreview" style="margin-top:10px"></div>
-  <button
-  type="button"
-  class="btn secondary"
-  id="readReceiptBtn"
-  style="margin-top:10px"
->
-  ✨ Ler texto da nota
-</button>
+        <label>Foto da nota fiscal</label>
+        <input type="file" id="receiptPhoto" name="receiptPhoto" accept="image/*">
+        <small class="muted">Tire uma foto ou escolha uma imagem da galeria. A imagem será ajustada antes da leitura.</small>
+        <div id="receiptPreview" style="margin-top:10px"></div>
+        <div class="form-actions">
+          <button type="button" class="btn secondary" id="readReceiptBtn">✨ Melhorar foto e ler nota</button>
+          <button type="button" class="btn secondary" id="readReceiptQrBtn">▦ Ler QR Code</button>
+        </div>
+        <p id="receiptOcrStatus" class="muted" aria-live="polite"></p>
+        <div class="field">
+          <label>Texto reconhecido na nota</label>
+          <textarea id="receiptOcrText" rows="7" placeholder="O texto identificado aparecerá aqui..."></textarea>
+        </div>
+        <div class="field">
+          <label>Conteúdo do QR Code (NFC-e), se identificado</label>
+          <textarea id="receiptQrText" rows="3" placeholder="O endereço ou conteúdo do QR Code aparecerá aqui..." readonly></textarea>
+        </div>
+      </div>
 
-<p id="receiptOcrStatus" class="muted"></p>
-
-<div class="field">
-  <label>Texto reconhecido na nota</label>
-  <textarea
-    id="receiptOcrText"
-    rows="8"
-    placeholder="O texto identificado aparecerá aqui..."
-  ></textarea>
-</div>
-</div>
+      <div class="form-grid">
         <div class="field">
           <label>Supermercado</label>
           <select name="storeId" required>
-            <option value="">Selecione</option>
-            ${storeOptions}
+            <option value="">Selecione</option>${storeOptions}
           </select>
         </div>
         <div class="field">
@@ -1419,14 +1638,11 @@ function openPurchaseModal() {
 
       <div class="field">
         <label>Itens da nota fiscal</label>
-        <textarea name="items" rows="7" required
-          placeholder="Informe um produto por linha, neste formato:
+        <textarea name="items" rows="7" required placeholder="Um produto por linha:
 Arroz 5 kg; 1; 25,90
 Leite integral; 2; 9,98
 Banana; 1,5; 8,50"></textarea>
-        <small class="muted">
-          Formato: produto; quantidade; valor total pago pelo item.
-        </small>
+        <small class="muted">Formato: produto; quantidade; valor total pago pelo item. Confira os valores antes de registrar.</small>
       </div>
 
       <div class="field">
@@ -1438,160 +1654,135 @@ Banana; 1,5; 8,50"></textarea>
       </div>
 
       <div class="form-actions">
-        <button type="button" class="btn secondary" data-cancel>
-          Cancelar
-        </button>
-        <button type="submit" class="btn primary">
-          Conferir e registrar compra
-        </button>
+        <button type="button" class="btn secondary" data-cancel>Cancelar</button>
+        <button type="submit" class="btn primary">Conferir e registrar compra</button>
       </div>
     </form>
   `, 'COMPRA AVULSA');
-const receiptInput = $('#receiptPhoto');
 
-receiptInput.addEventListener('change', () => {
-  const file = receiptInput.files[0];
+  const receiptInput = $('#receiptPhoto');
   const preview = $('#receiptPreview');
-
-  if (!file) {
-    preview.innerHTML = '';
-    return;
-  }
-
-  if (!file.type.startsWith('image/')) {
-    toast('Selecione uma imagem válida.');
-    receiptInput.value = '';
-    preview.innerHTML = '';
-    return;
-  }
-
-  const imageUrl = URL.createObjectURL(file);
-
-  preview.innerHTML = `
-    <img
-      src="${imageUrl}"
-      alt="Foto da nota fiscal"
-      style="width:100%;max-height:240px;object-fit:contain;border-radius:10px;border:1px solid #ddd"
-    >
-  `;
-});
-  $('#readReceiptBtn').addEventListener('click', async () => {
-  const file = receiptInput.files[0];
-
-  if (!file) {
-    toast('Tire uma foto ou selecione a imagem da nota.');
-    return;
-  }
-
-  const button = $('#readReceiptBtn');
   const status = $('#receiptOcrStatus');
-  const output = $('#receiptOcrText');
+  let enhancedCanvas = null;
+  let originalFile = null;
 
-  button.disabled = true;
-  button.textContent = 'Lendo nota...';
-  status.textContent = 'Preparando reconhecimento de texto...';
+  receiptInput.addEventListener('change', () => {
+    const file = receiptInput.files[0];
+    enhancedCanvas = null;
+    originalFile = file || null;
 
-  try {
-    if (!window.Tesseract) {
-      await new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-
-        script.src =
-          'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-
-        script.onload = resolve;
-        script.onerror = () =>
-          reject(new Error('Não foi possível carregar o leitor OCR.'));
-
-        document.head.appendChild(script);
-      });
+    if (!file) {
+      preview.innerHTML = '';
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      toast('Selecione uma imagem válida.');
+      receiptInput.value = '';
+      preview.innerHTML = '';
+      return;
     }
 
-    status.textContent = 'Reconhecendo os textos. Isso pode levar alguns segundos...';
+    const url = URL.createObjectURL(file);
+    preview.innerHTML = `<img src="${url}" alt="Foto original da nota" style="width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid #ddd">`;
+    status.textContent = 'Foto carregada. Você pode melhorar a imagem e iniciar a leitura.';
+  });
 
-    const result = await Tesseract.recognize(
-      file,
-      'por',
-      {
+  $('#readReceiptQrBtn').addEventListener('click', async () => {
+    const file = receiptInput.files[0];
+    if (!file) return toast('Selecione a foto da nota primeiro.');
+    const button = $('#readReceiptQrBtn');
+    button.disabled = true;
+    status.textContent = 'Procurando QR Code...';
+    try {
+      const value = await readReceiptQr(file, status);
+      if (!value) status.textContent = 'QR Code não identificado. Tente aproximar e enquadrar melhor a nota.';
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('#readReceiptBtn').addEventListener('click', async () => {
+    const file = receiptInput.files[0];
+    if (!file) return toast('Tire uma foto ou selecione a imagem da nota.');
+
+    const button = $('#readReceiptBtn');
+    const output = $('#receiptOcrText');
+    button.disabled = true;
+    button.textContent = 'Processando...';
+    status.textContent = 'Preparando a imagem para leitura...';
+
+    try {
+      try {
+        enhancedCanvas = await enhanceReceiptImage(file, status);
+        preview.innerHTML += `<div style="margin-top:10px"><strong>Imagem tratada para leitura</strong><img id="receiptEnhancedPreview" alt="Nota corrigida e melhorada" style="width:100%;max-height:300px;object-fit:contain;border-radius:10px;border:1px solid #23835d"></div>`;
+        $('#receiptEnhancedPreview').src = enhancedCanvas.toDataURL('image/png');
+      } catch (imageError) {
+        console.warn('Não foi possível processar a imagem; será usada a original:', imageError);
+        enhancedCanvas = null;
+        status.textContent = 'Não foi possível corrigir a imagem automaticamente. Tentando ler a foto original...';
+      }
+
+      const T = await loadTesseract();
+      status.textContent = 'Reconhecendo os textos...';
+      const imageForOcr = enhancedCanvas || file;
+      const result = await T.recognize(imageForOcr, 'por', {
         logger: message => {
           if (message.status === 'recognizing text') {
-            status.textContent =
-              `Lendo nota: ${Math.round(message.progress * 100)}%`;
+            status.textContent = `Lendo nota: ${Math.round(message.progress * 100)}%`;
           }
         }
-      }
-    );
+      });
 
-    const recognizedText = result.data.text.trim();
+      const recognizedText = (result.data.text || '').trim();
+      if (!recognizedText) throw new Error('Nenhum texto foi identificado. Tente outra foto, com boa iluminação e a nota inteira visível.');
 
-    if (!recognizedText) {
-      throw new Error('Nenhum texto foi identificado na imagem.');
+      output.value = recognizedText;
+      status.textContent = 'Leitura concluída. Confira o texto e transcreva/corrija os itens e valores no campo abaixo.';
+      toast('Texto da nota extraído. Confira os dados antes de salvar.');
+
+    } catch (error) {
+      console.error('Erro no processamento da nota:', error);
+      status.textContent = error.message || 'Erro ao ler a nota.';
+      toast('Não foi possível reconhecer o texto da nota.');
+    } finally {
+      button.disabled = false;
+      button.textContent = '✨ Melhorar foto e ler nota';
     }
+  });
 
-    output.value = recognizedText;
-    status.textContent =
-      'Leitura concluída! Confira o texto reconhecido.';
-
-    toast('Texto da nota extraído com sucesso!');
-
-  } catch (error) {
-    console.error('Erro no OCR:', error);
-    status.textContent = error.message || 'Erro ao ler a nota.';
-    toast('Não foi possível reconhecer o texto da nota.');
-
-  } finally {
-    button.disabled = false;
-    button.textContent = '✨ Ler texto da nota';
-  }
-});
   $('#purchaseForm').addEventListener('submit', e => {
     e.preventDefault();
 
     const data = formData(e.target);
-    const lines = data.items.split('\\n')
-      .map(line => line.trim())
-      .filter(Boolean);
-
+    const lines = String(data.items || '').split(/\r?\n/)
+      .map(line => line.trim()).filter(Boolean);
     const store = db.stores.find(s => s.id === data.storeId);
 
-    if (!store) {
-      toast('Selecione um supermercado cadastrado.');
-      return;
-    }
+    if (!store) return toast('Selecione um supermercado cadastrado.');
 
     const parsed = lines.map(line => {
       const parts = line.split(';').map(x => x.trim());
-
       if (parts.length < 3) return null;
-
       const name = parts[0];
       const qty = Number(parts[1].replace(',', '.'));
       const total = Number(parts[2].replace(/\./g, '').replace(',', '.'));
-
-      if (!name || !Number.isFinite(qty) || qty <= 0 ||
-          !Number.isFinite(total) || total < 0) return null;
-
+      if (!name || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(total) || total < 0) return null;
       return { name, qty, total };
     });
 
     if (!parsed.length || parsed.some(x => !x)) {
-      toast('Revise os itens. Use produto; quantidade; valor total.');
-      return;
+      return toast('Revise os itens. Use produto; quantidade; valor total.');
     }
 
     const unknown = parsed.filter(item =>
-      !db.products.some(p =>
-        p.name.toLowerCase() === item.name.toLowerCase()
-      )
+      !db.products.some(p => p.name.trim().toLocaleLowerCase('pt-BR') === item.name.trim().toLocaleLowerCase('pt-BR'))
     );
 
     if (unknown.length && !data.approveNew) {
-      toast('Há produtos novos. Marque a aprovação para cadastrá-los.');
-      return;
+      return toast('Há produtos novos. Marque a aprovação para cadastrá-los.');
     }
 
     const purchaseId = uid();
-
     db.purchases ||= [];
     db.purchases.push({
       id: purchaseId,
@@ -1599,44 +1790,29 @@ receiptInput.addEventListener('change', () => {
       date: data.date,
       total: parsed.reduce((sum, item) => sum + item.total, 0),
       itemCount: parsed.length,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      receiptQr: $('#receiptQrText')?.value || ''
     });
 
     parsed.forEach(item => {
       let product = db.products.find(p =>
-        p.name.toLowerCase() === item.name.toLowerCase()
+        p.name.trim().toLocaleLowerCase('pt-BR') === item.name.trim().toLocaleLowerCase('pt-BR')
       );
 
       if (!product) {
         product = {
-          id: uid(),
-          name: item.name,
-          category: 'Outros',
-          unit: 'un',
-          netAmount: 1,
-          netUnit: 'un',
-          barcode: '',
-          photo: '',
-          active: true
+          id: uid(), name: item.name, category: 'Outros', unit: 'un',
+          netAmount: 1, netUnit: 'un', barcode: '', photo: '', active: true
         };
-
         db.products.push(product);
       }
 
-      const unitPrice = item.total / item.qty;
-
       db.prices.push({
-        id: uid(),
-        purchaseId,
-        listId: null,
-        productId: product.id,
-        productName: product.name,
-        storeId: store.id,
-        date: data.date,
-        price: unitPrice,
-        totalPaid: item.total,
-        quantity: item.qty,
-        unit: product.unit,
+        id: uid(), purchaseId, listId: null,
+        productId: product.id, productName: product.name,
+        storeId: store.id, date: data.date,
+        price: item.total / item.qty, totalPaid: item.total,
+        quantity: item.qty, unit: product.unit,
         netAmount: product.netAmount || 1,
         netUnit: product.netUnit || product.unit
       });
