@@ -1372,6 +1372,20 @@ function openPurchaseModal() {
   openModal('Registrar compra realizada', `
     <form id="purchaseForm">
       <div class="form-grid">
+      <div class="field">
+  <label>Foto da nota fiscal</label>
+  <input
+    type="file"
+    id="receiptPhoto"
+    name="receiptPhoto"
+    accept="image/*"
+    capture="environment"
+  >
+  <small class="muted">
+    Tire uma foto da nota ou escolha uma imagem da galeria.
+  </small>
+  <div id="receiptPreview" style="margin-top:10px"></div>
+</div>
         <div class="field">
           <label>Supermercado</label>
           <select name="storeId" required>
@@ -1415,7 +1429,34 @@ Banana; 1,5; 8,50"></textarea>
       </div>
     </form>
   `, 'COMPRA AVULSA');
+const receiptInput = $('#receiptPhoto');
 
+receiptInput.addEventListener('change', () => {
+  const file = receiptInput.files[0];
+  const preview = $('#receiptPreview');
+
+  if (!file) {
+    preview.innerHTML = '';
+    return;
+  }
+
+  if (!file.type.startsWith('image/')) {
+    toast('Selecione uma imagem válida.');
+    receiptInput.value = '';
+    preview.innerHTML = '';
+    return;
+  }
+
+  const imageUrl = URL.createObjectURL(file);
+
+  preview.innerHTML = `
+    <img
+      src="${imageUrl}"
+      alt="Foto da nota fiscal"
+      style="width:100%;max-height:240px;object-fit:contain;border-radius:10px;border:1px solid #ddd"
+    >
+  `;
+});
   $('#purchaseForm').addEventListener('submit', e => {
     e.preventDefault();
 
