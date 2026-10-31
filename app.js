@@ -600,6 +600,172 @@ function openList(id) {
   renderShopping();
 }
 
+function editShoppingItem(itemId) {
+  const item = currentList?.items.find(i => i.id === itemId);
+  if (!item) return;
+
+  const categories = [...new Set([
+    ...db.categories,
+    item.category || 'Outros'
+  ])];
+
+  openModal('Editar item da compra', `
+    <form id="editShoppingItemForm">
+      <div class="field">
+        <label>Nome do produto</label>
+        <input name="name" required value="${esc(item.name)}">
+      </div>
+
+      <div class="field">
+        <label>Categoria</label>
+        <select name="category">
+          ${categories.map(c => `
+            <option value="${esc(c)}"
+              ${c === item.category ? 'selected' : ''}>
+              ${esc(c)}
+            </option>
+          `).join('')}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Unidade</label>
+        <select name="unit">
+          ${['un','kg','g','l','ml'].map(u => `
+            <option value="${u}"
+              ${u === item.unit ? 'selected' : ''}>
+              ${u}
+            </option>
+          `).join('')}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Preço (R$)</label>
+        <input name="price" inputmode="decimal"
+          value="${String(item.price || '').replace('.', ',')}">
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="btn secondary"
+          data-cancel>Cancelar</button>
+        <button class="btn primary">Salvar alterações</button>
+      </div>
+    </form>
+  `);
+
+  $('#editShoppingItemForm').addEventListener('submit', e => {
+    e.preventDefault();
+
+    const d = formData(e.currentTarget);
+    const price = Number(
+      String(d.price).replace(',', '.')
+    );
+
+    if (!Number.isFinite(price) || price < 0) {
+      toast('Informe um preço válido.');
+      return;
+    }
+
+    item.name = d.name.trim();
+    item.category = d.category;
+    item.unit = d.unit;
+    item.price = price;
+    item.estimate = price;
+
+    savePrice(item);
+    save();
+    closeModal();
+    renderShopping();
+    toast('Item atualizado!');
+  });
+}
+
+function addCatalogProductToList() {
+  if (!currentList) return;
+
+  const available = db.products.filter(p =>
+    !currentList.items.some(i => i.productId === p.id)
+  );
+
+  if (!available.length) {
+    toast('Todos os produtos do catálogo já estão nesta lista.');
+    return;
+  }
+
+  openModal('Adicionar produto à compra', `
+    <form id="addCatalogProductForm">
+      <div class="field">
+        <label>Produto do catálogo</label>
+        <select name="productId" required>
+          ${available.map(p => `
+            <option value="${p.id}">
+              ${esc(p.name)} — ${esc(p.category)}
+            </option>
+          `).join('')}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Quantidade</label>
+        <input name="qty" type="number" min="0.01"
+          step="0.01" value="1" required>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="btn secondary"
+          data-cancel>Cancelar</button>
+        <button class="btn primary">Adicionar à compra</button>
+      </div>
+    </form>
+  `);
+
+  $('#addCatalogProductForm').addEventListener('submit', e => {
+    e.preventDefault();
+
+    const d = formData(e.currentTarget);
+    const product = db.products.find(p => p.id === d.productId);
+
+    if (!product) return;
+
+    const previous = latestPrice(product.id, currentList.storeId);
+
+    currentList.items.push({
+      id: uid(),
+      productId: product.id,
+      name: product.name,
+      category: product.category || 'Outros',
+      unit: product.unit || 'un',
+      qty: Number(d.qty) || 1,
+      price: 0,
+      estimate: previous?.price || 0,
+      checked: false
+    });
+
+    save();
+    closeModal();
+    renderShopping();
+    toast('Produto adicionado à compra!');
+  });
+}
+
+function removeShoppingItem(itemId) {
+  if (!currentList) return;
+
+  const item = currentList.items.find(i => i.id === itemId);
+  if (!item) return;
+
+  if (!confirm(`Retirar "${item.name}" desta compra? O produto continuará no catálogo.`)) {
+    return;
+  }
+
+  currentList.items = currentList.items.filter(i => i.id !== itemId);
+
+  save();
+  renderShopping();
+  toast('Item retirado da compra.');
+}
+
 function renderShopping() {
   let l=currentList;
 
