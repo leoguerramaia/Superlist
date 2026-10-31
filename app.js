@@ -1385,6 +1385,25 @@ function openPurchaseModal() {
     Tire uma foto da nota ou escolha uma imagem da galeria.
   </small>
   <div id="receiptPreview" style="margin-top:10px"></div>
+  <button
+  type="button"
+  class="btn secondary"
+  id="readReceiptBtn"
+  style="margin-top:10px"
+>
+  ✨ Ler texto da nota
+</button>
+
+<p id="receiptOcrStatus" class="muted"></p>
+
+<div class="field">
+  <label>Texto reconhecido na nota</label>
+  <textarea
+    id="receiptOcrText"
+    rows="8"
+    placeholder="O texto identificado aparecerá aqui..."
+  ></textarea>
+</div>
 </div>
         <div class="field">
           <label>Supermercado</label>
@@ -1456,6 +1475,75 @@ receiptInput.addEventListener('change', () => {
       style="width:100%;max-height:240px;object-fit:contain;border-radius:10px;border:1px solid #ddd"
     >
   `;
+});
+  $('#readReceiptBtn').addEventListener('click', async () => {
+  const file = receiptInput.files[0];
+
+  if (!file) {
+    toast('Tire uma foto ou selecione a imagem da nota.');
+    return;
+  }
+
+  const button = $('#readReceiptBtn');
+  const status = $('#receiptOcrStatus');
+  const output = $('#receiptOcrText');
+
+  button.disabled = true;
+  button.textContent = 'Lendo nota...';
+  status.textContent = 'Preparando reconhecimento de texto...';
+
+  try {
+    if (!window.Tesseract) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+
+        script.src =
+          'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+
+        script.onload = resolve;
+        script.onerror = () =>
+          reject(new Error('Não foi possível carregar o leitor OCR.'));
+
+        document.head.appendChild(script);
+      });
+    }
+
+    status.textContent = 'Reconhecendo os textos. Isso pode levar alguns segundos...';
+
+    const result = await Tesseract.recognize(
+      file,
+      'por',
+      {
+        logger: message => {
+          if (message.status === 'recognizing text') {
+            status.textContent =
+              `Lendo nota: ${Math.round(message.progress * 100)}%`;
+          }
+        }
+      }
+    );
+
+    const recognizedText = result.data.text.trim();
+
+    if (!recognizedText) {
+      throw new Error('Nenhum texto foi identificado na imagem.');
+    }
+
+    output.value = recognizedText;
+    status.textContent =
+      'Leitura concluída! Confira o texto reconhecido.';
+
+    toast('Texto da nota extraído com sucesso!');
+
+  } catch (error) {
+    console.error('Erro no OCR:', error);
+    status.textContent = error.message || 'Erro ao ler a nota.';
+    toast('Não foi possível reconhecer o texto da nota.');
+
+  } finally {
+    button.disabled = false;
+    button.textContent = '✨ Ler texto da nota';
+  }
 });
   $('#purchaseForm').addEventListener('submit', e => {
     e.preventDefault();
