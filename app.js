@@ -67,9 +67,29 @@ let activeCategory = 'all';
 function loadDB() {
   try {
     let d = JSON.parse(localStorage.getItem(KEY));
-    if(d) return d;
-  } catch(e) {}
-  return {categories:seedCategories,products:seedProducts,stores:[],lists:[],prices:[]};
+
+    if(d) {
+      d.categories ||= seedCategories;
+      d.products ||= seedProducts;
+      d.stores ||= [];
+      d.lists ||= [];
+      d.prices ||= [];
+      d.purchases ||= [];
+
+      return d;
+    }
+  } catch(e) {
+    console.warn('Erro ao carregar dados locais:', e);
+  }
+
+  return {
+    categories: seedCategories,
+    products: seedProducts,
+    stores: [],
+    lists: [],
+    prices: [],
+    purchases: []
+  };
 }
 
 function save() {
