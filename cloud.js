@@ -705,6 +705,7 @@ window.SUPERLIST_CONFIG = {
     scheduleSync,
     onStatus,
     loadIntoApp,
+    
     uploadProductPhoto,
     getProductPhotoUrl,
     deleteProductPhoto,
