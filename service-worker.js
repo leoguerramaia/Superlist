@@ -1,5 +1,5 @@
 
-const CACHE = 'superlist-shell-v4';
+const CACHE = 'superlist-shell';
 
 const ASSETS = [
   './',
@@ -10,26 +10,53 @@ const ASSETS = [
   './manifest.webmanifest'
 ];
 
+// Instala o novo service worker e atualiza os arquivos armazenados.
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(ASSETS))
+    (async () => {
+      const cache = await caches.open(CACHE);
+
+      await Promise.all(
+        ASSETS.map(async path => {
+          try {
+            const request = new Request(path, { cache: 'reload' });
+            const response = await fetch(request);
+
+            if (response.ok) {
+              await cache.put(path, response);
+            }
+          } catch (error) {
+            console.warn('Não foi possível atualizar:', path, error);
+          }
+        })
+      );
+
+      await self.skipWaiting();
+    })()
   );
-  self.skipWaiting();
 });
 
+// Assume o controle e remove os caches antigos do Superlist.
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
+    (async () => {
+      const keys = await caches.keys();
+
+      await Promise.all(
         keys
-          .filter(key => key !== CACHE)
+          .filter(key =>
+            key.startsWith('superlist-shell') && key !== CACHE
+          )
           .map(key => caches.delete(key))
-      )
-    )
+      );
+
+      await self.clients.claim();
+    })()
   );
-  self.clients.claim();
 });
 
+// Busca sempre a versão mais recente dos arquivos.
+// Se estiver sem internet, utiliza a cópia armazenada.
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
 
@@ -37,21 +64,44 @@ self.addEventListener('fetch', event => {
 
   if (url.origin !== self.location.origin) return;
 
-  const isAppFile = /\.(html|js|css|webmanifest)$/.test(url.pathname);
+  const isAppFile =
+    event.request.mode === 'navigate' ||
+    /\.(html|js|css|webmanifest)$/.test(url.pathname);
 
   if (!isAppFile) return;
 
   event.respondWith(
-    fetch(event.request)
-      .then(response => {
+    (async () => {
+      try {
+        const response = await fetch(event.request, {
+          cache: 'no-store'
+        });
+
         if (response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE).then(cache =>
-            cache.put(event.request, copy)
-          );
+          const cache = await caches.open(CACHE);
+          await cache.put(event.request, response.clone());
         }
+
         return response;
-      })
-      .catch(() => caches.match(event.request))
+      } catch (error) {
+        const cached =
+          await caches.match(event.request) ||
+          await caches.match('./index.html');
+
+        if (cached) return cached;
+
+        return new Response('Você está offline. Conecte-se à internet e tente novamente.', {
+          status: 503,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        });
+      }
+    })()
   );
+});
+
+// Permite que a página solicite a ativação imediata.
+self.addEventListener('message', event => {
+  if (event.data === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
