@@ -522,50 +522,172 @@ function addStoreModal() {
   });
 }
 
-function addProductModal(product=null) {
-  let p=product||{};
 
-  openModal(product?'Editar produto':'Novo produto',`<form id="modalForm">
-    <div class="field">
-      <label>Nome do produto</label>
-      <input name="name" required placeholder="Ex.: Arroz tipo 1 — 5 kg" value="${esc(p.name||'')}">
-    </div>
-    <div class="form-grid">
-      ${selectField('Categoria','category',db.categories,p.category||'Mercearia')}
-      ${selectField('Unidade de compra','unit',['un','kg','g','l','ml'],p.unit||'un')}
-    </div>
-    <div class="form-grid">
-      ${field('Conteúdo da embalagem','netAmount','Ex.: 5','number',p.netAmount??packageInfo(p.name||'',p.unit||'un').amount)}
-      ${selectField('Unidade do conteúdo','netUnit',['un','kg','l'],p.netUnit||packageInfo(p.name||'',p.unit||'un').unit)}
-    </div>
-    <div class="field">
-      <label>Código de barras (EAN/GTIN)</label>
-      <input name="barcode" placeholder="Digite ou escaneie o código" value="${esc(p.barcode||'')}">
-    </div>
-    <div class="field">
-      <label>Foto (URL opcional)</label>
-      <input name="photo" placeholder="https://..." value="${esc(p.photo||'')}">
-    </div>
-    <div class="helper">A consulta por código de barras usa o catálogo público Open Food Facts. A cobertura varia conforme o produto e o país.</div>
-    <div class="form-actions">
-      <button type="button" class="btn secondary" data-cancel>Cancelar</button>
-      <button class="btn primary">Salvar produto</button>
-    </div>
-  </form>`);
+function addProductModal(product = null) {
+  const p = product || {};
+  const photoPath = p.photoPath || '';
+  const photoUrl = p.photo || '';
 
-  $('#modalForm').addEventListener('submit',e=>{
+  openModal(product ? 'Editar produto' : 'Novo produto', `
+    <form id="modalForm">
+      <div class="field">
+        <label>Nome do produto</label>
+        <input name="name" required
+          placeholder="Ex.: Arroz tipo 1 — 5 kg"
+          value="${esc(p.name || '')}">
+      </div>
+
+      <div class="form-grid">
+        ${selectField('Categoria', 'category', db.categories,
+          p.category || 'Mercearia')}
+        ${selectField('Unidade de compra', 'unit',
+          ['un','kg','g','l','ml'], p.unit || 'un')}
+      </div>
+
+      <div class="form-grid">
+        ${field('Conteúdo da embalagem', 'netAmount',
+          'Ex.: 5', 'number',
+          p.netAmount ?? packageInfo(p.name || '', p.unit || 'un').amount)}
+        ${selectField('Unidade do conteúdo', 'netUnit',
+          ['un','kg','l'],
+          p.netUnit || packageInfo(p.name || '', p.unit || 'un').unit)}
+      </div>
+
+      <div class="field">
+        <label>Código de barras (EAN/GTIN)</label>
+        <input name="barcode" placeholder="Digite o código"
+          value="${esc(p.barcode || '')}">
+      </div>
+
+      <div class="field">
+        <label>Foto por URL</label>
+        <input name="photo" type="url"
+          placeholder="https://..."
+          value="${esc(photoUrl)}">
+      </div>
+
+      <div class="field">
+        <label>Foto pela câmera ou galeria</label>
+        <input id="productPhotoFile" type="file"
+          accept="image/*">
+        <small class="helper">
+          No celular, você poderá escolher a câmera ou uma foto da galeria.
+          Limite de 5 MB.
+        </small>
+      </div>
+
+      <div id="productPhotoPreview" class="field">
+        ${photoUrl
+          ? `<img src="${esc(photoUrl)}" alt="Foto do produto"
+              style="max-width:130px;max-height:130px;object-fit:contain">`
+          : photoPath
+            ? '<span class="helper">Foto armazenada no Supabase.</span>'
+            : '<span class="helper">Nenhuma foto selecionada.</span>'}
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="btn secondary" data-cancel>
+          Cancelar
+        </button>
+        <button class="btn primary">Salvar produto</button>
+      </div>
+    </form>
+  `);
+
+  const form = $('#modalForm');
+  const fileInput = $('#productPhotoFile');
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      fileInput.value = '';
+      toast('A imagem deve ter no máximo 5 MB.');
+      return;
+    }
+
+    const preview = $('#productPhotoPreview');
+    const url = URL.createObjectURL(file);
+
+    preview.innerHTML = `
+      <img src="${url}" alt="Prévia da foto"
+        style="max-width:130px;max-height:130px;object-fit:contain">
+    `;
+  });
+
+  form.addEventListener('submit', async e => {
     e.preventDefault();
-    let d=formData();
-    d.netAmount=Number(d.netAmount)||1;
 
-    if(product)Object.assign(product,d);
-    else db.products.push({id:uid(),...d,active:true});
+    const button = form.querySelector('button[type="submit"], button.primary');
+    button.disabled = true;
+    button.textContent = 'Salvando...';
 
-    save();
-    closeModal();
-    toast('Produto salvo!');
+    try {
+      const d = formData(form);
+      const file = fileInput.files[0];
+
+      d.name = d.name.trim();
+      d.netAmount = Number(d.netAmount) || 1;
+
+      const barcode = d.barcode.trim();
+
+      const duplicate = db.products.find(x =>
+        x.id !== p.id &&
+        barcode &&
+        x.barcode === barcode
+      );
+
+      if (duplicate) {
+        throw new Error('Esse código de barras já está cadastrado em outro produto.');
+      }
+
+      let newPhotoPath = photoPath;
+      let photo = d.photo.trim();
+
+      if (file) {
+        if (!window.SuperlistCloud?.uploadProductPhoto) {
+          throw new Error('A integração de fotos não está disponível.');
+        }
+
+        newPhotoPath = await window.SuperlistCloud.uploadProductPhoto(file);
+        photo = '';
+      }
+
+      const productData = {
+        name: d.name,
+        category: d.category,
+        unit: d.unit,
+        netAmount: d.netAmount,
+        netUnit: d.netUnit,
+        barcode,
+        photo,
+        photoPath: newPhotoPath,
+        active: true
+      };
+
+      if (product) {
+        Object.assign(product, productData);
+      } else {
+        db.products.push({
+          id: uid(),
+          ...productData
+        });
+      }
+
+      save();
+      closeModal();
+      toast('Produto salvo com sucesso!');
+
+    } catch (error) {
+      console.error(error);
+      toast(error.message || 'Não foi possível salvar o produto.');
+      button.disabled = false;
+      button.textContent = 'Salvar produto';
+    }
   });
 }
+
 
 function addCategory() {
   openModal('Nova categoria',`<form id="modalForm">
@@ -667,10 +789,18 @@ function editShoppingItem(itemId) {
       return;
     }
 
-    item.name = d.name.trim();
-    item.category = d.category;
-    item.unit = d.unit;
-    item.price = price;
+item.name = d.name.trim();
+item.category = d.category;
+item.unit = d.unit;
+
+const product = findOrCreateProduct(item);
+Object.assign(product, {
+  name: item.name,
+  category: item.category,
+  unit: item.unit
+});
+
+item.price = price;
     item.estimate = price;
 
     savePrice(item);
@@ -680,6 +810,49 @@ function editShoppingItem(itemId) {
     toast('Item atualizado!');
   });
 }
+
+
+function findOrCreateProduct(item) {
+  let product = item.productId
+    ? db.products.find(p => p.id === item.productId)
+    : null;
+
+  if (!product) {
+    const normalize = value => String(value || '')
+      .trim()
+      .toLocaleLowerCase('pt-BR')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    product = db.products.find(p =>
+      normalize(p.name) === normalize(item.name)
+    );
+  }
+
+  if (!product) {
+    product = {
+      id: uid(),
+      name: item.name.trim(),
+      category: item.category || 'Outros',
+      unit: item.unit || 'un',
+      ...packageInfo(item.name, item.unit || 'un'),
+      barcode: '',
+      photo: '',
+      photoPath: '',
+      active: true
+    };
+
+    db.products.push(product);
+  }
+
+  item.productId = product.id;
+  item.name = product.name;
+  item.category = product.category;
+  item.unit = product.unit;
+
+  return product;
+}
+
 
 function addCatalogProductToList() {
   if (!currentList) return;
