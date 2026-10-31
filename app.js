@@ -1360,6 +1360,166 @@ function savePrice(item) {
   else db.prices.push(row);
 }
 
+function openPurchaseModal() {
+  const storeOptions = db.stores.map(s =>
+    `<option value="${esc(s.id)}">${esc(s.name)}</option>`
+  ).join('');
+
+  const categoryOptions = db.categories.map(c =>
+    `<option value="${esc(c)}">${esc(c)}</option>`
+  ).join('');
+
+  openModal('Registrar compra realizada', `
+    <form id="purchaseForm">
+      <div class="form-grid">
+        <div class="field">
+          <label>Supermercado</label>
+          <select name="storeId" required>
+            <option value="">Selecione</option>
+            ${storeOptions}
+          </select>
+        </div>
+        <div class="field">
+          <label>Data da compra</label>
+          <input type="date" name="date" value="${today()}" required>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Itens da nota fiscal</label>
+        <textarea name="items" rows="7" required
+          placeholder="Informe um produto por linha, neste formato:
+Arroz 5 kg; 1; 25,90
+Leite integral; 2; 9,98
+Banana; 1,5; 8,50"></textarea>
+        <small class="muted">
+          Formato: produto; quantidade; valor total pago pelo item.
+        </small>
+      </div>
+
+      <div class="field">
+        <label>Produtos que ainda não existem no catálogo</label>
+        <label style="display:flex;gap:8px;align-items:center">
+          <input type="checkbox" name="approveNew">
+          Aprovo cadastrar os novos produtos identificados
+        </label>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="btn secondary" data-cancel>
+          Cancelar
+        </button>
+        <button type="submit" class="btn primary">
+          Conferir e registrar compra
+        </button>
+      </div>
+    </form>
+  `, 'COMPRA AVULSA');
+
+  $('#purchaseForm').addEventListener('submit', e => {
+    e.preventDefault();
+
+    const data = formData(e.target);
+    const lines = data.items.split('\\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    const store = db.stores.find(s => s.id === data.storeId);
+
+    if (!store) {
+      toast('Selecione um supermercado cadastrado.');
+      return;
+    }
+
+    const parsed = lines.map(line => {
+      const parts = line.split(';').map(x => x.trim());
+
+      if (parts.length < 3) return null;
+
+      const name = parts[0];
+      const qty = Number(parts[1].replace(',', '.'));
+      const total = Number(parts[2].replace(/\./g, '').replace(',', '.'));
+
+      if (!name || !Number.isFinite(qty) || qty <= 0 ||
+          !Number.isFinite(total) || total < 0) return null;
+
+      return { name, qty, total };
+    });
+
+    if (!parsed.length || parsed.some(x => !x)) {
+      toast('Revise os itens. Use produto; quantidade; valor total.');
+      return;
+    }
+
+    const unknown = parsed.filter(item =>
+      !db.products.some(p =>
+        p.name.toLowerCase() === item.name.toLowerCase()
+      )
+    );
+
+    if (unknown.length && !data.approveNew) {
+      toast('Há produtos novos. Marque a aprovação para cadastrá-los.');
+      return;
+    }
+
+    const purchaseId = uid();
+
+    db.purchases ||= [];
+    db.purchases.push({
+      id: purchaseId,
+      storeId: store.id,
+      date: data.date,
+      total: parsed.reduce((sum, item) => sum + item.total, 0),
+      itemCount: parsed.length,
+      createdAt: new Date().toISOString()
+    });
+
+    parsed.forEach(item => {
+      let product = db.products.find(p =>
+        p.name.toLowerCase() === item.name.toLowerCase()
+      );
+
+      if (!product) {
+        product = {
+          id: uid(),
+          name: item.name,
+          category: 'Outros',
+          unit: 'un',
+          netAmount: 1,
+          netUnit: 'un',
+          barcode: '',
+          photo: '',
+          active: true
+        };
+
+        db.products.push(product);
+      }
+
+      const unitPrice = item.total / item.qty;
+
+      db.prices.push({
+        id: uid(),
+        purchaseId,
+        listId: null,
+        productId: product.id,
+        productName: product.name,
+        storeId: store.id,
+        date: data.date,
+        price: unitPrice,
+        totalPaid: item.total,
+        quantity: item.qty,
+        unit: product.unit,
+        netAmount: product.netAmount || 1,
+        netUnit: product.netUnit || product.unit
+      });
+    });
+
+    save();
+    closeModal();
+    toast('Compra registrada e histórico de preços atualizado!');
+  });
+}
+
 // Leitor de código de barras compatível com Safari e outros navegadores.
 async function scanBarcode(itemId) {
   let item=currentList?.items.find(i=>i.id===itemId);
@@ -1982,6 +2142,7 @@ $('#shoppingSearch').addEventListener('input', renderShopping);
   $('#priceSearch').addEventListener('input',renderPrices);
 
   $('#exportPrices').onclick=exportCSV;
+  $('#registerPurchaseBtn').onclick=openPurchaseModal;
 
   $('#backToLists').onclick=()=>page('lists');
   $('#finishList').onclick=finishList;
