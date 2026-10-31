@@ -429,6 +429,20 @@ function createListModal() {
     <div class="field"><label>Importar itens por texto (opcional)</label><textarea name="text" id="newListText" placeholder="2 arroz 5kg&#10;1 kg de banana&#10;Leite 3 unidades"></textarea></div>
     <div class="field"><label>Ou fotografar uma lista escrita à mão</label><input id="handwrittenListPhoto" type="file" accept="image/*" capture="environment"><small class="helper">Tire uma foto nítida da lista. A IA vai identificar os itens para você revisar antes de criar.</small></div>
     <div class="form-actions"><button type="button" class="btn secondary" id="analyzeHandwrittenList">✨ Ler foto com IA</button></div>
+    <style>
+      .receipt-progress{margin:14px 0;padding:13px;border:1px solid #dce8e2;border-radius:12px;background:#f7fbf8}
+      .receipt-progress-top{display:flex;align-items:center;gap:9px;margin-bottom:11px;color:#245b43;font-size:13px}
+      .receipt-spinner{width:17px;height:17px;border:2px solid #c9ddd1;border-top-color:#23835d;border-radius:50%;animation:receiptSpin .8s linear infinite;flex:none}
+      .receipt-progress-track{height:7px;overflow:hidden;border-radius:99px;background:#e1ebe5;margin-bottom:8px}
+      .receipt-progress-track span{display:block;width:38%;height:100%;border-radius:99px;background:#23835d;animation:receiptSlide 1.35s ease-in-out infinite}
+      @keyframes receiptSpin{to{transform:rotate(360deg)}}
+      @keyframes receiptSlide{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
+    </style>
+    <div id="handwrittenListProgress" class="receipt-progress" style="display:none" aria-live="polite">
+      <div class="receipt-progress-top"><span class="receipt-spinner"></span><strong id="handwrittenListProgressMessage">Organizando seus produtos...</strong></div>
+      <div class="receipt-progress-track"><span></span></div>
+      <small class="helper">Aguarde. Você poderá revisar tudo antes de salvar.</small>
+    </div>
     <div id="handwrittenListStatus" class="helper" aria-live="polite"></div>
     <div id="handwrittenListReview" style="display:none;margin-top:12px"></div>
     <p class="helper">Você também poderá adicionar produtos individualmente depois. Itens não reconhecidos serão incluídos em “Outros”.</p>
@@ -436,27 +450,37 @@ function createListModal() {
   </form>`,'NOVA LISTA');
   let recognizedRows=[];
   const photoInput=$('#handwrittenListPhoto'), status=$('#handwrittenListStatus'), review=$('#handwrittenListReview');
+  const progress=$('#handwrittenListProgress'), progressMessage=$('#handwrittenListProgressMessage');
+  const showListProgress=(message)=>{progressMessage.textContent=message;progress.style.display='block';status.textContent='';};
+  const hideListProgress=()=>{progress.style.display='none';};
   $('#analyzeHandwrittenList').addEventListener('click',async()=>{
     const file=photoInput.files?.[0];
     if(!file)return toast('Selecione ou fotografe uma lista escrita à mão.');
     if(!window.SuperlistCloud?.analyzeListPhoto)return toast('Atualize a integração com o Supabase para habilitar a leitura de listas.');
-    const button=$('#analyzeHandwrittenList');button.disabled=true;button.textContent='Analisando...';status.textContent='A IA está lendo a lista. Isso pode levar alguns segundos.';
+    const button=$('#analyzeHandwrittenList');button.disabled=true;button.textContent='Analisando...';showListProgress('A IA está lendo sua lista manuscrita...');
     try{
       const result=await window.SuperlistCloud.analyzeListPhoto(file);
       recognizedRows=(result.items||[]).map(x=>({name:String(x.name||'').trim(),brand:String(x.brand||'').trim(),quantity:Number(x.quantity)||1,unit:String(x.unit||'un').toLowerCase()})).filter(x=>x.name);
       review.innerHTML=recognizedRows.length?`<strong>${recognizedRows.length} item(ns) identificado(s). Confira antes de criar a lista:</strong><div style="overflow-x:auto"><table class="receipt-items-table"><thead><tr><th>Produto</th><th>Marca (opcional)</th><th>Qtd.</th><th>Un.</th><th></th></tr></thead><tbody>${recognizedRows.map((r,i)=>`<tr data-hand-row="${i}"><td><input data-hand-field="name" value="${esc(r.name)}"></td><td><input data-hand-field="brand" value="${esc(r.brand)}" placeholder="Marca"></td><td><input data-hand-field="quantity" type="number" min="0.01" step="0.01" value="${r.quantity}"></td><td><select data-hand-field="unit">${['un','kg','g','l','ml','cx','pct'].map(u=>`<option ${r.unit===u?'selected':''}>${u}</option>`).join('')}</select></td><td><button type="button" data-hand-remove="${i}">×</button></td></tr>`).join('')}</tbody></table></div>`:'A IA não identificou itens. Tente uma foto mais nítida.';
-      review.style.display='block';status.textContent='Leitura concluída. Revise os itens acima; nada será salvo até clicar em “Criar lista”.';
-    }catch(err){console.error(err);status.textContent=err.message||'Não foi possível ler a foto.';toast(status.textContent)}
+      review.style.display='block';hideListProgress();status.textContent='Leitura concluída. Revise os itens acima; nada será salvo até clicar em “Criar lista”.';
+    }catch(err){console.error(err);hideListProgress();status.textContent='Não conseguimos ler a foto neste momento. Você pode digitar ou colar os produtos no campo acima. Sua foto continua selecionada para tentar novamente depois.';toast('Não conseguimos ler a foto agora. Você pode digitar ou colar os produtos e continuar.')}
     finally{button.disabled=false;button.textContent='✨ Ler foto com IA'}
   });
   review.addEventListener('change',e=>{const tr=e.target.closest('[data-hand-row]');if(!tr)return;const row=recognizedRows[Number(tr.dataset.handRow)];if(!row)return;row[e.target.dataset.handField]=e.target.dataset.handField==='quantity'?Number(e.target.value):e.target.value});
   review.addEventListener('click',e=>{const b=e.target.closest('[data-hand-remove]');if(!b)return;recognizedRows.splice(Number(b.dataset.handRemove),1);review.innerHTML=recognizedRows.length?`<strong>${recognizedRows.length} item(ns) para revisar:</strong><div style="overflow-x:auto"><table class="receipt-items-table"><thead><tr><th>Produto</th><th>Marca</th><th>Qtd.</th><th>Un.</th><th></th></tr></thead><tbody>${recognizedRows.map((r,i)=>`<tr data-hand-row="${i}"><td><input data-hand-field="name" value="${esc(r.name)}"></td><td><input data-hand-field="brand" value="${esc(r.brand)}" placeholder="Marca"></td><td><input data-hand-field="quantity" type="number" min="0.01" step="0.01" value="${r.quantity}"></td><td><select data-hand-field="unit">${['un','kg','g','l','ml','cx','pct'].map(u=>`<option ${r.unit===u?'selected':''}>${u}</option>`).join('')}</select></td><td><button type="button" data-hand-remove="${i}">×</button></td></tr>`).join('')}</tbody></table></div>`:'Nenhum item na revisão.';});
   $('#modalForm').addEventListener('submit',e=>{
-    e.preventDefault();const d=formData(e.currentTarget);const storeId=d.storeId;
+    e.preventDefault();const form=e.currentTarget;if(!form.reportValidity())return;
+    const d=formData(form);const storeId=d.storeId;
+    const submitButton=form.querySelector('button[type="submit"],button:not([type])');
+    if(submitButton){submitButton.disabled=true;submitButton.textContent='Organizando...';}
+    showListProgress('Organizando seus produtos e preparando a lista...');
+    // Aguarda um ciclo de renderização para a barra aparecer antes do processamento local.
+    setTimeout(()=>{
     let items=parseImported(d.text||'');
     recognizedRows.forEach(r=>{if(!r.name)return;const product=findOrCreateProduct({name:r.name,category:'Outros',unit:r.unit});items.push({id:uid(),productId:product.id,name:product.name,category:product.category||'Outros',unit:r.unit||product.unit||'un',qty:r.quantity||1,brand:r.brand||'',price:0,checked:false})});
     items.forEach(i=>{let h=latestPrice(i.productId,storeId);if(h)i.estimate=h.price});
-    const l={id:uid(),name:d.name,storeId,created:d.created,done:false,items};db.lists.push(l);save();closeModal();openList(l.id);toast('Lista criada com sucesso!');
+    const l={id:uid(),name:d.name,storeId,created:d.created,done:false,items};db.lists.push(l);save();hideListProgress();closeModal();openList(l.id);toast('Lista criada com sucesso!');
+    },120);
   });
 }
 
@@ -1899,8 +1923,8 @@ function openPurchaseModal() {
       toast(`${items.length} item(ns) analisado(s) pela IA.`);
     } catch (error) {
       console.error('Erro na análise IA da nota:', error);
-      status.textContent = error.message || 'Não foi possível analisar a nota.';
-      toast(error.message || 'Falha na análise da nota.');
+      status.textContent = 'Não conseguimos ler a nota neste momento. Tente novamente em alguns instantes ou confira os produtos manualmente.';
+      toast('Não foi possível concluir a leitura agora. Você pode conferir os produtos manualmente.');
     } finally {
       if (progressTimer) clearInterval(progressTimer);
       progressTimer = null;
