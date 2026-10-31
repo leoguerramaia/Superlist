@@ -1689,7 +1689,7 @@ function openPurchaseModal() {
         <small class="muted">Tire uma foto ou escolha uma imagem da galeria. A imagem será ajustada antes da leitura.</small>
         <div id="receiptPreview" style="margin-top:10px"></div>
         <div class="form-actions">
-          <button type="button" class="btn secondary" id="readReceiptBtn">✨ Melhorar foto e ler nota</button>
+          <button type="button" class="btn secondary" id="readReceiptBtn">✨ Analisar nota com IA</button>
           <button type="button" class="btn secondary" id="readReceiptQrBtn">▦ Ler QR Code pela câmera</button>
           <button type="button" class="btn secondary" id="stopReceiptQrBtn" disabled>Parar câmera</button>
           <button type="button" class="btn secondary" id="readReceiptQrPhotoBtn">Ler QR de uma foto (opcional)</button>
@@ -1701,6 +1701,7 @@ function openPurchaseModal() {
         <div class="form-actions">
         </div>
         <p id="receiptOcrStatus" class="muted" aria-live="polite"></p>
+        <div id="receiptAiReview" class="invite-box" style="display:none"></div>
         <div class="field">
           <label>Texto reconhecido na nota</label>
           <textarea id="receiptOcrText" rows="7" placeholder="O texto identificado aparecerá aqui..."></textarea>
@@ -1753,6 +1754,7 @@ Banana; 1,5; 8,50"></textarea>
   const status = $('#receiptOcrStatus');
   let enhancedCanvas = null;
   let originalFile = null;
+  let aiReceiptAnalysis = null;
 
   receiptInput.addEventListener('change', () => {
     const file = receiptInput.files[0];
@@ -1882,64 +1884,106 @@ Banana; 1,5; 8,50"></textarea>
 
   $('#readReceiptBtn').addEventListener('click', async () => {
     const file = receiptInput.files[0];
-    if (!file) return toast('Tire uma foto ou selecione a imagem da nota.');
+    if (!file) return toast('Selecione ou fotografe a nota fiscal.');
+
+    if (!window.SuperlistCloud?.analyzeReceipt) {
+      return toast('Integração OpenAI ainda não configurada. Configure o Supabase e publique a Edge Function.');
+    }
 
     const button = $('#readReceiptBtn');
     const output = $('#receiptOcrText');
+    const review = $('#receiptAiReview');
     button.disabled = true;
-    button.textContent = 'Processando...';
-    status.textContent = 'Preparando a imagem para leitura...';
+    button.textContent = 'Analisando com IA...';
+    status.textContent = 'Enviando a imagem com segurança para a IA...';
+    review.style.display = 'none';
+    review.innerHTML = '';
 
     try {
-      try {
-        enhancedCanvas = await enhanceReceiptImage(file, status);
-        preview.innerHTML += `<div style="margin-top:10px"><strong>Imagem tratada para leitura</strong><img id="receiptEnhancedPreview" alt="Nota corrigida e melhorada" style="width:100%;max-height:300px;object-fit:contain;border-radius:10px;border:1px solid #23835d"></div>`;
-        $('#receiptEnhancedPreview').src = enhancedCanvas.toDataURL('image/png');
-      } catch (imageError) {
-        console.warn('Não foi possível processar a imagem; será usada a original:', imageError);
-        enhancedCanvas = null;
-        status.textContent = 'Não foi possível corrigir a imagem automaticamente. Tentando ler a foto original...';
+      const analysis = await window.SuperlistCloud.analyzeReceipt(file, (db.products || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        category: p.category || 'Outros',
+        unit: p.unit || 'un',
+        netAmount: p.netAmount || 1,
+        netUnit: p.netUnit || p.unit || 'un',
+        barcode: p.barcode || ''
+      })));
+
+      aiReceiptAnalysis = analysis;
+      output.value = analysis.raw_text || '';
+      const items = Array.isArray(analysis.items) ? analysis.items : [];
+
+      const storeSelect = $('#purchaseForm [name="storeId"]');
+      if (analysis.store_name && storeSelect) {
+        const storeMatch = (db.stores || []).find(s =>
+          normalizeReceiptText(s.name) === normalizeReceiptText(analysis.store_name)
+        );
+        if (storeMatch) storeSelect.value = storeMatch.id;
       }
 
-      const T = await loadTesseract();
-      status.textContent = 'Reconhecendo os textos...';
-      const imageForOcr = enhancedCanvas || file;
-      const result = await T.recognize(imageForOcr, 'por', {
-        logger: message => {
-          if (message.status === 'recognizing text') {
-            status.textContent = `Lendo nota: ${Math.round(message.progress * 100)}%`;
-          }
-        }
+      const dateInput = $('#purchaseForm [name="date"]');
+      if (analysis.invoice_date && /^\d{4}-\d{2}-\d{2}$/.test(analysis.invoice_date) && dateInput) {
+        dateInput.value = analysis.invoice_date;
+      }
+
+      const lines = items.map(item => {
+        const matched = item.catalog_match_id
+          ? db.products.find(p => String(p.id) === String(item.catalog_match_id))
+          : null;
+        const label = matched ? matched.name : (item.name || 'Produto não identificado');
+        const qty = Number(item.quantity) || 1;
+        const total = Number(item.paid_total ?? item.line_total) || 0;
+        return `${label}; ${String(qty).replace('.', ',')}; ${total.toFixed(2).replace('.', ',')}`;
       });
 
-      const recognizedText = (result.data.text || '').trim();
-      if (!recognizedText) throw new Error('Nenhum texto foi identificado. Tente outra foto, com boa iluminação e a nota inteira visível.');
-
-      output.value = recognizedText;
-
-      const extracted = suggestReceiptItems(recognizedText);
       const itemsField = $('#purchaseForm [name="items"]');
-      if (extracted.length && itemsField) {
-        const reviewRows = extracted.map(item => {
-          const match = findReceiptCatalogMatch(item.name);
-          const displayName = match ? match.product.name : item.name;
-          return `${displayName}; ${String(item.qty).replace('.', ',')}; ${item.paidTotal.toFixed(2).replace('.', ',')}`;
-        });
-        itemsField.value = reviewRows.join('\\n');
-        status.textContent = `${extracted.length} linha(s) de produto estruturada(s). Produtos com correspondência provável no catálogo foram associados; revise tudo antes de salvar.`;
-        toast(`${extracted.length} produtos identificados para conferência.`);
+      if (itemsField) itemsField.value = lines.join('\n');
+
+      const matchedCount = items.filter(x => x.catalog_match_id && db.products.some(p => String(p.id) === String(x.catalog_match_id))).length;
+      const unmatchedCount = items.length - matchedCount;
+      const rows = items.map((item, index) => {
+        const matched = item.catalog_match_id
+          ? db.products.find(p => String(p.id) === String(item.catalog_match_id))
+          : null;
+        const conf = item.match_confidence || 'low';
+        const badgeColor = conf === 'high' ? '#16794b' : conf === 'medium' ? '#9a6700' : '#b42318';
+        return `<tr>
+          <td style="padding:6px 4px">${esc(item.name || 'Não identificado')}</td>
+          <td style="padding:6px 4px">${esc(matched?.name || 'Novo / revisar')}</td>
+          <td style="padding:6px 4px;text-align:right">${esc(String(item.quantity ?? ''))} ${esc(item.unit || '')}</td>
+          <td style="padding:6px 4px;text-align:right">${money(Number(item.paid_total ?? item.line_total) || 0)}</td>
+          <td style="padding:6px 4px;color:${badgeColor};font-weight:600">${esc(conf)}</td>
+        </tr>`;
+      }).join('');
+
+      review.innerHTML = `
+        <strong>Análise da IA — confira antes de salvar</strong>
+        <p class="muted">${items.length} item(ns) · ${matchedCount} associado(s) ao catálogo · ${unmatchedCount} para revisar/cadastrar</p>
+        <div style="overflow:auto">
+          <table style="width:100%;font-size:12px;border-collapse:collapse">
+            <thead><tr><th style="text-align:left">Na nota</th><th style="text-align:left">Catálogo</th><th>Qtd.</th><th>Total</th><th>Confiança</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <p class="muted">A IA pode cometer erros. Confira nomes, quantidades, descontos e valores na imagem original.</p>`;
+      review.style.display = 'block';
+
+      if (analysis.invoice_total != null) {
+        status.textContent = `Leitura concluída. Total informado na nota: ${money(analysis.invoice_total)}. Total dos itens interpretados: ${money(items.reduce((sum, x) => sum + (Number(x.paid_total ?? x.line_total) || 0), 0))}. Confira antes de registrar.`;
       } else {
-        status.textContent = 'O texto foi reconhecido, mas as linhas de produtos não puderam ser estruturadas com segurança. Confira a imagem e preencha os itens manualmente.';
-        toast('Não foi possível estruturar os itens automaticamente.');
+        status.textContent = `Leitura concluída: ${items.length} item(ns) extraído(s). Confira os dados antes de registrar.`;
       }
 
+      toast(`${items.length} item(ns) analisado(s) pela IA.`);
+
     } catch (error) {
-      console.error('Erro no processamento da nota:', error);
-      status.textContent = error.message || 'Erro ao ler a nota.';
-      toast('Não foi possível reconhecer o texto da nota.');
+      console.error('Erro na análise IA da nota:', error);
+      status.textContent = error.message || 'Não foi possível analisar a nota.';
+      toast(error.message || 'Falha na análise da nota.');
     } finally {
       button.disabled = false;
-      button.textContent = '✨ Melhorar foto e ler nota';
+      button.textContent = '✨ Analisar nota com IA';
     }
   });
 
@@ -1985,8 +2029,12 @@ Banana; 1,5; 8,50"></textarea>
       receiptQr: $('#receiptQrText')?.value || ''
     });
 
-    parsed.forEach(item => {
-      const catalogMatch = findReceiptCatalogMatch(item.name);
+    parsed.forEach((item, itemIndex) => {
+      const aiItem = aiReceiptAnalysis?.items?.[itemIndex] || null;
+      const exactAiMatch = aiItem?.catalog_match_id
+        ? db.products.find(p => String(p.id) === String(aiItem.catalog_match_id))
+        : null;
+      const catalogMatch = exactAiMatch ? { product: exactAiMatch, score: 1 } : findReceiptCatalogMatch(item.name);
       let product = catalogMatch?.product || null;
 
       if (!product) {
