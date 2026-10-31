@@ -1440,34 +1440,128 @@ async function maskQrCodeForOcr(canvas) {
 
 // Extrai sugestões conservadoras de linhas de itens de NFC-e.
 // Os valores continuam editáveis e precisam ser conferidos pelo usuário.
+function normalizeReceiptText(value) {
+  return String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9., ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function receiptNumber(value) {
+  if (value == null) return NaN;
+  return Number(String(value).replace(/\./g, '').replace(',', '.'));
+}
+
+// Interpreta o padrão comum de NFC-e: uma linha com código/descrição,
+// seguida por outra com quantidade, unidade, preço unitário e total.
+// Descontos "Desconto no item N" são aplicados ao item anterior.
 function suggestReceiptItems(ocrText) {
-  const suggestions = [];
-  const lines = String(ocrText || '').split(/\r?\n/);
+  const lines = String(ocrText || '')
+    .split(/\r?\n/)
+    .map(line => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
 
-  for (const rawLine of lines) {
-    const line = rawLine.replace(/\s+/g, ' ').trim();
-    if (!line || /CNPJ|CPF|CHAVE|CONSULTA|PROTOCOLO|TOTAL|TRIBUT|DESCONTO|PAGAMENTO|CONSUMIDOR/i.test(line)) continue;
+  const result = [];
+  let pending = null;
 
-    // Formato comum: descrição ... quantidade unidade valor unitário valor total.
-    const match = line.match(/^(.*?)\s+(\d+(?:[,.]\d+)?)\s*(UN|UND|KG|G|L|LT|ML|CX|PC)?\s+(\d{1,6}[,.]\d{2})\s+(\d{1,7}[,.]\d{2})$/i);
-    if (!match) continue;
+  const itemStart = /^(?:0*\d{1,3})\s+(.+)$/;
+  const detail = /^(\d{1,4}[,.]\d{1,3})\s*(UN|UND|KG|G|L|LT|ML|CX|PC|PCT)?\s*(?:X|×)?\s*(\d{1,5}[,.]\d{2})\s+(\d{1,5}[,.]\d{2})$/i;
+  const discount = /desconto\s+no\s+item\s+\d+\s*[-:]?\s*(\d{1,5}[,.]\d{2})/i;
 
-    let name = match[1]
-      .replace(/^\d{1,4}\s+/, '')
-      .replace(/^\d{4,}\s+/, '')
-      .replace(/[|*_]+/g, '')
-      .trim();
+  for (const line of lines) {
+    const discountMatch = line.match(discount);
+    if (discountMatch && result.length) {
+      const amount = receiptNumber(discountMatch[1]);
+      if (Number.isFinite(amount) && amount > 0) {
+        result[result.length - 1].total = Math.max(0, result[result.length - 1].total - amount);
+        result[result.length - 1].discount = amount;
+      }
+      continue;
+    }
 
-    if (name.length < 3 || !/[A-Za-zÀ-ÿ]/.test(name)) continue;
+    // Ignora cabeçalho, rodapé e linhas de pagamento.
+    if (/CNPJ|CPF|CHAVE|CONSULTA|PROTOCOLO|TOTAL DE ITENS|VALOR TOTAL|VALOR A PAGAR|FORMA DE PAGAMENTO|CARTAO|CONSUMIDOR|DOCUMENTO AUXILIAR|NOTA FISCAL/i.test(line)) {
+      continue;
+    }
 
-    const qty = Number(match[2].replace(',', '.'));
-    const total = Number(match[5].replace(/\./g, '').replace(',', '.'));
-    if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(total) || total < 0) continue;
+    const detailMatch = line.match(detail);
+    if (detailMatch && pending) {
+      const qty = receiptNumber(detailMatch[1]);
+      const unit = (detailMatch[2] || 'UN').toUpperCase();
+      const unitPrice = receiptNumber(detailMatch[3]);
+      const total = receiptNumber(detailMatch[4]);
 
-    suggestions.push(`${name}; ${qty}; ${total.toFixed(2).replace('.', ',')}`);
+      if (Number.isFinite(qty) && qty > 0 && Number.isFinite(total) && total >= 0) {
+        result.push({
+          name: pending.name,
+          code: pending.code,
+          qty,
+          unit,
+          unitPrice,
+          total,
+          discount: 0
+        });
+      }
+      pending = null;
+      continue;
+    }
+
+    const startMatch = line.match(itemStart);
+    if (startMatch) {
+      const raw = startMatch[1].trim();
+      // Código EAN/código interno costuma vir antes da descrição.
+      const codeMatch = raw.match(/^(\d{6,14})\s+(.+)$/);
+      const name = (codeMatch ? codeMatch[2] : raw)
+        .replace(/\b(?:UN|UND|KG|G|ML|LT|L)\s*$/i, '')
+        .trim();
+
+      if (name.length >= 3 && /[A-Za-zÀ-ÿ]/.test(name)) {
+        pending = { code: codeMatch ? codeMatch[1] : '', name };
+      }
+    }
   }
 
-  return [...new Set(suggestions)];
+  return result.map(item => {
+    const paidTotal = Math.max(0, item.total);
+    return {
+      ...item,
+      paidTotal,
+      line: `${item.name}; ${String(item.qty).replace('.', ',')}; ${paidTotal.toFixed(2).replace('.', ',')}`
+    };
+  });
+}
+
+// Correspondência conservadora entre a descrição da nota e o catálogo.
+// Só substitui pelo nome cadastrado quando a similaridade é alta.
+function findReceiptCatalogMatch(receiptName) {
+  const target = normalizeReceiptText(receiptName);
+  if (!target) return null;
+
+  let best = null;
+  let bestScore = 0;
+
+  for (const product of (db.products || [])) {
+    const candidate = normalizeReceiptText(product.name);
+    if (!candidate) continue;
+
+    if (candidate === target) return { product, score: 1 };
+
+    const a = new Set(target.split(' ').filter(token => token.length > 2));
+    const b = new Set(candidate.split(' ').filter(token => token.length > 2));
+    if (!a.size || !b.size) continue;
+
+    const intersection = [...a].filter(token => b.has(token)).length;
+    const score = intersection / Math.max(a.size, b.size);
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = product;
+    }
+  }
+
+  return best && bestScore >= 0.72 ? { product: best, score: bestScore } : null;
 }
 
 async function loadTesseract() {
@@ -1823,15 +1917,20 @@ Banana; 1,5; 8,50"></textarea>
 
       output.value = recognizedText;
 
-      const suggestions = suggestReceiptItems(recognizedText);
+      const extracted = suggestReceiptItems(recognizedText);
       const itemsField = $('#purchaseForm [name="items"]');
-      if (suggestions.length && itemsField) {
-        itemsField.value = suggestions.join('\\n');
-        status.textContent = `${suggestions.length} possível(is) item(ns) identificado(s). Confira nomes, quantidades e valores antes de registrar.`;
-        toast(`${suggestions.length} sugestão(ões) de item extraída(s). Revise antes de salvar.`);
+      if (extracted.length && itemsField) {
+        const reviewRows = extracted.map(item => {
+          const match = findReceiptCatalogMatch(item.name);
+          const displayName = match ? match.product.name : item.name;
+          return `${displayName}; ${String(item.qty).replace('.', ',')}; ${item.paidTotal.toFixed(2).replace('.', ',')}`;
+        });
+        itemsField.value = reviewRows.join('\\n');
+        status.textContent = `${extracted.length} linha(s) de produto estruturada(s). Produtos com correspondência provável no catálogo foram associados; revise tudo antes de salvar.`;
+        toast(`${extracted.length} produtos identificados para conferência.`);
       } else {
-        status.textContent = 'Texto reconhecido. Não foi possível identificar linhas de itens com segurança; confira a nota e preencha os itens manualmente.';
-        toast('Texto extraído. Os itens precisam ser conferidos/preenchidos manualmente.');
+        status.textContent = 'O texto foi reconhecido, mas as linhas de produtos não puderam ser estruturadas com segurança. Confira a imagem e preencha os itens manualmente.';
+        toast('Não foi possível estruturar os itens automaticamente.');
       }
 
     } catch (error) {
@@ -1868,9 +1967,7 @@ Banana; 1,5; 8,50"></textarea>
       return toast('Revise os itens. Use produto; quantidade; valor total.');
     }
 
-    const unknown = parsed.filter(item =>
-      !db.products.some(p => p.name.trim().toLocaleLowerCase('pt-BR') === item.name.trim().toLocaleLowerCase('pt-BR'))
-    );
+    const unknown = parsed.filter(item => !findReceiptCatalogMatch(item.name));
 
     if (unknown.length && !data.approveNew) {
       return toast('Há produtos novos. Marque a aprovação para cadastrá-los.');
@@ -1889,9 +1986,8 @@ Banana; 1,5; 8,50"></textarea>
     });
 
     parsed.forEach(item => {
-      let product = db.products.find(p =>
-        p.name.trim().toLocaleLowerCase('pt-BR') === item.name.trim().toLocaleLowerCase('pt-BR')
-      );
+      const catalogMatch = findReceiptCatalogMatch(item.name);
+      let product = catalogMatch?.product || null;
 
       if (!product) {
         product = {
