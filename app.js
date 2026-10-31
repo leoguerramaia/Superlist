@@ -603,7 +603,7 @@ function addProductModal(product = null) {
 
       <div class="field">
         <label>Foto pela câmera ou galeria</label>
-        <input id="productPhotoFile" type="file"
+        <input id="productPhotoFile"
           accept="image/*">
         <small class="helper">
           No celular, você poderá escolher a câmera ou uma foto da galeria.
@@ -1374,13 +1374,12 @@ function openPurchaseModal() {
       <div class="form-grid">
       <div class="field">
   <label>Foto da nota fiscal</label>
-  <input
-    type="file"
-    id="receiptPhoto"
-    name="receiptPhoto"
-    accept="image/*"
-    capture="environment"
-  >
+ <input
+  type="file"
+  id="receiptPhoto"
+  name="receiptPhoto"
+  accept="image/*"
+>
   <small class="muted">
     Tire uma foto da nota ou escolha uma imagem da galeria.
   </small>
