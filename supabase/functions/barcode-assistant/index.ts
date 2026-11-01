@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Método não permitido." }, 405);
 
   try {
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    const apiKey = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_GEMINI_API_KEY") || Deno.env.get("GOOGLE_API_KEY");
     if (!apiKey) return json({ error: "Configure o secret GEMINI_API_KEY nas funções do Supabase." }, 500);
 
     const body = await req.json();
