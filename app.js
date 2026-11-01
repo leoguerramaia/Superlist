@@ -1393,19 +1393,19 @@ function addCatalogProductToList() {
           const reader = new ZXingBrowser.BrowserMultiFormatReader();
           const video = cameraBox.querySelector('video');
 
-          controls = await reader.decodeFromConstraints(
-            {
-              audio: false,
-              video: { facingMode: { ideal: 'environment' } }
-            },
+          const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
+          const backCamera = devices.find(device => /back|rear|environment|traseira/i.test(device.label));
+          const selectedDeviceId = backCamera?.deviceId || devices[devices.length - 1]?.deviceId;
+          controls = await reader.decodeFromVideoDevice(
+            selectedDeviceId,
             video,
-            (result) => {
-              if (!result) return;
-
+            (result, error) => {
+              if (!result) {
+                if (error && error.name !== 'NotFoundException') console.debug('Leitura em andamento:', error);
+                return;
+              }
               $('#addProductBarcode').value = result.getText();
-
               if (controls) controls.stop();
-
               cameraBox.style.display = 'none';
               button.disabled = false;
               toast('Código identificado. Toque em Consultar código.');
@@ -2354,7 +2354,7 @@ async function scanBarcode(itemId) {
 
     const script=document.createElement('script');
 
-    script.src='https://unpkg.com/@zxing/browser@latest';
+    script.src='https://unpkg.com/@zxing/browser@0.2.1/umd/index.min.js';
     script.async=true;
     script.dataset.superlistZxing='true';
 
@@ -2427,28 +2427,26 @@ async function scanBarcode(itemId) {
 
       button.textContent='Câmera aberta';
 
-      controls=await reader.decodeFromConstraints(
-        {
-          audio:false,
-          video:{
-            facingMode:{ideal:'environment'}
-          }
-        },
+      // Seleciona preferencialmente a câmera traseira e usa o leitor contínuo da ZXing.
+      const devices=await ZXing.BrowserCodeReader.listVideoInputDevices();
+      const backCamera=devices.find(device=>/back|rear|environment|traseira|environment/i.test(device.label));
+      const selectedDeviceId=backCamera?.deviceId || devices[devices.length-1]?.deviceId;
+      controls=await reader.decodeFromVideoDevice(
+        selectedDeviceId,
         video,
         (result,error)=>{
-          if(stopped||!result)return;
-
+          if(stopped)return;
+          if(!result) {
+            if(error && error.name!=='NotFoundException') console.debug('Leitura em andamento:',error);
+            return;
+          }
           const code=result.getText();
-
           if(code) {
             $('#barcodeInput').value=code;
             box.textContent='Código lido: '+code;
-
             stop();
-
             button.textContent='Abrir câmera novamente';
             button.disabled=false;
-
             toast('Código de barras identificado!');
           }
         }
