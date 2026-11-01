@@ -2370,138 +2370,49 @@ function exportCSV() {
   toast('Arquivo de preços exportado!');
 }
 
-// Conta e sincronização.
+// Conta, login, cadastro e recuperação de senha.
 function accountModal() {
-  let cloud=window.SuperlistCloud;
+  const cloud=window.SuperlistCloud;
+  if(!cloud){toast('Não foi possível conectar à conta agora.');return;}
+  openModal('Acessar o SuperList', '<div id="authScreen"></div>', 'MINHA CONTA');
+  const screen=$('#authScreen');
 
-  if(!cloud) {
-    toast('Supabase não configurado ou não carregado.');
-    return;
+  const eyeField=(name,label,placeholder='')=>`<div class="field"><label>${label}</label><div style="display:flex;gap:8px;align-items:center"><input style="flex:1" id="${name}" name="${name}" type="password" autocomplete="${name==='password'?'current-password':'new-password'}" placeholder="${placeholder}" required><button type="button" class="btn secondary" data-toggle-password="${name}" aria-label="Mostrar senha" title="Mostrar senha">◉</button></div></div>`;
+  function wireEyes(){screen.querySelectorAll('[data-toggle-password]').forEach(btn=>btn.addEventListener('click',()=>{const input=$('#'+btn.dataset.togglePassword);if(!input)return;const show=input.type==='password';input.type=show?'text':'password';btn.textContent=show?'◎':'◉';btn.title=show?'Ocultar senha':'Mostrar senha';btn.setAttribute('aria-label',btn.title);}));}
+  function familyArea(){return `<div class="invite-box" style="margin-top:18px"><strong>Compartilhar com a família</strong><p>Já tem um código de convite? Informe abaixo para entrar no espaço compartilhado.</p><div class="field"><label>Código de convite</label><input id="joinCode" placeholder="Código recebido de quem criou o espaço"></div><button type="button" class="btn secondary" id="joinHousehold">Entrar em um espaço compartilhado</button><hr style="margin:14px 0;border:0;border-top:1px solid var(--border,#ddd)"><strong>Convide sua família</strong><div id="inviteCodeDisplay">Código disponível após entrar.</div><button type="button" class="text-button" id="showInviteCode">Mostrar meu código de convite</button></div><button type="button" class="btn secondary" id="signOutBtn" style="margin-top:12px;width:100%">Sair da conta</button>`;}
+  function wireFamily(){
+    const join=$('#joinHousehold'); if(join)join.addEventListener('click',async()=>{try{const code=$('#joinCode').value.trim();if(!code){toast('Informe o código de convite.');return;}await cloud.join(code);closeModal();await cloud.loadIntoApp();toast('Você entrou no espaço compartilhado!');}catch(err){toast(err.message||'Não foi possível entrar no espaço.');}});
+    const invite=$('#showInviteCode');if(invite)invite.addEventListener('click',async()=>{try{const code=await cloud.getInviteCode();$('#inviteCodeDisplay').innerHTML=`<div class="invite-code">${esc(code)}</div><small>Compartilhe este código somente com pessoas de confiança.</small>`;}catch(err){toast(err.message||'Entre na sua conta para obter o convite.');}});
+    const out=$('#signOutBtn');if(out)out.addEventListener('click',async()=>{try{await cloud.signOut();closeModal();toast('Você saiu da sua conta.');}catch(err){toast(err.message||'Não foi possível sair.');}});
   }
-
-  let status=cloud.status();
-
-  openModal(
-    'Conta e sincronização',
-    `<div class="invite-box">
-      ${esc(status)}<br>
-      Entre ou crie uma conta para sincronizar suas listas entre dispositivos e compartilhar o espaço da família.
-    </div>
-    <form id="authForm">
-      <div class="field">
-        <label>E-mail</label>
-        <input name="email" type="email" required placeholder="voce@email.com">
-      </div>
-      <div class="field">
-        <label>Senha</label>
-        <input name="password" type="password" required minlength="6" placeholder="Mínimo de 6 caracteres">
-      </div>
-      <div class="form-actions">
-        <button type="button" class="btn secondary" id="signOutBtn">Sair</button>
-        <button type="button" class="btn secondary" id="signUpBtn">Criar conta</button>
-        <button type="submit" class="btn primary">Entrar</button>
-      </div>
-    </form>
-    <div class="field" style="margin-top:15px">
-      <label>Código de convite da família</label>
-      <input id="joinCode" placeholder="Código recebido de quem criou o espaço">
-    </div>
-    <button type="button" class="btn secondary" id="joinHousehold">
-      Entrar em um espaço compartilhado
-    </button>
-    <div class="invite-box">
-      <strong>Convide sua família</strong>
-      <div id="inviteCodeDisplay">Código disponível após entrar.</div>
-      <button type="button" class="text-button" id="showInviteCode">
-        Mostrar meu código de convite
-      </button>
-    </div>
-    <p class="auth-note">
-      Para ativar a nuvem, configure a URL e a chave pública do seu projeto Supabase no arquivo cloud.js e execute o script SQL fornecido no pacote.
-    </p>`,
-    'MINHA CONTA'
-  );
-
-  const authForm=$('#authForm');
-
-  authForm.addEventListener('submit',async e=>{
-    e.preventDefault();
-
-    if(!authForm.reportValidity())return;
-
-    const d=formData(authForm);
-
-    try {
-      await cloud.signIn(d.email,d.password);
-      closeModal();
-      toast('Login realizado!');
-
-    } catch(err) {
-      console.error('Erro no login:',err);
-      toast(err.message||'Não foi possível entrar.');
-    }
-  });
-
-  $('#signUpBtn').addEventListener('click',async()=>{
-    if(!authForm.reportValidity())return;
-
-    const d=formData(authForm);
-
-    try {
-      await cloud.signUp(d.email,d.password);
-      toast('Conta criada! Verifique seu e-mail se a confirmação estiver ativada.');
-
-    } catch(err) {
-      console.error('Erro no cadastro:',err);
-      toast(err.message||'Não foi possível criar a conta.');
-    }
-  });
-
-  $('#signOutBtn').addEventListener('click',async()=>{
-    try {
-      await cloud.signOut();
-      closeModal();
-      toast('Sessão encerrada.');
-
-    } catch(err) {
-      console.error(err);
-      toast(err.message||'Erro ao sair.');
-    }
-  });
-
-  $('#joinHousehold').addEventListener('click',async()=>{
-    try {
-      const code=$('#joinCode').value.trim();
-
-      if(!code) {
-        toast('Informe o código de convite.');
-        return;
-      }
-
-      await cloud.join(code);
-      closeModal();
-      await cloud.loadIntoApp();
-      toast('Você entrou no espaço compartilhado!');
-
-    } catch(err) {
-      console.error(err);
-      toast(err.message||'Erro ao entrar no espaço.');
-    }
-  });
-
-  $('#showInviteCode').addEventListener('click',async()=>{
-    try {
-      let code=await cloud.getInviteCode();
-
-      $('#inviteCodeDisplay').innerHTML=
-        `<div class="invite-code">${esc(code)}</div>
-         <small>Compartilhe este código somente com pessoas de confiança.</small>`;
-
-    } catch(err) {
-      console.error(err);
-      toast(err.message||'Erro ao obter convite.');
-    }
-  });
+  function showLogin(){
+    screen.innerHTML=`<div class="invite-box">Entre para sincronizar suas listas e compartilhar suas compras com a família.</div><form id="loginForm"><div class="field"><label>E-mail</label><input id="loginEmail" name="email" type="email" autocomplete="email" required placeholder="voce@email.com"></div>${eyeField('loginPassword','Senha','Digite sua senha')}<div style="text-align:right;margin:-4px 0 14px"><button type="button" class="text-button" id="forgotPassword">Esqueci minha senha</button></div><button class="btn primary full" type="submit">Entrar</button></form><p style="text-align:center;margin:18px 0 8px">Ainda não tem uma conta?</p><button type="button" class="btn secondary full" id="goSignup">Criar minha conta</button>${familyArea()}`;
+    wireEyes();wireFamily();
+    $('#loginForm').addEventListener('submit',async e=>{e.preventDefault();const email=$('#loginEmail').value.trim(),password=$('#loginPassword').value;try{await cloud.signIn(email,password);closeModal();toast('Login realizado com sucesso!');}catch(err){toast(err.message||'Confira seu e-mail e sua senha e tente novamente.');}});
+    $('#goSignup').addEventListener('click',showSignup);$('#forgotPassword').addEventListener('click',showRecoveryEmail);
+  }
+  function showSignup(){
+    screen.innerHTML=`<p class="muted">Crie sua conta para manter suas listas protegidas e sincronizadas.</p><form id="signupForm"><div class="field"><label>E-mail</label><input id="signupEmail" type="email" autocomplete="email" required placeholder="voce@email.com"></div>${eyeField('signupPassword','Senha','Crie uma senha segura')}${eyeField('signupConfirm','Confirme sua senha','Digite a senha novamente')}<div class="invite-box" style="font-size:13px;margin:8px 0"><strong>Sua senha precisa ter:</strong><ul style="margin:8px 0 0 18px"><li>Ao menos 8 caracteres</li><li>Uma letra maiúscula e uma minúscula</li><li>Um caractere especial (ex.: ! @ # $ %)</li></ul></div><p id="signupFeedback" class="auth-note" aria-live="polite"></p><button class="btn primary full" type="submit">Criar conta</button></form><p style="text-align:center;margin-top:16px">Já tem uma conta? <button type="button" class="text-button" id="backLogin">Voltar ao login</button></p>`;
+    wireEyes();
+    const pass=$('#signupPassword'),confirm=$('#signupConfirm'),feedback=$('#signupFeedback');
+    const validate=()=>{const v=pass.value, c=confirm.value;const checks=[v.length>=8,/[A-ZÀ-Þ]/.test(v),/[a-zà-ÿ]/.test(v),/[^A-Za-zÀ-ÿ0-9\s]/.test(v)];let msg=checks.every(Boolean)?'Senha atende aos requisitos.':'A senha ainda não atende a todos os requisitos.';if(c&&v!==c)msg='As senhas estão diferentes.';else if(c&&v===c&&checks.every(Boolean))msg='As senhas conferem.';feedback.textContent=msg;feedback.style.color=(checks.every(Boolean)&&(!c||v===c))?'#16834a':'#b45309';return checks.every(Boolean)&&v===c&&c.length>0;};
+    pass.addEventListener('input',validate);confirm.addEventListener('input',validate);
+    $('#signupForm').addEventListener('submit',async e=>{e.preventDefault();const email=$('#signupEmail').value.trim();if(!validate()){toast('Confira os requisitos e a confirmação da senha.');return;}try{await cloud.signUp(email,pass.value);toast('Cadastro iniciado! Confira seu e-mail para confirmar a conta.');showLogin();}catch(err){toast(err.message||'Não foi possível criar sua conta.');}});
+    $('#backLogin').addEventListener('click',showLogin);
+  }
+  function showRecoveryEmail(){
+    screen.innerHTML=`<p>Informe o e-mail cadastrado. Enviaremos um código para confirmar que a conta é sua.</p><form id="recoveryEmailForm"><div class="field"><label>E-mail cadastrado</label><input id="recoveryEmail" type="email" autocomplete="email" required placeholder="voce@email.com"></div><button class="btn primary full" type="submit">Enviar código</button></form><p style="text-align:center;margin-top:16px"><button type="button" class="text-button" id="backLogin">Voltar ao login</button></p>`;
+    $('#backLogin').addEventListener('click',showLogin);
+    $('#recoveryEmailForm').addEventListener('submit',async e=>{e.preventDefault();const email=$('#recoveryEmail').value.trim();try{await cloud.sendRecoveryCode(email);showRecoveryCode(email);toast('Se o e-mail estiver cadastrado, você receberá um código de confirmação.');}catch(err){toast(err.message||'Não foi possível enviar o código. Tente novamente.');}});
+  }
+  function showRecoveryCode(email){
+    screen.innerHTML=`<p>Digite o código enviado para <strong>${esc(email)}</strong> e escolha uma nova senha.</p><form id="recoveryForm"><div class="field"><label>Código de confirmação</label><input id="recoveryToken" inputmode="numeric" autocomplete="one-time-code" required maxlength="12" placeholder="Código recebido por e-mail"></div>${eyeField('newPassword','Nova senha','Mínimo de 8 caracteres')}${eyeField('newPasswordConfirm','Confirme a nova senha','Digite novamente')}<div class="invite-box" style="font-size:13px">Use pelo menos 8 caracteres, uma letra maiúscula, uma minúscula e um caractere especial.</div><p id="recoveryFeedback" class="auth-note" aria-live="polite"></p><button class="btn primary full" type="submit">Confirmar e alterar senha</button></form><p style="text-align:center;margin-top:16px"><button type="button" class="text-button" id="resendCode">Enviar outro código</button> · <button type="button" class="text-button" id="backLogin">Voltar ao login</button></p>`;
+    wireEyes();const pass=$('#newPassword'),confirm=$('#newPasswordConfirm'),feedback=$('#recoveryFeedback');
+    const validate=()=>{const v=pass.value,c=confirm.value;const ok=v.length>=8&&/[A-ZÀ-Þ]/.test(v)&&/[a-zà-ÿ]/.test(v)&&/[^A-Za-zÀ-ÿ0-9\s]/.test(v);feedback.textContent=c&&v!==c?'As senhas estão diferentes.':ok?'Senha válida.':'A senha precisa atender aos requisitos informados.';return ok&&c.length>0&&v===c;};pass.addEventListener('input',validate);confirm.addEventListener('input',validate);
+    $('#recoveryForm').addEventListener('submit',async e=>{e.preventDefault();if(!validate()){toast('Confira os requisitos e a confirmação da senha.');return;}try{await cloud.verifyRecoveryCode(email,$('#recoveryToken').value.trim(),pass.value);toast('Senha alterada! Agora você já pode entrar.');showLogin();}catch(err){toast(err.message||'Código inválido ou expirado. Solicite outro código.');}});
+    $('#resendCode').addEventListener('click',async()=>{try{await cloud.sendRecoveryCode(email);toast('Se o e-mail estiver cadastrado, enviaremos outro código.');}catch(err){toast(err.message||'Não foi possível reenviar o código.');}});$('#backLogin').addEventListener('click',showLogin);
+  }
+  showLogin();
 }
 
 function init() {

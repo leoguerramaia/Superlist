@@ -48,6 +48,8 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
   }
   async function signIn(email,password){if(!client)throw new Error('Configure o Supabase primeiro.');let {error}=await client.auth.signInWithPassword({email,password});if(error)throw error;await loadIntoApp()}
   async function signUp(email,password){if(!client)throw new Error('Configure o Supabase primeiro.');let {error}=await client.auth.signUp({email,password});if(error)throw error}
+  async function sendRecoveryCode(email){if(!client)throw new Error('Configure o Supabase primeiro.');const {error}=await client.auth.resetPasswordForEmail(email);if(error)throw error}
+  async function verifyRecoveryCode(email,token,newPassword){if(!client)throw new Error('Configure o Supabase primeiro.');const {error:verifyError}=await client.auth.verifyOtp({email,token,type:'recovery'});if(verifyError)throw verifyError;const {error:updateError}=await client.auth.updateUser({password:newPassword});if(updateError)throw updateError}
   async function signOut(){if(!client)return;await client.auth.signOut();householdId=null;if(channel)client.removeChannel(channel);emit('Somente neste dispositivo','')}
   async function getInviteCode(){if(!client||!householdId)throw new Error('Entre em um espaço primeiro.');let {data,error}=await client.from('households').select('invite_code').eq('id',householdId).single();if(error)throw error;return data.invite_code}
   async function join(code){if(!client)throw new Error('Configure o Supabase primeiro.');let {data,error}=await client.rpc('join_household',{invite_code_input:code});if(error)throw error;householdId=data;await loadIntoApp()}
@@ -87,5 +89,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     client.auth.onAuthStateChange((event,session)=>{if(session&&event!=='TOKEN_REFRESHED')setTimeout(loadIntoApp,0);else if(!session){householdId=null;emit('Entre para sincronizar','')}});
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
   }
-  window.SuperlistCloud={boot,status,signIn,signUp,signOut,join,getInviteCode,scheduleSync,analyzeReceipt,analyzeListPhoto,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,scheduleSync,analyzeReceipt,analyzeListPhoto,onStatus(fn){callback=fn},loadIntoApp};
 })();
