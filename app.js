@@ -601,7 +601,7 @@ function createListModal() {
     toast(confirmedItems.length + ' produto(s) confirmado(s).');
   });
 
-  $('#manualListItems').addEventListener('click', () => createListAndOpen([]));
+  $('#manualListItems').addEventListener('click', () => { if (importNeedsConfirmation) return toast('Confirme ou descarte a importação antes de continuar.'); createListAndOpen([]); });
   function createListAndOpen(items) {
     const name = form.elements.name.value.trim(), storeId = form.elements.storeId.value;
     if (!name) { form.elements.name.focus(); return toast('Informe o nome da lista.'); }
