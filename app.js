@@ -2543,10 +2543,14 @@ async function scanBarcode(itemId) {
   $('#lookupBarcode').onclick=async()=>{
     if(lookupStarted)return;
 
-    const code=$('#barcodeInput').value.trim();
+    const code=normalizeBarcodeCode($('#barcodeInput').value);
 
     if(!code) {
-      toast('Informe o código de barras.');
+      toast('Informe um código de barras válido.');
+      return;
+    }
+    if (![8, 12, 13, 14].includes(code.length)) {
+      toast('O código deve ter 8, 12, 13 ou 14 números (EAN/UPC/GTIN).');
       return;
     }
 
