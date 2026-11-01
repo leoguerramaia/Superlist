@@ -241,8 +241,33 @@ function renderLists() {
     .sort((a,b)=>b.created.localeCompare(a.created));
 
   $('#allLists').innerHTML=ls.length
-    ? ls.map(l=>`<article class="list-card" data-open-list="${l.id}">${listCardInner(l)}</article>`).join('')
+    ? ls.map(l=>`<article class="list-card" data-open-list="${l.id}"><div class="list-card-actions"><button type="button" class="list-card-action" data-rename-list="${l.id}" aria-label="Renomear lista" title="Renomear lista">✎</button><button type="button" class="list-card-action danger" data-delete-list="${l.id}" aria-label="Excluir lista" title="Excluir lista">⌫</button></div>${listCardInner(l)}</article>`).join('')
     : '<div class="empty-state">Nenhuma lista encontrada. Clique em “Nova lista” para começar.</div>';
+}
+
+function renameListById(id) {
+  const list=db.lists.find(item=>item.id===id);
+  if(!list)return;
+  openModal('Renomear lista', `<form id="renameListCardForm"><div class="field"><label>Nome da lista</label><input name="name" maxlength="80" required value="${esc(list.name)}"></div><div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button class="btn primary">Salvar nome</button></div></form>`);
+  $('#renameListCardForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    const name=formData(e.currentTarget).name.trim();
+    if(!name)return toast('Informe o nome da lista.');
+    list.name=name;save();closeModal();toast('Lista renomeada.');
+  });
+}
+
+function deleteListById(id) {
+  const list=db.lists.find(item=>item.id===id);
+  if(!list)return;
+  if(!confirm(`Excluir a lista "${list.name}"? Esta ação não pode ser desfeita.`))return;
+  db.lists=db.lists.filter(item=>item.id!==id);
+  db.prices=db.prices.filter(item=>item.listId!==id);
+  db.purchases=db.purchases.filter(item=>item.listId!==id);
+  if(currentList?.id===id)currentList=null;
+  save();
+  if(!currentList && $('#page-shopping')?.classList.contains('active'))page('lists');
+  toast('Lista excluída.');
 }
 
 function listCardInner(l) {
@@ -2718,6 +2743,11 @@ function init() {
       createListModal();
       return;
     }
+
+    const renameListButton=e.target.closest('[data-rename-list]');
+    if(renameListButton){e.stopPropagation();renameListById(renameListButton.dataset.renameList);return;}
+    const deleteListButton=e.target.closest('[data-delete-list]');
+    if(deleteListButton){e.stopPropagation();deleteListById(deleteListButton.dataset.deleteList);return;}
 
     let open=e.target.closest('[data-open-list]');
 
