@@ -65,6 +65,23 @@ const extraSeedProducts = [
 ].map((p,i)=>{const pack=packageInfo(p[0],p[2]);return {id:'seed-extra-'+(i+1),name:formatDisplayName(p[0]),category:p[1],unit:['kg','l','g','ml'].includes(p[2])?p[2]:'un',netAmount:pack.amount,netUnit:pack.unit,barcode:'',photo:'',active:true};});
 seedProducts.push(...extraSeedProducts);
 
+function inferProductCategory(product={}) {
+  const text=[product.categories,product.categories_tags,product.product_name,product.product_name_pt].flat().join(' ').toLocaleLowerCase('pt-BR');
+  const rules=[
+    ['Hortifruti',/fruit|vegetable|fruta|verdura|legume|hortifruti/],
+    ['Açougue e aves',/meat|poultry|beef|pork|fish|seafood|carne|frango|peixe/],
+    ['Laticínios e frios',/dairy|milk|cheese|yogurt|latic.nio|leite|queijo/],
+    ['Padaria',/bakery|bread|biscuit|p.o|padaria/],
+    ['Bebidas',/beverage|drink|water|juice|soda|bebida/],
+    ['Limpeza',/cleaning|detergent|laundry|limpeza/],
+    ['Higiene pessoal',/personal care|toothpaste|shampoo|hygiene|higiene/],
+    ['Congelados',/frozen|congelad/],
+    ['Pet shop',/pet food|petfood|dog food|cat food|pet shop/],
+    ['Mercearia',/grocery|pasta|rice|cereal|sauce|snack|mercearia/]
+  ];
+  return rules.find(([,regex])=>regex.test(text))?.[0] || 'Outros';
+}
+
 function packageInfo(name,unit) {
   let m = name.match(/(\d+(?:[,.]\d+)?)\s*(kg|g|l|ml)\b/i);
   if(m) {
@@ -132,6 +149,8 @@ function loadDB() {
       normalizeProductNames(d);
       d.lists.forEach(list => (list.items || []).forEach(item => { item.brand = formatDisplayName(item.brand); }));
       d.prices.forEach(price => { price.brand = formatDisplayName(price.brand); });
+      // Persiste no navegador a atualização do catálogo inicial para que fique disponível nas próximas sessões.
+      localStorage.setItem(KEY,JSON.stringify(d));
       return d;
     }
   } catch(e) {
@@ -1329,7 +1348,7 @@ function addCatalogProductToList() {
             product = {
               id: uid(),
               name: prod.product_name_pt || prod.product_name || `Produto ${code}`,
-              category: 'Outros',
+              category: inferProductCategory(prod),
               unit: 'un',
               ...packageInfo(prod.product_name || '', 'un'),
               barcode: code,
@@ -2531,7 +2550,7 @@ async function scanBarcode(itemId) {
           let p={
             id:uid(),
             name:prod.product_name_pt||prod.product_name||item.name,
-            category:'Outros',
+            category:inferProductCategory(prod),
             unit:item.unit,
             barcode:code,
             photo:prod.image_url||'',
