@@ -131,6 +131,21 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
   }
   async function analyzeReceipt(file, products = []) { return analyzeImage(file, 'receipt', products); }
   async function analyzeListPhoto(file) { return analyzeImage(file, 'list'); }
+  async function validateListItems(items = []) {
+    if (!client) throw new Error('Supabase não está configurado.');
+    const { data: { session } } = await client.auth.getSession();
+    if (!session?.access_token) throw new Error('Entre na sua conta antes de validar os produtos.');
+    const { data, error } = await client.functions.invoke('analyze-receipt', {
+      body: { mode: 'validate-list', items: items.slice(0, 200) }
+    });
+    if (error) {
+      let detail = error.message || 'Falha ao revisar a grafia dos produtos.';
+      try { const context = error.context; if (context && typeof context.json === 'function') { const body = await context.json(); if (body?.error) detail = body.error; } } catch (_) {}
+      throw new Error(detail);
+    }
+    if (!data || !Array.isArray(data.items)) throw new Error('A IA retornou uma resposta inesperada.');
+    return data;
+  }
 
   async function boot(appApi){
     app=appApi;
@@ -142,5 +157,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
     return true;
   }
-  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,scheduleSync,analyzeReceipt,analyzeListPhoto,adminRequest,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,adminRequest,onStatus(fn){callback=fn},loadIntoApp};
 })();
