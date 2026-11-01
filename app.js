@@ -48,6 +48,23 @@ const seedProducts = [
   };
 });
 
+
+// Catálogo inicial ampliado de produtos comuns de supermercado.
+// Mantido localmente para inclusão manual mesmo sem consulta externa.
+const extraSeedProducts = [
+  ['Abacaxi','Hortifruti','un'],['Abacate','Hortifruti','kg'],['Acerola','Hortifruti','kg'],['Uva','Hortifruti','kg'],['Melancia','Hortifruti','kg'],['Melão','Hortifruti','kg'],['Manga','Hortifruti','kg'],['Pera','Hortifruti','kg'],['Morango','Hortifruti','bandeja'],['Pepino','Hortifruti','kg'],['Pimentão','Hortifruti','kg'],['Beterraba','Hortifruti','kg'],['Abobrinha','Hortifruti','kg'],['Chuchu','Hortifruti','kg'],['Brócolis','Hortifruti','un'],['Couve','Hortifruti','un'],['Repolho','Hortifruti','un'],['Mandioca','Hortifruti','kg'],
+  ['Carne bovina','Açougue e aves','kg'],['Coxão mole','Açougue e aves','kg'],['Coxão duro','Açougue e aves','kg'],['Músculo bovino','Açougue e aves','kg'],['Fígado bovino','Açougue e aves','kg'],['Bisteca suína','Açougue e aves','kg'],['Pernil suíno','Açougue e aves','kg'],['Bacon','Açougue e aves','kg'],['Salsicha','Açougue e aves','kg'],['Peito de peru','Açougue e aves','kg'],['Filé de peixe','Açougue e aves','kg'],['Camarão','Açougue e aves','kg'],['Ovos de codorna','Açougue e aves','un'],
+  ['Feijão preto','Mercearia','un'],['Feijão fradinho','Mercearia','un'],['Lentilha','Mercearia','un'],['Grão-de-bico','Mercearia','un'],['Fubá','Mercearia','un'],['Farinha de mandioca','Mercearia','un'],['Farinha de milho','Mercearia','un'],['Tapioca','Mercearia','un'],['Flocão de milho','Mercearia','un'],['Amido de milho','Mercearia','un'],['Fermento em pó','Mercearia','un'],['Fermento biológico','Mercearia','un'],['Vinagre','Mercearia','un'],['Azeite de oliva','Mercearia','un'],['Maionese','Mercearia','un'],['Ketchup','Mercearia','un'],['Mostarda','Mercearia','un'],['Ervilha em conserva','Mercearia','un'],['Atum em lata','Mercearia','un'],['Sardinha em lata','Mercearia','un'],['Leite de coco','Mercearia','un'],['Creme de leite','Mercearia','un'],['Leite condensado','Mercearia','un'],['Gelatina','Mercearia','un'],['Pipoca','Mercearia','un'],['Chocolate em pó','Mercearia','un'],['Achocolatado','Mercearia','un'],['Goiabada','Mercearia','un'],['Mel','Mercearia','un'],['Castanha de caju','Mercearia','un'],
+  ['Leite desnatado','Laticínios e frios','un'],['Leite sem lactose','Laticínios e frios','un'],['Leite em pó','Laticínios e frios','un'],['Queijo coalho','Laticínios e frios','kg'],['Queijo parmesão','Laticínios e frios','kg'],['Queijo prato','Laticínios e frios','kg'],['Cream cheese','Laticínios e frios','un'],['Margarina','Laticínios e frios','un'],[' iogurte natural','Laticínios e frios','un'],['Bebida láctea','Laticínios e frios','un'],
+  ['Pão de queijo','Padaria','un'],['Torrada','Padaria','un'],['Bisnaguinha','Padaria','un'],['Croissant','Padaria','un'],['Biscoito de polvilho','Padaria','un'],
+  ['Água mineral 500 ml','Bebidas','un'],['Água com gás','Bebidas','un'],['Água de coco','Bebidas','un'],['Chá pronto','Bebidas','un'],['Energético','Bebidas','un'],['Achocolatado pronto','Bebidas','un'],
+  ['Limpador multiuso','Limpeza','un'],['Sabão em barra','Limpeza','un'],['Desengordurante','Limpeza','un'],['Limpa-vidros','Limpeza','un'],['Álcool 70%','Limpeza','un'],['Lustra-móveis','Limpeza','un'],['Pano de chão','Limpeza','un'],['Pano de prato','Limpeza','un'],['Luvas de limpeza','Limpeza','un'],
+  ['Fio dental','Higiene pessoal','un'],['Enxaguante bucal','Higiene pessoal','un'],['Escova de dentes','Higiene pessoal','un'],['Absorvente','Higiene pessoal','un'],['Hastes flexíveis','Higiene pessoal','un'],['Algodão','Higiene pessoal','un'],['Papel facial','Higiene pessoal','un'],['Protetor solar','Higiene pessoal','un'],['Aparelho de barbear','Higiene pessoal','un'],['Fralda descartável','Higiene pessoal','un'],
+  ['Lasanha congelada','Congelados','un'],['Hambúrguer congelado','Congelados','un'],['Nuggets','Congelados','un'],['Polpa de fruta','Congelados','un'],['Legumes congelados','Congelados','un'],['Pão de alho','Congelados','un'],
+  ['Ração para gato','Pet shop','kg'],['Petisco para cachorro','Pet shop','un'],['Petisco para gato','Pet shop','un'],['Shampoo para pets','Pet shop','un']
+].map((p,i)=>{const pack=packageInfo(p[0],p[2]);return {id:'seed-extra-'+(i+1),name:formatDisplayName(p[0]),category:p[1],unit:['kg','l','g','ml'].includes(p[2])?p[2]:'un',netAmount:pack.amount,netUnit:pack.unit,barcode:'',photo:'',active:true};});
+seedProducts.push(...extraSeedProducts);
+
 function packageInfo(name,unit) {
   let m = name.match(/(\d+(?:[,.]\d+)?)\s*(kg|g|l|ml)\b/i);
   if(m) {
@@ -96,7 +113,17 @@ function loadDB() {
 
     if(d) {
       d.categories ||= seedCategories;
-      d.products ||= seedProducts;
+      d.products ||= [];
+      // Inclui novos itens do catálogo inicial em contas já existentes, sem duplicar IDs ou nomes.
+      const existingSeedIds = new Set(d.products.map(p=>p.id));
+      const existingNames = new Set(d.products.map(p=>String(p.name||'').toLocaleLowerCase('pt-BR')));
+      seedProducts.forEach(p=>{
+        if(!existingSeedIds.has(p.id) && !existingNames.has(p.name.toLocaleLowerCase('pt-BR'))) {
+          d.products.push({...p});
+          existingSeedIds.add(p.id);
+          existingNames.add(p.name.toLocaleLowerCase('pt-BR'));
+        }
+      });
       d.stores ||= [];
       d.lists ||= [];
       d.prices ||= [];
@@ -1492,7 +1519,7 @@ let cats=[...new Set(visibleItems.map(i=>i.category||'Outros'))];
 
   const actionBar = document.createElement('div');
   actionBar.className = 'shopping-list-actions';
-  actionBar.innerHTML = '<button type="button" class="btn primary" id="addShoppingProduct">＋ Incluir Novo Produto</button><button type="button" class="btn secondary" id="addShoppingBarcode">▥ Incluir Produto Pelo Código de Barras</button>';
+  actionBar.innerHTML = '<button type="button" class="btn primary" id="addShoppingProduct"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="4"/></svg> Novo Produto</button><button type="button" class="btn secondary" id="addShoppingBarcode"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5v14M6 5v14M9 5v14M13 5v14M16 5v14M19 5v14M22 5v14"/></svg> Ler Código de Barras</button>';
   $('#shoppingItems').prepend(actionBar);
   updateSummary();
 }
