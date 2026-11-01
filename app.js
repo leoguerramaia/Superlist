@@ -2395,7 +2395,7 @@ async function profileModal() {
         <div class="field"><label>Nome da Família</label><input class="profile-readonly" value="${esc(profile.familyName||'Não identificado')}" readonly aria-readonly="true"></div>
         <div class="field"><label>Código de vinculação da família</label><div class="profile-code"><input id="profileFamilyCode" class="profile-readonly" value="${esc(profile.familyCode||'Indisponível')}" readonly aria-readonly="true"><button type="button" class="btn secondary" id="copyFamilyCode">Copiar</button></div><small class="muted">Compartilhe esse código somente com pessoas que deseja adicionar à família.</small></div>
       </div>
-      <div style="display:flex;gap:10px;margin-top:18px"><button type="button" class="btn primary" id="saveProfilePhone">Salvar telefone</button><button type="button" class="btn secondary" id="closeProfile">Fechar</button></div><p id="profileFeedback" class="auth-note" aria-live="polite"></p>`;
+      <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap"><button type="button" class="btn primary" id="saveProfilePhone">Salvar telefone</button><button type="button" class="btn secondary" id="closeProfile">Fechar</button><button type="button" class="btn secondary" id="profileSignOut" style="margin-left:auto;color:#b42318;border-color:#f0c7c4">Sair da conta</button></div><p id="profileFeedback" class="auth-note" aria-live="polite"></p>`;
     const phone=$('#profilePhone');phone.addEventListener('input',()=>phone.value=formatProfilePhone(phone.value));
     $('#saveProfilePhone').addEventListener('click',async()=>{const digits=phone.value.replace(/\D/g,'');if(digits.length!==10&&digits.length!==11){toast('Informe um telefone válido com DDD.');return;}const btn=$('#saveProfilePhone');btn.disabled=true;try{await cloud.updatePhone(digits);toast('Telefone atualizado com sucesso!');}catch(e){toast(e.message||'Não foi possível atualizar o telefone.');}finally{btn.disabled=false;}});
     $('#chooseProfilePhoto').onclick=()=>$('#profilePhotoFile').click();$('#takeProfilePhoto').onclick=()=>$('#profileCameraFile').click();
@@ -2403,6 +2403,7 @@ async function profileModal() {
     $('#profilePhotoFile').addEventListener('change',e=>handlePhoto(e.target));$('#profileCameraFile').addEventListener('change',e=>handlePhoto(e.target));
     $('#copyFamilyCode').onclick=()=>{const code=profile.familyCode;if(!code){toast('Código de vinculação indisponível.');return;}if(navigator.clipboard?.writeText)navigator.clipboard.writeText(code).then(()=>toast('Código copiado!')).catch(()=>toast('Não foi possível copiar o código.'));else{const input=$('#profileFamilyCode');input.select();document.execCommand('copy');toast('Código copiado!');}};
     $('#closeProfile').onclick=closeModal;
+    $('#profileSignOut').addEventListener('click',async()=>{const btn=$('#profileSignOut');btn.disabled=true;btn.textContent='Saindo...';try{await cloud.signOut();}catch(err){btn.disabled=false;btn.textContent='Sair da conta';toast(err.message||'Não foi possível sair da conta.');}});
   } catch(e) { $('#modalBody').innerHTML=`<p>Não foi possível carregar seu perfil: ${esc(e.message||'Tente novamente.')}</p><button type="button" class="btn secondary" id="closeProfile">Fechar</button>`;$('#closeProfile').onclick=closeModal; }
 }
 function getNameInitials(name='') {
