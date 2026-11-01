@@ -1372,7 +1372,7 @@ function addCatalogProductToList() {
 
             if (!script) {
               script = document.createElement('script');
-              script.src = 'https://unpkg.com/@zxing/browser@0.2.1';
+              script.src = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
               script.dataset.superlistZxing = 'true';
               document.head.appendChild(script);
             }
@@ -1832,7 +1832,7 @@ async function loadZXingLibrary() {
     let script = document.querySelector('script[data-superlist-zxing]');
     if (!script) {
       script = document.createElement('script');
-      script.src = 'https://unpkg.com/@zxing/browser@0.2.1';
+      script.src = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
       script.async = true;
       script.dataset.superlistZxing = 'true';
       document.head.appendChild(script);
@@ -2429,7 +2429,7 @@ async function scanBarcode(itemId) {
 
     const script=document.createElement('script');
 
-    script.src='https://unpkg.com/@zxing/browser@0.2.1';
+    script.src='https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
     script.async=true;
     script.dataset.superlistZxing='true';
 
