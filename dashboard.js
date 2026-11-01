@@ -36,6 +36,7 @@
   '<section class="dash-section"><h2>Resumo das atividades</h2><div class="dash-grid dash-activities"><article class="dash-card"><b>'+done.length+'</b><small>Listas concluídas</small></article><article class="dash-card"><b>'+lists.length+'</b><small>Listas criadas</small></article><article class="dash-card"><b>'+active.length+'</b><small>Listas em andamento</small></article><article class="dash-card"><b>'+(db.products||[]).length+'</b><small>Produtos cadastrados</small></article><article class="dash-card wide"><b>'+(top?esc(top.name):'Ainda sem dados')+'</b><small>Produto mais comprado</small></article></div></section>'+
   '<section class="dash-section"><h2>Oportunidades para sua família</h2><p class="muted">Produtos com menor preço que o último valor registrado.</p><div class="dash-grid">'+offerHtml+'</div></section>'+
   '<section class="dash-section"><h2>Listas em andamento</h2><div class="dash-grid">'+activeHtml+'</div></section>';
+  }
   renderDashboard();
   renderHome=renderDashboard;
 })();
