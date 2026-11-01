@@ -466,7 +466,7 @@ function createListModal() {
       '<section id="textImportPanel" class="invite-box" style="display:none"><div class="field"><label for="newListText">Cole ou digite os produtos, um por linha</label><textarea id="newListText" rows="6" placeholder="2 arroz 5kg&#10;1 kg de banana&#10;3 unidades de leite"></textarea></div><button type="button" class="btn primary" id="validateTextList">Validar produtos</button></section>' +
       '<section id="photoImportPanel" class="invite-box" style="display:none"><p class="muted">Escolha uma foto da galeria ou tire uma foto da lista escrita à mão. A IA vai transcrever os produtos para você revisar.</p><div class="form-grid"><button type="button" class="btn secondary" id="chooseListGallery">Escolher da galeria</button><button type="button" class="btn secondary" id="takeListPhoto">Usar câmera</button></div><input id="listGalleryInput" type="file" accept="image/*" style="display:none"><input id="listCameraInput" type="file" accept="image/*" capture="environment" style="display:none"><div id="listPhotoName" class="helper"></div><div id="listPhotoPreview" style="display:none;margin:10px 0"><img id="listPhotoPreviewImage" alt="Prévia da lista fotografada" style="display:block;width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:#fff"></div><button type="button" class="btn primary" id="readListPhoto" disabled>✨ Transcrever com IA</button></section>' +
       '<div id="listImportProgress" class="receipt-progress" style="display:none" aria-live="polite"><div class="receipt-progress-top"><span class="receipt-spinner"></span><strong id="listImportProgressText">Organizando seus produtos...</strong></div><div class="receipt-progress-track"><span></span></div></div>' +
-      '<section id="listValidationPanel" style="display:none;margin-top:14px"><h3>Revise os produtos</h3><p class="helper">Confirme o nome, a quantidade e a associação ao catálogo. Nenhum produto será incluído antes de você confirmar.</p><div id="listValidationRows" class="receipt-table-wrap"></div><button type="button" class="btn primary" id="confirmValidatedItems" style="margin-top:12px">Confirmar produtos</button></section>' +
+      '<section id="listValidationPanel" style="display:none;margin-top:14px"><h3>Revise os produtos</h3><p class="helper">Confirme o nome, a quantidade e a associação ao catálogo. Nenhum produto será incluído antes de você confirmar.</p><div id="listValidationRows" class="receipt-table-wrap"></div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn primary" id="confirmValidatedItems">Confirmar produtos</button><span id="confirmProductsWarning" role="alert" style="display:none;color:#c62828;font-size:12px;font-weight:600"><span aria-hidden="true">*</span> Confirme os produtos antes de Criar a Lista</span></div></section>' +
       '<div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button type="submit" class="btn primary" id="createNewListButton">Criar lista</button></div>' +
     '</form>', 'NOVA LISTA');
 
@@ -477,8 +477,8 @@ function createListModal() {
   let previewUrl = null;
   const form = $('#modalForm');
   const createButton = $('#createNewListButton');
-  const setCreateEnabled = enabled => { createButton.disabled = !enabled; createButton.title = enabled ? '' : 'Confirme os produtos importados antes de criar a lista.'; };
-  setCreateEnabled(true);
+  const confirmWarning = $('#confirmProductsWarning');
+  const setCreateEnabled = enabled => { createButton.disabled = false; createButton.title = ''; if (enabled) confirmWarning.style.display = 'none'; };
   const textPanel = $('#textImportPanel'), photoPanel = $('#photoImportPanel');
   const validation = $('#listValidationPanel'), validationRows = $('#listValidationRows');
   const progress = $('#listImportProgress'), progressText = $('#listImportProgressText');
@@ -502,6 +502,7 @@ function createListModal() {
     importNeedsConfirmation = !!selectedPhoto;
     confirmedItems = [];
     setCreateEnabled(!importNeedsConfirmation);
+    confirmWarning.style.display = 'none';
     validation.style.display = 'none';
   }));
 
@@ -509,6 +510,7 @@ function createListModal() {
     importNeedsConfirmation = true;
     confirmedItems = [];
     setCreateEnabled(false);
+    confirmWarning.style.display = 'none';
     reviewRows = rows.map(row => {
       const name = String(row.name || '').trim();
       const key = norm(name);
@@ -608,6 +610,7 @@ function createListModal() {
     validation.style.display = 'none';
     importNeedsConfirmation = false;
     setCreateEnabled(true);
+    confirmWarning.style.display = 'none';
     toast(confirmedItems.length + ' produto(s) confirmado(s).');
   });
 
@@ -624,7 +627,7 @@ function createListModal() {
   form.addEventListener('submit', e => {
     e.preventDefault();
     if (!form.reportValidity()) return;
-    if (importNeedsConfirmation) return toast('Confirme os produtos antes de Criar a Lista');
+    if (importNeedsConfirmation) { confirmWarning.style.display = 'inline'; confirmWarning.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); return; }
     createListAndOpen(confirmedItems);
   });
 }
