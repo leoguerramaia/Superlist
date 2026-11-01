@@ -71,7 +71,7 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
       if(error) throw error;
       family=data;
     }
-    return {id:user.id,email:user.email||'',fullName:user.user_metadata?.full_name||'',phone:user.user_metadata?.phone||'',avatarUrl:user.user_metadata?.avatar_url||'',familyName:family?.name||'',familyCode:family?.invite_code||''};
+    return {id:user.id,email:user.email||'',fullName:user.user_metadata?.full_name||'',phone:user.user_metadata?.phone||'',avatarUrl:user.user_metadata?.avatar_url||'',familyName:family?.name||'',familyCode:family?.invite_code||'',isAdmin:user.app_metadata?.is_admin===true};
   }
   async function updatePhone(phoneDigits){
     if(!client) throw new Error('Supabase não está conectado.');

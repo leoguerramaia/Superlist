@@ -2384,7 +2384,7 @@ async function profileModal() {
   openModal('Meu perfil','<p class="muted">Carregando seus dados...</p>','MINHA CONTA');
   try {
     const profile=await cloud.getProfile();
-    const avatar=profile.avatarUrl?`<img src="${esc(profile.avatarUrl)}" alt="Foto do perfil" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:'<span style="font-size:30px">👤</span>';
+    const avatar=profile.avatarUrl?`<img src="${esc(profile.avatarUrl)}" alt="Foto do perfil" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:`<span style="font-size:25px;font-weight:700;color:#176b52">${esc(getNameInitials(profile.fullName))}</span>`;
     $('#modalBody').innerHTML=`
       <style>.profile-edit-grid{display:grid;gap:12px}.profile-photo-row{display:flex;align-items:center;gap:16px;margin-bottom:16px}.profile-photo{width:88px;height:88px;border-radius:50%;overflow:hidden;background:#e8f2ed;display:grid;place-items:center;border:3px solid #d8e9df;flex:none}.profile-readonly{background:#f4f6f5!important;color:#52615b!important}.profile-code{display:flex;gap:8px}.profile-code input{font-family:monospace;font-weight:700;letter-spacing:1px}.profile-actions{display:flex;gap:8px;flex-wrap:wrap}</style>
       <div class="profile-photo-row"><div class="profile-photo" id="profilePhotoPreview">${avatar}</div><div><strong>Foto do perfil</strong><p class="muted" style="margin:4px 0 10px">A foto aparecerá ao lado do seu usuário.</p><div class="profile-actions"><button type="button" class="btn secondary" id="chooseProfilePhoto">Enviar foto</button><button type="button" class="btn secondary" id="takeProfilePhoto">Usar câmera</button></div><input id="profilePhotoFile" type="file" accept="image/*" hidden><input id="profileCameraFile" type="file" accept="image/*" capture="user" hidden></div></div>
@@ -2405,8 +2405,14 @@ async function profileModal() {
     $('#closeProfile').onclick=closeModal;
   } catch(e) { $('#modalBody').innerHTML=`<p>Não foi possível carregar seu perfil: ${esc(e.message||'Tente novamente.')}</p><button type="button" class="btn secondary" id="closeProfile">Fechar</button>`;$('#closeProfile').onclick=closeModal; }
 }
-function applyProfileAvatar(url){
-  document.querySelectorAll('.avatar').forEach(el=>{el.innerHTML=url?`<img src="${esc(url)}" alt="Foto do perfil" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:'SL';});
+function getNameInitials(name='') {
+  const parts=String(name).trim().split(/\s+/).filter(Boolean);
+  if(!parts.length)return 'U';
+  return (parts.length===1?parts[0].slice(0,2):parts[0][0]+parts[parts.length-1][0]).toLocaleUpperCase('pt-BR');
+}
+function applyProfileAvatar(url,fullName='') {
+  const button=$('#profileAvatarButton');if(!button)return;
+  button.innerHTML=url?`<img src="${esc(url)}" alt="Foto do perfil" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:`<span style="font-weight:700;color:#176b52">${esc(getNameInitials(fullName))}</span>`;
 }
 
 // Conta, login, cadastro e recuperação de senha.
@@ -2576,8 +2582,8 @@ if (e.target.closest('#addShoppingProduct')) {
     $('#sidebar').classList.toggle('open');
   };
 
+  $('#profileAvatarButton').onclick=()=>window.__superlistSignedIn?profileModal():accountModal();
   $('#accountBtn').onclick=()=>window.__superlistSignedIn?profileModal():accountModal();
-  const sideProfile=$('.profile');if(sideProfile){sideProfile.style.cursor='pointer';sideProfile.title='Abrir meu perfil';sideProfile.addEventListener('click',()=>window.__superlistSignedIn?profileModal():accountModal());}
 
   $('#listSearch').addEventListener('input',renderLists);
   $('#listFilter').addEventListener('change',renderLists);
@@ -2636,16 +2642,23 @@ if(window.SuperlistCloud) {
     }
 
     const accountButton=$('#accountBtn');
-
-    if(accountButton&&s.userEmail) {
+    const identity=$('#userIdentity');
+    if(s.userEmail) {
       window.__superlistSignedIn=true;
-      accountButton.textContent='Meu perfil';
-      accountButton.title='Abrir meu perfil';
-      if(!window.__superlistProfileLoaded){window.__superlistProfileLoaded=true;window.SuperlistCloud.getProfile().then(p=>{if(p.avatarUrl)applyProfileAvatar(p.avatarUrl);const label=$('.profile strong');if(label&&p.fullName)label.textContent=p.fullName;const sub=$('.profile small');if(sub&&p.familyName)sub.textContent=p.familyName;}).catch(()=>{window.__superlistProfileLoaded=false;});}
-    } else if(accountButton&&s.userEmail===null) {
-      window.__superlistSignedIn=false;window.__superlistProfileLoaded=false;
-      accountButton.textContent='Conta';
-      accountButton.title='Entrar ou criar conta';
+      if(identity)identity.style.display='flex';
+      if(!window.__superlistProfileLoaded){window.__superlistProfileLoaded=true;window.SuperlistCloud.getProfile().then(p=>{
+        applyProfileAvatar(p.avatarUrl,p.fullName);
+        const name=$('#identityName'),family=$('#identityFamily'),email=$('#identityEmail');
+        if(name)name.textContent=p.fullName||'Usuário';
+        if(family)family.textContent=p.familyName||'Família não identificada';
+        if(email)email.textContent=p.email||s.userEmail;
+        window.__superlistIsAdmin=!!p.isAdmin;
+        document.documentElement.dataset.admin=window.__superlistIsAdmin?'true':'false';
+      }).catch(()=>{window.__superlistProfileLoaded=false;});}
+    } else if(s.userEmail===null) {
+      window.__superlistSignedIn=false;window.__superlistProfileLoaded=false;window.__superlistIsAdmin=false;
+      if(identity)identity.style.display='none';
+      applyProfileAvatar('', '');
     }
   });
 
