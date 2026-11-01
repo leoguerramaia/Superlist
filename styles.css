@@ -19,9 +19,14 @@
 
 /* Ações rápidas em cada cartão da lista */
 .list-card{position:relative}
-.list-card-actions{position:absolute;right:14px;bottom:12px;display:flex;gap:6px;z-index:2}
+.list-card-actions{position:absolute;left:46px;top:58px;display:flex;gap:6px;z-index:3}
 .list-card-action{width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;opacity:.82}
 .list-card-action:hover{opacity:1;background:var(--surface-soft)}
 .list-card-action.danger{color:#c62828}
+.list-card-action svg{width:16px;height:16px;display:block}
+.list-card h3{display:flex;align-items:center;gap:8px;padding-right:0}
+.list-card-actions{left:auto;right:auto;top:auto;position:static;display:inline-flex;vertical-align:middle;margin-left:8px}
+.list-card-title-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.list-card-title-row h3{margin:0;padding:0}
 .list-card-action.danger:hover{background:#fff1f0}
 .list-card h3{padding-right:74px}
