@@ -2609,11 +2609,25 @@ if(window.SuperlistCloud) {
 
   window.SuperlistCloud.boot({
     getData:()=>db,
+    emptyData:()=>({categories:[...seedCategories],products:JSON.parse(JSON.stringify(seedProducts)),stores:[],lists:[],prices:[],purchases:[]}),
     setData:d=>{
       db=d;
       localStorage.setItem(KEY,JSON.stringify(db));
       renderAll();
     },
     key:KEY
+  }).then(ready=>{
+    if(ready){
+      document.documentElement.classList.remove('auth-check');
+    }else if(document.documentElement.classList.contains('auth-check')){
+      document.body.innerHTML='<main style="max-width:560px;margin:12vh auto;padding:24px;font:16px system-ui;color:#18352d"><h1>Não foi possível carregar seus dados</h1><p>Por segurança, a área de listas continua bloqueada. Verifique sua conexão e tente novamente.</p><a href="./index.html">Voltar à página inicial</a></main>';
+      document.documentElement.classList.remove('auth-check');
+    }
+  }).catch(error=>{
+    console.error('Falha ao inicializar a área privada:',error);
+    if(document.documentElement.classList.contains('auth-check')){
+      document.body.innerHTML='<main style="max-width:560px;margin:12vh auto;padding:24px;font:16px system-ui;color:#18352d"><h1>Não foi possível validar sua conta</h1><p>Por segurança, a área privada permanece bloqueada.</p><a href="./index.html">Voltar à página inicial</a></main>';
+      document.documentElement.classList.remove('auth-check');
+    }
   });
 }
