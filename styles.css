@@ -30,3 +30,19 @@
 .list-card-title-row h3{margin:0;padding:0}
 .list-card-action.danger:hover{background:#fff1f0}
 .list-card h3{padding-right:74px}
+
+
+/* Cabeçalho da lista: ações compactas junto ao título */
+.shopping-heading{min-width:0}
+.shopping-title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.shopping-title-row h1{margin:0}
+.shopping-title-actions{display:inline-flex;align-items:center;gap:6px}
+.shopping-title-actions .list-card-action{width:32px;height:32px;background:#fff}
+.shopping-title-actions .list-card-action:hover{background:var(--surface-soft)}
+.shopping-title-actions .list-card-action.danger:hover{background:#fff1f0}
+.shopping-head-actions{display:flex;align-items:center;justify-content:flex-end}
+@media(max-width:760px){
+  .shopping-title-row{gap:8px}
+  .shopping-title-actions{gap:5px}
+  .shopping-title-actions .list-card-action{width:30px;height:30px}
+}
