@@ -6,7 +6,7 @@ const KEY = 'superlist-v1';
 const seedCategories = [
   'Hortifruti', 'Açougue e aves', 'Mercearia', 'Laticínios e frios',
   'Padaria', 'Bebidas', 'Limpeza', 'Higiene pessoal', 'Congelados',
-  'Pet shop', 'Outros'
+  'Pet shop', 'Papelaria', 'Casa e utilidades', 'Eletrônicos', 'Automotivo', 'Outros'
 ];
 
 const seedProducts = [
@@ -132,7 +132,8 @@ function loadDB() {
     let d = JSON.parse(localStorage.getItem(KEY));
 
     if(d) {
-      d.categories ||= seedCategories;
+      d.categories ||= [];
+      seedCategories.forEach(category => { if (!d.categories.includes(category)) d.categories.push(category); });
       d.products ||= [];
       // Inclui novos itens do catálogo inicial em contas já existentes, sem duplicar IDs ou nomes.
       const existingSeedIds = new Set(d.products.map(p=>p.id));
@@ -3012,6 +3013,8 @@ if(window.SuperlistCloud) {
     setData:d=>{
       const original = JSON.stringify(d || {});
       db=normalizeProductNames(d || {});
+      db.categories ||= [];
+      seedCategories.forEach(category => { if (!db.categories.includes(category)) db.categories.push(category); });
       db.lists.forEach(list => (list.items || []).forEach(item => { item.brand = formatDisplayName(item.brand); }));
       db.prices.forEach(price => { price.brand = formatDisplayName(price.brand); });
       const normalized = JSON.stringify(db);
