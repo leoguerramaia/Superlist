@@ -129,6 +129,33 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     if (!data || !Array.isArray(data.items)) throw new Error('A IA retornou uma resposta inesperada.');
     return data;
   }
+  async function analyzeBarcode({ image = null, code = '' } = {}) {
+    if (!client) throw new Error('Supabase não está configurado.');
+    const { data: { session } } = await client.auth.getSession();
+    if (!session?.access_token) throw new Error('Entre na sua conta antes de usar a identificação por IA.');
+    let image_base64 = '';
+    let mime_type = image?.type || 'image/jpeg';
+    if (image) {
+      if (!image.type?.startsWith('image/')) throw new Error('Capture uma imagem válida do código de barras.');
+      if (image.size > 8 * 1024 * 1024) throw new Error('A imagem está muito grande. Tente novamente.');
+      image_base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => { const value = String(reader.result || ''); const comma = value.indexOf(','); resolve(comma >= 0 ? value.slice(comma + 1) : value); };
+        reader.onerror = () => reject(new Error('Não foi possível preparar a foto para a IA.'));
+        reader.readAsDataURL(image);
+      });
+    }
+    const { data, error } = await client.functions.invoke('barcode-assistant', {
+      body: { code: String(code || '').replace(/[^0-9]/g, ''), image_base64, mime_type }
+    });
+    if (error) {
+      let detail = error.message || 'Falha ao consultar a IA de código de barras.';
+      try { const context = error.context; if (context && typeof context.json === 'function') { const body = await context.json(); if (body?.error) detail = body.error; } } catch (_) {}
+      throw new Error(detail);
+    }
+    if (!data || typeof data !== 'object') throw new Error('A IA retornou uma resposta inesperada.');
+    return data;
+  }
   async function analyzeReceipt(file, products = []) { return analyzeImage(file, 'receipt', products); }
   async function analyzeListPhoto(file) { return analyzeImage(file, 'list'); }
   async function validateListItems(items = []) {
@@ -157,5 +184,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
     return true;
   }
-  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,adminRequest,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeBarcode,adminRequest,onStatus(fn){callback=fn},loadIntoApp};
 })();
