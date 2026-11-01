@@ -520,7 +520,7 @@ function createListModal() {
       const key = norm(name);
       const match = db.products.find(p => norm(p.name) === key) ||
         db.products.find(p => norm(p.name).includes(key) || key.includes(norm(p.name)));
-      return { name, quantity: Number(row.quantity) > 0 ? Number(row.quantity) : 1, unit: row.unit || match?.unit || 'un', brand: row.brand || '', productId: match?.id || '' };
+      return { name, suggestedName: row.suggested_name || '', correctionReason: row.reason || '', hasCorrection: !!row.has_correction, needsReview: !!row.needs_review, quantity: Number(row.quantity) > 0 ? Number(row.quantity) : 1, unit: row.unit || match?.unit || 'un', brand: row.brand || '', productId: match?.id || '' };
     }).filter(row => row.name);
     renderValidation();
   }
@@ -540,35 +540,45 @@ function createListModal() {
         const brands = brandsForProduct(row.productId);
         const selectedBrand = row.brand || '';
         const hasNew = selectedBrand && !brands.some(b => norm(b) === norm(selectedBrand));
-        return '<tr data-review-row="' + i + '"><td><input data-review="name" value="' + esc(row.name) + '"></td><td><input data-review="quantity" type="number" min="0.01" step="0.01" value="' + row.quantity + '"></td><td><select data-review="unit">' + ['un','kg','g','l','ml','cx','pct'].map(u => '<option value="' + u + '"' + (row.unit === u ? ' selected' : '') + '>' + u + '</option>').join('') + '</select></td><td><select data-review="product"><option value="">Criar novo produto</option>' + db.products.map(p => '<option value="' + esc(p.id) + '"' + (row.productId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></td><td><select data-review="brand"><option value="">Sem marca</option>' + brands.map(b => '<option value="' + esc(b) + '"' + (norm(b) === norm(selectedBrand) ? ' selected' : '') + '>' + esc(b) + '</option>').join('') + '<option value="__new__"' + (hasNew ? ' selected' : '') + '>＋ Nova marca</option></select><input data-review="newBrand" value="' + (hasNew ? esc(selectedBrand) : '') + '" placeholder="Digite a nova marca" style="display:' + (hasNew ? 'block' : 'none') + ';margin-top:6px;max-width:150px"></td><td><button type="button" data-remove-review="' + i + '">×</button></td></tr>';
+        return '<tr data-review-row="' + i + '"><td><input data-review="name" value="' + esc(row.name) + '">' + (row.hasCorrection ? '<div style="font-size:11px;color:#a15c00;margin-top:5px">Sugestão da IA: <button type="button" data-accept-suggestion="' + i + '" style="color:#176b52;text-decoration:underline;background:none;border:0;padding:0;font-weight:700">' + esc(row.suggestedName) + '</button></div>' : row.needsReview ? '<small style="display:block;color:#a15c00;margin-top:5px">Confira a grafia deste produto.</small>' : '') + '</td><td><input data-review="quantity" type="number" min="0.01" step="0.01" value="' + row.quantity + '"></td><td><select data-review="unit">' + ['un','kg','g','l','ml','cx','pct'].map(u => '<option value="' + u + '"' + (row.unit === u ? ' selected' : '') + '>' + u + '</option>').join('') + '</select></td><td><select data-review="product"><option value="">Criar novo produto</option>' + db.products.map(p => '<option value="' + esc(p.id) + '"' + (row.productId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></td><td><select data-review="brand"><option value="">Sem marca</option>' + brands.map(b => '<option value="' + esc(b) + '"' + (norm(b) === norm(selectedBrand) ? ' selected' : '') + '>' + esc(b) + '</option>').join('') + '<option value="__new__"' + (hasNew ? ' selected' : '') + '>＋ Nova marca</option></select><input data-review="newBrand" value="' + (hasNew ? esc(selectedBrand) : '') + '" placeholder="Digite a nova marca" style="display:' + (hasNew ? 'block' : 'none') + ';margin-top:6px;max-width:150px"></td><td><button type="button" data-remove-review="' + i + '">×</button></td></tr>';
       }).join('') +
       '</tbody></table>';
     validation.style.display = 'block';
   }
 
-  $('#validateTextList').addEventListener('click', () => {
+  $('#validateTextList').addEventListener('click', async () => {
     const raw = textInput.value.trim();
     if (!raw) return toast('Cole ou digite os produtos primeiro.');
     importNeedsConfirmation = true;
     confirmedItems = [];
     setCreateEnabled(false);
-    const rows = raw.split(/\n|,/).map(line => line.trim()).filter(Boolean).map(line => {
-      let quantity = 1, unit = 'un', name = line;
-      const match = line.match(/^(\d+(?:[,.]\d+)?)\s*(kg|quilo[s]?|g|gramas?|l|litros?|ml|un(?:idades?)?|x)?\s+(?:de\s+)?(.+)$/i);
-      if (match) {
-        quantity = Number(match[1].replace(',', '.'));
-        const u = (match[2] || '').toLowerCase();
-        name = match[3].trim();
-        if (/kg|quilo/.test(u)) unit = 'kg'; else if (u === 'g' || u.startsWith('gram')) unit = 'g';
-        else if (u === 'l' || u.startsWith('litro')) unit = 'l'; else if (u === 'ml') unit = 'ml';
-        else if (u.startsWith('un') || u === 'x') unit = 'un';
-      }
-      return { name, quantity, unit };
-    });
-    prepareRows(rows);
-    textNeedsValidation = false;
-    validateTextWarning.style.display = 'none';
-    toast(reviewRows.length + ' produto(s) para revisar.');
+    const button = $('#validateTextList'); button.disabled = true;
+    showProgress('A IA está conferindo a grafia dos produtos...');
+    try {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const rows = raw.split(/\n|,/).map(line => line.trim()).filter(Boolean).map(line => {
+        let quantity = 1, unit = 'un', name = line;
+        const match = line.match(/^(\d+(?:[,.]\d+)?)\s*(kg|quilo[s]?|g|gramas?|l|litros?|ml|un(?:idades?)?|x)?\s+(?:de\s+)?(.+)$/i);
+        if (match) {
+          quantity = Number(match[1].replace(',', '.'));
+          const u = (match[2] || '').toLowerCase();
+          name = match[3].trim();
+          if (/kg|quilo/.test(u)) unit = 'kg'; else if (u === 'g' || u.startsWith('gram')) unit = 'g';
+          else if (u === 'l' || u.startsWith('litro')) unit = 'l'; else if (u === 'ml') unit = 'ml';
+          else if (u.startsWith('un') || u === 'x') unit = 'un';
+        }
+        return { name, quantity, unit };
+      });
+      if (!window.SuperlistCloud?.validateListItems) throw new Error('A validação por IA não está disponível. Atualize a Edge Function no Supabase.');
+      const checked = await window.SuperlistCloud.validateListItems(rows);
+      prepareRows(checked.items || rows);
+      textNeedsValidation = false;
+      validateTextWarning.style.display = 'none';
+      toast(reviewRows.length + ' produto(s) revisados pela IA. Confira as sugestões.');
+    } catch (error) {
+      console.error(error);
+      toast(error.message || 'Não foi possível validar a grafia com IA. Tente novamente.');
+    } finally { hideProgress(); button.disabled = false; }
   });
 
   $('#readListPhoto').addEventListener('click', async () => {
@@ -578,8 +588,11 @@ function createListModal() {
     try {
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const result = await window.SuperlistCloud.analyzeListPhoto(selectedPhoto);
-      prepareRows((result.items || []).map(x => ({ name:x.name, brand:x.brand, quantity:x.quantity, unit:String(x.unit || 'un').toLowerCase() })));
-      toast(reviewRows.length + ' produto(s) identificados. Revise antes de confirmar.');
+      const transcribed = (result.items || []).map(x => ({ name:x.name, brand:x.brand, quantity:x.quantity, unit:String(x.unit || 'un').toLowerCase() }));
+      showProgress('Transcrição concluída. A IA está revisando a grafia...');
+      const checked = await window.SuperlistCloud.validateListItems(transcribed);
+      prepareRows(checked.items || transcribed);
+      toast(reviewRows.length + ' produto(s) identificados e revisados. Confira as sugestões.');
     } catch (error) {
       console.error(error); toast('Não foi possível ler a foto. Tente outra imagem ou use a importação por texto.');
     } finally { hideProgress(); button.disabled = false; }
@@ -596,6 +609,8 @@ function createListModal() {
     else if (field) row[field] = e.target.value;
   });
   validationRows.addEventListener('click', e => {
+    const accept = e.target.closest('[data-accept-suggestion]');
+    if (accept) { const row = reviewRows[Number(accept.dataset.acceptSuggestion)]; if (row?.suggestedName) { row.name = row.suggestedName; row.hasCorrection = false; row.needsReview = false; renderValidation(); } return; }
     const button = e.target.closest('[data-remove-review]'); if (!button) return;
     reviewRows.splice(Number(button.dataset.removeReview), 1); renderValidation();
   });
