@@ -66,7 +66,7 @@ const extraSeedProducts = [
 seedProducts.push(...extraSeedProducts);
 
 function inferProductCategory(product={}) {
-  const text=[product.categories,product.categories_tags,product.product_name,product.product_name_pt].flat().join(' ').toLocaleLowerCase('pt-BR');
+  const text=[product.categories,product.categories_tags,product.product_name,product.product_name_pt,product.generic_name,product.brands].flat().join(' ').toLocaleLowerCase('pt-BR');
   const rules=[
     ['Hortifruti',/fruit|vegetable|fruta|verdura|legume|hortifruti/],
     ['Açougue e aves',/meat|poultry|beef|pork|fish|seafood|carne|frango|peixe/],
@@ -74,14 +74,17 @@ function inferProductCategory(product={}) {
     ['Padaria',/bakery|bread|biscuit|p.o|padaria/],
     ['Bebidas',/beverage|drink|water|juice|soda|bebida/],
     ['Limpeza',/cleaning|detergent|laundry|limpeza/],
-    ['Higiene pessoal',/personal care|toothpaste|shampoo|hygiene|higiene/],
+    ['Higiene pessoal',/personal care|toothpaste|shampoo|hygiene|cosmetic|higiene|cosm.tic/],
     ['Congelados',/frozen|congelad/],
-    ['Pet shop',/pet food|petfood|dog food|cat food|pet shop/],
+    ['Pet shop',/pet food|petfood|dog food|cat food|pet shop|alimento.*animal/],
+    ['Papelaria',/stationery|school supplies|office supplies|paper|glue|adhesive|pen|pencil|notebook|papelaria|material escolar|cola|caneta|l.pis|caderno/],
+    ['Casa e utilidades',/household|home.?care|kitchen|utensil|cleaning tool|casa|cozinha|utilidade dom.stica/],
+    ['Eletrônicos',/electronics|electronic|computer|phone|mobile phone|electr.nic|inform.tica/],
+    ['Automotivo',/automotive|car care|vehicle|automotivo|autom.vel/],
     ['Mercearia',/grocery|pasta|rice|cereal|sauce|snack|mercearia/]
   ];
   return rules.find(([,regex])=>regex.test(text))?.[0] || 'Outros';
 }
-
 function packageInfo(name,unit) {
   let m = name.match(/(\d+(?:[,.]\d+)?)\s*(kg|g|l|ml)\b/i);
   if(m) {
@@ -2268,54 +2271,73 @@ async function findProductByBarcode(value) {
   const code = normalizeBarcodeCode(value);
   if (!code) throw new Error('Informe um código de barras válido.');
 
-  // Primeiro consulta o catálogo compartilhado/local, comparando apenas dígitos.
-  const local = db.products.find(p =>
+  const local = (db.products || []).find(p =>
     normalizeBarcodeCode(p.barcode) === code && normalizeBarcodeCode(p.barcode)
   );
   if (local) return local;
 
-  // Open Food Facts v3 é a API atual; product_type=all também consulta bases irmãs.
-  const urls = [
-    `https://world.openfoodfacts.org/api/v3/product/${encodeURIComponent(code)}.json?product_type=all`,
-    `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`
+  // Endpoint universal: procura em alimentos, beleza, pet food e produtos em geral.
+  // As bases específicas ficam como fallback caso a consulta universal não responda.
+  const endpoints = [
+    { url: `https://world.openfoodfacts.org/api/v3/product/${encodeURIComponent(code)}.json?product_type=all&cc=br&lc=pt`, type: 'all' },
+    { url: `https://world.openfoodfacts.org/api/v3/product/${encodeURIComponent(code)}.json?cc=br&lc=pt`, type: 'food' },
+    { url: `https://world.openproductsfacts.org/api/v3/product/${encodeURIComponent(code)}.json?cc=br&lc=pt`, type: 'product' },
+    { url: `https://world.openbeautyfacts.org/api/v3/product/${encodeURIComponent(code)}.json?cc=br&lc=pt`, type: 'beauty' },
+    { url: `https://world.openpetfoodfacts.org/api/v3/product/${encodeURIComponent(code)}.json?cc=br&lc=pt`, type: 'petfood' }
   ];
-  let lastError = null;
-  for (let index = 0; index < urls.length; index++) {
-    try {
-      const response = await fetch(urls[index], { headers: { Accept: 'application/json' } });
-      if (!response.ok) {
-        if (response.status === 404) continue;
-        throw new Error(`Consulta de código retornou HTTP ${response.status}`);
-      }
-      const data = await response.json();
-      const prod = data.product;
-      const found = index === 0
-        ? (data.status === 'success' || !!prod?.code)
-        : (data.status === 1);
-      if (!found || !prod) continue;
 
-      const name = formatDisplayName(
-        prod.product_name_pt || prod.product_name || prod.generic_name_pt ||
-        prod.generic_name || `Produto ${code}`
-      );
+  let lastError = null;
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint.url, {
+        method: 'GET',
+        headers: { Accept: 'application/json' }
+      });
+      if (response.status === 404) continue;
+      if (!response.ok) {
+        if ([429, 500, 502, 503, 504].includes(response.status)) {
+          lastError = new Error(`Base de produtos temporariamente indisponível (HTTP ${response.status}).`);
+          continue;
+        }
+        continue;
+      }
+
+      const data = await response.json();
+      const prod = data.product || data;
+      const status = String(data.status || '').toLowerCase();
+      const found = !!prod && !!(prod.code || prod.product_name || prod.product_name_pt) &&
+        !['failure', 'not_found', 'product_not_found'].includes(status);
+      if (!found) continue;
+
+      const rawName = prod.product_name_pt || prod.product_name ||
+        prod.generic_name_pt || prod.generic_name || `Produto ${code}`;
+      const name = formatDisplayName(rawName);
       const product = {
         id: uid(),
         name,
-        category: inferProductCategory(prod),
+        category: inferProductCategory(prod) === 'Outros' && endpoint.type === 'beauty'
+          ? 'Higiene pessoal'
+          : inferProductCategory(prod) === 'Outros' && endpoint.type === 'petfood'
+            ? 'Pet shop'
+            : inferProductCategory(prod),
         unit: 'un',
         ...packageInfo(name, 'un'),
         barcode: code,
         brand: formatDisplayName(prod.brands || ''),
         photo: prod.image_front_url || prod.image_url || '',
         photoPath: '',
-        active: true
+        active: true,
+        source: endpoint.type
       };
       db.products.push(product);
+      save();
       return product;
     } catch (error) {
       lastError = error;
+      console.warn('Falha consultando base de código de barras:', endpoint.type, error);
     }
   }
+
   if (lastError) throw lastError;
   return null;
 }
