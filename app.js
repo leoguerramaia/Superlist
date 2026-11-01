@@ -67,7 +67,7 @@ let activeCategory = 'all';
 
 // Padroniza nomes de produtos e marcas em formato Título, mantendo conectores em minúsculas.
 function formatDisplayName(value) {
-  const minorWords = new Set(['de','da','do','das','dos','e','em','no','na','nos','nas','por','para','com']);
+  const minorWords = new Set(['a','as','o','os','de','da','do','das','dos','e','em','no','na','nos','nas','ao','aos','à','às','pelo','pela','pelos','pelas','por','para','com','sem','sob','sobre','entre']);
   const capitalize = (part, isFirst) => {
     if (!part) return part;
     const lower = part.toLocaleLowerCase('pt-BR');
@@ -77,6 +77,17 @@ function formatDisplayName(value) {
   return String(value || '').trim().replace(/\s+/g, ' ').split(' ').map((word, index) =>
     word.split('-').map((part, subIndex) => capitalize(part, index === 0 && subIndex === 0)).join('-')
   ).join(' ');
+}
+
+function normalizeProductNames(data) {
+  if (!data || typeof data !== 'object') return data;
+  data.products ||= [];
+  data.lists ||= [];
+  data.prices ||= [];
+  data.products.forEach(product => { product.name = formatDisplayName(product.name); });
+  data.lists.forEach(list => (list.items || []).forEach(item => { item.name = formatDisplayName(item.name); }));
+  data.prices.forEach(price => { price.productName = formatDisplayName(price.productName); });
+  return data;
 }
 
 function loadDB() {
@@ -90,11 +101,10 @@ function loadDB() {
       d.lists ||= [];
       d.prices ||= [];
       d.purchases ||= [];
-      // Padroniza também registros antigos, sem alterar IDs ou relacionamentos.
-      d.products.forEach(p => { p.name = formatDisplayName(p.name); });
-      d.lists.forEach(list => (list.items || []).forEach(item => { item.name = formatDisplayName(item.name); item.brand = formatDisplayName(item.brand); }));
-      d.prices.forEach(price => { price.productName = formatDisplayName(price.productName); price.brand = formatDisplayName(price.brand); });
-
+      // Padroniza produtos antigos e suas referências sem alterar IDs ou relacionamentos.
+      normalizeProductNames(d);
+      d.lists.forEach(list => (list.items || []).forEach(item => { item.brand = formatDisplayName(item.brand); }));
+      d.prices.forEach(price => { price.brand = formatDisplayName(price.brand); });
       return d;
     }
   } catch(e) {
@@ -792,7 +802,7 @@ function addProductModal(product = null) {
       }
 
       const productData = {
-        name: d.name,
+        name: formatDisplayName(d.name),
         category: d.category,
         unit: d.unit,
         netAmount: d.netAmount,
@@ -2811,7 +2821,9 @@ if(window.SuperlistCloud) {
     getData:()=>db,
     emptyData:()=>({categories:[...seedCategories],products:JSON.parse(JSON.stringify(seedProducts)),stores:[],lists:[],prices:[],purchases:[]}),
     setData:d=>{
-      db=d;
+      db=normalizeProductNames(d);
+      db.lists.forEach(list => (list.items || []).forEach(item => { item.brand = formatDisplayName(item.brand); }));
+      db.prices.forEach(price => { price.brand = formatDisplayName(price.brand); });
       localStorage.setItem(KEY,JSON.stringify(db));
       renderAll();
     },
