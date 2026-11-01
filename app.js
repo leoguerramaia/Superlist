@@ -1390,21 +1390,13 @@ function addCatalogProductToList() {
           const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
           const backCamera = devices.find(device => /back|rear|environment|traseira/i.test(device.label));
           const selectedDeviceId = backCamera?.deviceId || devices[devices.length - 1]?.deviceId;
-          controls = await reader.decodeFromVideoDevice(
-            selectedDeviceId,
-            video,
-            (result, error) => {
-              if (!result) {
-                if (error && error.name !== 'NotFoundException') console.debug('Leitura em andamento:', error);
-                return;
-              }
-              $('#addProductBarcode').value = result.getText();
-              if (controls) controls.stop();
-              cameraBox.style.display = 'none';
-              button.disabled = false;
-              toast('Código identificado. Toque em Consultar código.');
-            }
-          );
+          controls = await startLiveBarcodeScanner(video, code => {
+            $('#addProductBarcode').value = code;
+            if (controls) controls.stop();
+            cameraBox.style.display = 'none';
+            button.disabled = false;
+            toast('Código identificado. Toque em Consultar código.');
+          });
 
         } catch (error) {
           console.error(error);
@@ -2268,6 +2260,72 @@ function normalizeBarcodeCode(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
+// Leitor ao vivo de códigos EAN/UPC: prioriza BarcodeDetector nativo e usa ZXing como fallback.
+async function startLiveBarcodeScanner(video, onDetected) {
+  const formats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf', 'codabar'];
+  if ('BarcodeDetector' in window) {
+    try {
+      const supported = typeof BarcodeDetector.getSupportedFormats === 'function'
+        ? await BarcodeDetector.getSupportedFormats()
+        : formats;
+      const available = formats.filter(format => supported.includes(format));
+      if (available.length) {
+        const detector = new BarcodeDetector({ formats: available });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: { ideal: 'environment' } }
+        });
+        video.srcObject = stream;
+        video.setAttribute('playsinline', '');
+        video.muted = true;
+        await video.play();
+        let stopped = false;
+        let timer = null;
+        let detecting = false;
+        const detect = async () => {
+          if (stopped) return;
+          if (!detecting && video.readyState >= 2) {
+            detecting = true;
+            try {
+              const results = await detector.detect(video);
+              const result = results.find(item => item.rawValue);
+              if (result?.rawValue) {
+                stopped = true;
+                stream.getTracks().forEach(track => track.stop());
+                onDetected(result.rawValue);
+                return;
+              }
+            } catch (error) {
+              console.debug('Leitura nativa em andamento:', error);
+            } finally {
+              detecting = false;
+            }
+          }
+          if (!stopped) timer = setTimeout(detect, 180);
+        };
+        detect();
+        return {
+          stop() {
+            stopped = true;
+            if (timer) clearTimeout(timer);
+            stream.getTracks().forEach(track => track.stop());
+            video.srcObject = null;
+          }
+        };
+      }
+    } catch (error) {
+      console.warn('Leitor nativo indisponível; usando ZXing.', error);
+    }
+  }
+
+  const ZXing = await loadZXingLibrary();
+  const reader = new ZXing.BrowserMultiFormatReader();
+  return reader.decodeFromVideoDevice(undefined, video, (result, error) => {
+    if (result?.getText?.()) onDetected(result.getText());
+    else if (error && error.name !== 'NotFoundException') console.debug('Leitura ZXing em andamento:', error);
+  });
+}
+
 async function findProductByBarcode(value) {
   const code = normalizeBarcodeCode(value);
   if (!code) throw new Error('Informe um código de barras válido.');
@@ -2502,30 +2560,16 @@ async function scanBarcode(itemId) {
 
       button.textContent='Câmera aberta';
 
-      // Seleciona preferencialmente a câmera traseira e usa o leitor contínuo da ZXing.
-      const devices=await ZXing.BrowserCodeReader.listVideoInputDevices();
-      const backCamera=devices.find(device=>/back|rear|environment|traseira|environment/i.test(device.label));
-      const selectedDeviceId=backCamera?.deviceId || devices[devices.length-1]?.deviceId;
-      controls=await reader.decodeFromVideoDevice(
-        selectedDeviceId,
-        video,
-        (result,error)=>{
-          if(stopped)return;
-          if(!result) {
-            if(error && error.name!=='NotFoundException') console.debug('Leitura em andamento:',error);
-            return;
-          }
-          const code=result.getText();
-          if(code) {
-            $('#barcodeInput').value=code;
-            box.textContent='Código lido: '+code;
-            stop();
-            button.textContent='Abrir câmera novamente';
-            button.disabled=false;
-            toast('Código de barras identificado!');
-          }
-        }
-      );
+      // Usa o leitor nativo do navegador quando disponível e ZXing como alternativa.
+      controls=await startLiveBarcodeScanner(video, code=>{
+        if(stopped)return;
+        $('#barcodeInput').value=code;
+        box.textContent='Código lido: '+code;
+        stop();
+        button.textContent='Abrir câmera novamente';
+        button.disabled=false;
+        toast('Código de barras identificado!');
+      });
 
       if(stopped&&controls) {
         controls.stop();
