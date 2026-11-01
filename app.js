@@ -1465,7 +1465,54 @@ let cats=[...new Set(visibleItems.map(i=>i.category||'Outros'))];
       }).join('')
     : '<div class="empty-state">Sua lista está vazia. Adicione produtos para começar.</div>';
 
+  const actionBar = document.createElement('div');
+  actionBar.className = 'shopping-list-actions';
+  actionBar.innerHTML = '<button type="button" class="btn primary" id="addShoppingProduct">＋ Incluir Novo Produto</button><button type="button" class="btn secondary" id="addShoppingBarcode">▥ Incluir Produto Pelo Código de Barras</button>';
+  $('#shoppingItems').prepend(actionBar);
   updateSummary();
+}
+
+function renameCurrentList() {
+  if (!currentList) return;
+  openModal('Renomear lista', `<form id="renameListForm"><div class="field"><label>Nome da lista</label><input name="name" maxlength="80" required value="${esc(currentList.name)}"></div><div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button class="btn primary">Salvar nome</button></div></form>`);
+  $('#renameListForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const name = formData(e.currentTarget).name.trim();
+    if (!name) return toast('Informe o nome da lista.');
+    currentList.name = name; save(); closeModal(); renderShopping(); toast('Lista renomeada.');
+  });
+}
+
+function deleteCurrentList() {
+  if (!currentList) return;
+  if (!confirm('Excluir esta lista permanentemente? Esta ação não pode ser desfeita.')) return;
+  const id = currentList.id;
+  db.lists = db.lists.filter(list => list.id !== id);
+  db.prices = db.prices.filter(price => price.listId !== id);
+  db.purchases = db.purchases.filter(purchase => purchase.listId !== id);
+  currentList = null; save(); page('lists'); toast('Lista excluída.');
+}
+
+function exportCurrentList() {
+  if (!currentList) return;
+  openModal('Exportar lista', '<p class="muted">Escolha como deseja compartilhar ou guardar sua lista.</p><div class="form-actions" style="flex-wrap:wrap"><button type="button" class="btn secondary" id="exportListExcel">Excel (CSV)</button><button type="button" class="btn secondary" id="exportListPDF">PDF</button><button type="button" class="btn primary" id="exportListWhatsApp">WhatsApp</button></div>');
+  $('#exportListExcel').onclick = () => {
+    const rows = [['Produto','Marca','Quantidade','Unidade','Preço unitário','Total','Comprado'], ...currentList.items.map(item => [item.name,item.brand||'',item.qty,item.unit,item.price||0,(Number(item.qty)||0)*(Number(item.price)||0),item.checked?'Sim':'Não'])];
+    const csv = '\uFEFF' + rows.map(row => row.map(value => '"' + String(value ?? '').replace(/"/g,'""') + '"').join(';')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+    const a=document.createElement('a');a.href=url;a.download=(currentList.name||'lista').replace(/[^\w-]+/g,'_')+'.csv';a.click();URL.revokeObjectURL(url);
+  };
+  $('#exportListPDF').onclick = () => {
+    const rows=currentList.items.map(item=>'<tr><td>'+esc(item.name)+'</td><td>'+esc(item.brand||'')+'</td><td>'+item.qty+' '+esc(item.unit)+'</td><td>'+money(item.price||0)+'</td><td>'+money((Number(item.qty)||0)*(Number(item.price)||0))+'</td><td>'+(item.checked?'Sim':'Não')+'</td></tr>').join('');
+    const w=window.open('','_blank');
+    if(!w)return toast('Permita pop-ups para gerar o PDF.');
+    w.document.write('<html><head><title>'+esc(currentList.name)+'</title><style>body{font:14px Arial;padding:28px;color:#18352d}h1{font-size:22px}table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px solid #ddd;text-align:left}button{padding:10px;margin-bottom:18px}@media print{button{display:none}}</style></head><body><button onclick="window.print()">Salvar como PDF / Imprimir</button><h1>'+esc(currentList.name)+'</h1><p>'+esc(storeName(currentList.storeId))+' · '+dateBR(currentList.created)+'</p><table><thead><tr><th>Produto</th><th>Marca</th><th>Quantidade</th><th>Preço</th><th>Total</th><th>Comprado</th></tr></thead><tbody>'+rows+'</tbody></table><h2>Total: '+money(listTotal(currentList))+'</h2></body></html>');
+    w.document.close();
+  };
+  $('#exportListWhatsApp').onclick = () => {
+    const text=['*'+currentList.name+'*','Supermercado: '+storeName(currentList.storeId), ...currentList.items.map(item=>'• '+item.name+(item.brand?' ('+item.brand+')':'')+' — '+item.qty+' '+item.unit),'Total estimado: '+money(listTotal(currentList))].join('\n');
+    window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+  };
 }
 
 function updateSummary() {
@@ -2741,6 +2788,15 @@ if (e.target.closest('#addShoppingProduct')) {
   addCatalogProductToList();
   return;
 }
+if (e.target.closest('#addShoppingBarcode')) {
+  addCatalogProductToList();
+  const mode = $('#addProductMode');
+  if (mode) { mode.value = 'barcode'; mode.dispatchEvent(new Event('change')); }
+  return;
+}
+if (e.target.closest('#renameCurrentList')) { renameCurrentList(); return; }
+if (e.target.closest('#deleteCurrentList')) { deleteCurrentList(); return; }
+if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
     let scan=e.target.closest('[data-scan]');
 
     if(scan) {
