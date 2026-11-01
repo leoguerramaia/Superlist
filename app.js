@@ -2260,119 +2260,43 @@ function normalizeBarcodeCode(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
-// Leitor ao vivo de códigos EAN/UPC usando ZXing diretamente.
-// Evita BarcodeDetector nativo, que em alguns navegadores abre a câmera,
-// mas não reconhece os códigos de barras de forma consistente.
-async function startLiveBarcodeScanner(video, onDetected) {
-  const ZXing = await loadZXingLibrary();
-  if (!ZXing?.BrowserMultiFormatReader) {
-    throw new Error('Biblioteca de leitura de código de barras indisponível.');
-  }
-
-  video.setAttribute('autoplay', '');
-  video.setAttribute('muted', '');
-  video.setAttribute('playsinline', '');
-  video.playsInline = true;
-  video.muted = true;
-
-  let deviceId;
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const cameras = devices.filter(device => device.kind === 'videoinput');
-    const preferred = cameras.find(device => /back|rear|environment|traseira/i.test(device.label));
-    deviceId = preferred?.deviceId || cameras[0]?.deviceId;
-  } catch (error) {
-    console.debug('Não foi possível listar as câmeras; usando a câmera padrão.', error);
-  }
-
-  const reader = new ZXing.BrowserMultiFormatReader();
-  return reader.decodeFromVideoDevice(deviceId, video, (result, error) => {
-    const code = result?.getText?.();
-    if (code) {
-      onDetected(code);
-      return;
+// A câmera captura uma foto; a Edge Function envia a imagem à IA para ler o GTIN e pesquisar o produto na web.
+async function startLiveBarcodeScanner(video) {
+  if (!navigator.mediaDevices?.getUserMedia) throw new Error('A câmera exige acesso HTTPS e permissão do navegador.');
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+  video.srcObject = stream;
+  video.setAttribute('autoplay', ''); video.setAttribute('muted', ''); video.setAttribute('playsinline', '');
+  video.playsInline = true; video.muted = true;
+  await video.play();
+  return {
+    stop() { stream.getTracks().forEach(track => track.stop()); video.srcObject = null; },
+    async capture() {
+      if (!video.videoWidth || !video.videoHeight) throw new Error('A câmera ainda está ajustando a imagem. Aguarde um instante.');
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      return await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Não foi possível capturar a imagem.')), 'image/jpeg', 0.92));
     }
-    if (error && error.name !== 'NotFoundException') {
-      console.debug('Leitura de código em andamento:', error);
-    }
-  });
+  };
 }
-
 async function findProductByBarcode(value) {
   const code = normalizeBarcodeCode(value);
   if (!code) throw new Error('Informe um código de barras válido.');
-
-  const local = (db.products || []).find(p =>
-    normalizeBarcodeCode(p.barcode) === code && normalizeBarcodeCode(p.barcode)
-  );
+  const local = (db.products || []).find(p => normalizeBarcodeCode(p.barcode) === code && normalizeBarcodeCode(p.barcode));
   if (local) return local;
-
-  // Endpoint universal: procura em alimentos, beleza, pet food e produtos em geral.
-  // As bases específicas ficam como fallback caso a consulta universal não responda.
-  const endpoints = [
-    { url: `https://world.openfoodfacts.org/api/v3/product/${encodeURIComponent(code)}.json?product_type=all&cc=br&lc=pt`, type: 'all' },
-    { url: `https://world.openfoodfacts.org/api/v3/product/${encodeURIComponent(code)}.json?cc=br&lc=pt`, type: 'food' },
-    { url: `https://world.openproductsfacts.org/api/v3/product/${encodeURIComponent(code)}.json?cc=br&lc=pt`, type: 'product' },
-    { url: `https://world.openbeautyfacts.org/api/v3/product/${encodeURIComponent(code)}.json?cc=br&lc=pt`, type: 'beauty' },
-    { url: `https://world.openpetfoodfacts.org/api/v3/product/${encodeURIComponent(code)}.json?cc=br&lc=pt`, type: 'petfood' }
-  ];
-
-  let lastError = null;
-  for (const endpoint of endpoints) {
-    try {
-      const response = await fetch(endpoint.url, {
-        method: 'GET',
-        headers: { Accept: 'application/json' }
-      });
-      if (response.status === 404) continue;
-      if (!response.ok) {
-        if ([429, 500, 502, 503, 504].includes(response.status)) {
-          lastError = new Error(`Base de produtos temporariamente indisponível (HTTP ${response.status}).`);
-          continue;
-        }
-        continue;
-      }
-
-      const data = await response.json();
-      const prod = data.product || data;
-      const status = String(data.status || '').toLowerCase();
-      const found = !!prod && !!(prod.code || prod.product_name || prod.product_name_pt) &&
-        !['failure', 'not_found', 'product_not_found'].includes(status);
-      if (!found) continue;
-
-      const rawName = prod.product_name_pt || prod.product_name ||
-        prod.generic_name_pt || prod.generic_name || `Produto ${code}`;
-      const name = formatDisplayName(rawName);
-      const product = {
-        id: uid(),
-        name,
-        category: inferProductCategory(prod) === 'Outros' && endpoint.type === 'beauty'
-          ? 'Higiene pessoal'
-          : inferProductCategory(prod) === 'Outros' && endpoint.type === 'petfood'
-            ? 'Pet shop'
-            : inferProductCategory(prod),
-        unit: 'un',
-        ...packageInfo(name, 'un'),
-        barcode: code,
-        brand: formatDisplayName(prod.brands || ''),
-        photo: prod.image_front_url || prod.image_url || '',
-        photoPath: '',
-        active: true,
-        source: endpoint.type
-      };
-      db.products.push(product);
-      save();
-      return product;
-    } catch (error) {
-      lastError = error;
-      console.warn('Falha consultando base de código de barras:', endpoint.type, error);
-    }
-  }
-
-  if (lastError) throw lastError;
-  return null;
+  if (!window.SuperlistCloud?.analyzeBarcode) throw new Error('Atualize o SuperList para habilitar a busca por IA.');
+  const result = await window.SuperlistCloud.analyzeBarcode({ code });
+  if (result.needs_confirmation || !result.barcode || result.barcode !== code) throw new Error('A IA não confirmou o código informado. Confira os números e tente novamente.');
+  if (!result.product_found || !result.name) return null;
+  const name = formatDisplayName(result.name);
+  const product = {
+    id: uid(), name, category: seedCategories.includes(result.category) ? result.category : 'Outros',
+    unit: 'un', ...packageInfo(name, 'un'), barcode: code,
+    brand: formatDisplayName(result.brand || ''), photo: '', photoPath: '', active: true,
+    description: result.description || '', barcodeSources: result.sources || []
+  };
+  db.products.push(product); save(); return product;
 }
-
 // Leitor de código de barras compatível com Safari e outros navegadores.
 async function scanBarcode(itemId) {
   let item=currentList?.items.find(i=>i.id===itemId);
