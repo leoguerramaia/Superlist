@@ -2260,69 +2260,41 @@ function normalizeBarcodeCode(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
-// Leitor ao vivo de códigos EAN/UPC: prioriza BarcodeDetector nativo e usa ZXing como fallback.
+// Leitor ao vivo de códigos EAN/UPC usando ZXing diretamente.
+// Evita BarcodeDetector nativo, que em alguns navegadores abre a câmera,
+// mas não reconhece os códigos de barras de forma consistente.
 async function startLiveBarcodeScanner(video, onDetected) {
-  const formats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf', 'codabar'];
-  if ('BarcodeDetector' in window) {
-    try {
-      const supported = typeof BarcodeDetector.getSupportedFormats === 'function'
-        ? await BarcodeDetector.getSupportedFormats()
-        : formats;
-      const available = formats.filter(format => supported.includes(format));
-      if (available.length) {
-        const detector = new BarcodeDetector({ formats: available });
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: { facingMode: { ideal: 'environment' } }
-        });
-        video.srcObject = stream;
-        video.setAttribute('playsinline', '');
-        video.muted = true;
-        await video.play();
-        let stopped = false;
-        let timer = null;
-        let detecting = false;
-        const detect = async () => {
-          if (stopped) return;
-          if (!detecting && video.readyState >= 2) {
-            detecting = true;
-            try {
-              const results = await detector.detect(video);
-              const result = results.find(item => item.rawValue);
-              if (result?.rawValue) {
-                stopped = true;
-                stream.getTracks().forEach(track => track.stop());
-                onDetected(result.rawValue);
-                return;
-              }
-            } catch (error) {
-              console.debug('Leitura nativa em andamento:', error);
-            } finally {
-              detecting = false;
-            }
-          }
-          if (!stopped) timer = setTimeout(detect, 180);
-        };
-        detect();
-        return {
-          stop() {
-            stopped = true;
-            if (timer) clearTimeout(timer);
-            stream.getTracks().forEach(track => track.stop());
-            video.srcObject = null;
-          }
-        };
-      }
-    } catch (error) {
-      console.warn('Leitor nativo indisponível; usando ZXing.', error);
-    }
+  const ZXing = await loadZXingLibrary();
+  if (!ZXing?.BrowserMultiFormatReader) {
+    throw new Error('Biblioteca de leitura de código de barras indisponível.');
   }
 
-  const ZXing = await loadZXingLibrary();
+  video.setAttribute('autoplay', '');
+  video.setAttribute('muted', '');
+  video.setAttribute('playsinline', '');
+  video.playsInline = true;
+  video.muted = true;
+
+  let deviceId;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cameras = devices.filter(device => device.kind === 'videoinput');
+    const preferred = cameras.find(device => /back|rear|environment|traseira/i.test(device.label));
+    deviceId = preferred?.deviceId || cameras[0]?.deviceId;
+  } catch (error) {
+    console.debug('Não foi possível listar as câmeras; usando a câmera padrão.', error);
+  }
+
   const reader = new ZXing.BrowserMultiFormatReader();
-  return reader.decodeFromVideoDevice(undefined, video, (result, error) => {
-    if (result?.getText?.()) onDetected(result.getText());
-    else if (error && error.name !== 'NotFoundException') console.debug('Leitura ZXing em andamento:', error);
+  return reader.decodeFromVideoDevice(deviceId, video, (result, error) => {
+    const code = result?.getText?.();
+    if (code) {
+      onDetected(code);
+      return;
+    }
+    if (error && error.name !== 'NotFoundException') {
+      console.debug('Leitura de código em andamento:', error);
+    }
   });
 }
 
