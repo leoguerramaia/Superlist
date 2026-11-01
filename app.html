@@ -41,6 +41,7 @@
       <button class="nav-link" data-page="stores"><span>⌖</span> Supermercados</button>
       <button class="nav-link" data-page="products"><span>▦</span> Produtos e categorias</button>
       <button class="nav-link" data-page="prices"><span>↗</span> Histórico de preços</button>
+      <button class="nav-link admin-only" data-page="admin" style="display:none"><span>⚙</span> Administração</button>
     </nav>
     <div class="sidebar-bottom">
       <div class="tip-card"><div class="tip-icon">✦</div><strong>Compre melhor.</strong><p>Compare preços e acompanhe seus gastos em um só lugar.</p></div>
@@ -101,7 +102,16 @@
         <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Supermercado</th><th>Data</th><th>Preço unitário</th><th>Unidade</th></tr></thead><tbody id="priceRows"></tbody></table></div>
       </section>
 
-      <section class="page" id="page-shopping">
+      <section class="page" id="page-admin">
+      <div class="page-heading"><div><span class="eyebrow">ÁREA RESTRITA</span><h1>Painel administrativo</h1><p class="muted">Acesso reservado à administração do SuperList.</p></div></div>
+      <div class="stat-card" style="max-width:760px">
+        <div class="stat-top"><span>Conta administrativa</span><span class="status">ACESSO RESTRITO</span></div>
+        <strong style="font-size:20px">Administrador principal</strong>
+        <p class="muted" style="margin-top:8px">Sua conta será reconhecida como administradora quando a permissão <code>is_admin=true</code> estiver gravada no <code>app_metadata</code> do Supabase. Se este menu não aparecer, execute o arquivo <code>set-superlist-admin.sql</code> no SQL Editor e entre novamente.</p>
+        <p class="muted" style="margin-top:12px">Os recursos de gestão de usuários, famílias e auditoria dependem de uma função administrativa segura no servidor. Eles não são habilitados apenas pela exibição deste menu.</p>
+      </div>
+    </section>
+    <section class="page" id="page-shopping">
         <div class="shopping-head"><div><button class="back-link" id="backToLists">← Minhas listas</button><div class="eyebrow">MODO DE COMPRA</div><h1 id="shoppingTitle">Minha lista</h1><p class="muted" id="shoppingMeta"></p></div><div class="shopping-head-actions"><span class="store-pill" id="shoppingStore"></span><button class="btn secondary" id="finishList">Finalizar compra</button></div></div>
         <div class="shopping-layout"><div class="shopping-items" id="shoppingItems"></div><aside class="purchase-summary"><div class="summary-label">RESUMO DA COMPRA</div><div class="summary-line"><span>Itens na lista</span><strong id="summaryItems">0</strong></div><div class="summary-line"><span>Itens comprados</span><strong id="summaryChecked">0</strong></div><div class="summary-line"><span>Previsão</span><strong id="summaryEstimate">R$ 0,00</strong></div><div class="summary-divider"></div><div class="total-label">Total da compra</div><div class="total-value" id="summaryTotal">R$ 0,00</div><div class="summary-note">O total é atualizado automaticamente conforme você informa quantidades e preços.</div><button class="btn primary full" id="finishListBottom">Concluir compra</button></aside></div>
       </section>

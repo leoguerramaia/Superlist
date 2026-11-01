@@ -142,6 +142,7 @@ function toast(t) {
 }
 
 function page(name) {
+  if(name==='admin' && !window.__superlistIsAdmin){toast('Acesso restrito à administração.');return;}
   $$('.page').forEach(p => p.classList.toggle('active',p.id==='page-'+name));
   $$('.nav-link').forEach(b => b.classList.toggle('active',b.dataset.page===name));
   $('#pageTitle').textContent = ({
@@ -150,7 +151,8 @@ function page(name) {
     stores:'Supermercados',
     products:'Produtos e categorias',
     prices:'Histórico de preços',
-    shopping:'Compras'
+    shopping:'Compras',
+    admin:'Painel administrativo'
   })[name]||name;
   $('#sidebar').classList.remove('open');
   if(name!=='shopping') renderAll();
@@ -2392,7 +2394,7 @@ async function profileModal() {
         <div class="field"><label>Nome completo</label><input class="profile-readonly" value="${esc(profile.fullName)}" readonly aria-readonly="true"></div>
         <div class="field"><label>E-mail</label><input class="profile-readonly" type="email" value="${esc(profile.email)}" readonly aria-readonly="true"></div>
         <div class="field"><label>Telefone com DDD</label><input id="profilePhone" type="tel" inputmode="numeric" maxlength="15" value="${esc(formatProfilePhone(profile.phone))}" placeholder="(00) 00000-0000"></div>
-        <div class="field"><label>Nome da Família</label><input class="profile-readonly" value="${esc(profile.familyName||'Não identificado')}" readonly aria-readonly="true"></div>
+        <div class="field"><label>Nome da Família</label><input class="profile-readonly" value="${esc(profile.familyName?`Família ${profile.familyName}`:'Não identificado')}" readonly aria-readonly="true"></div>
         <div class="field"><label>Código de vinculação da família</label><div class="profile-code"><input id="profileFamilyCode" class="profile-readonly" value="${esc(profile.familyCode||'Indisponível')}" readonly aria-readonly="true"><button type="button" class="btn secondary" id="copyFamilyCode">Copiar</button></div><small class="muted">Compartilhe esse código somente com pessoas que deseja adicionar à família.</small></div>
       </div>
       <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap"><button type="button" class="btn primary" id="saveProfilePhone">Salvar telefone</button><button type="button" class="btn secondary" id="closeProfile">Fechar</button><button type="button" class="btn secondary" id="profileSignOut" style="margin-left:auto;color:#b42318;border-color:#f0c7c4">Sair da conta</button></div><p id="profileFeedback" class="auth-note" aria-live="polite"></p>`;
@@ -2651,10 +2653,11 @@ if(window.SuperlistCloud) {
         applyProfileAvatar(p.avatarUrl,p.fullName);
         const name=$('#identityName'),family=$('#identityFamily'),email=$('#identityEmail');
         if(name)name.textContent=p.fullName||'Usuário';
-        if(family)family.textContent=p.familyName||'Família não identificada';
+        if(family)family.textContent=p.familyName?`Família ${p.familyName}`:'Família não identificada';
         if(email)email.textContent=p.email||s.userEmail;
         window.__superlistIsAdmin=!!p.isAdmin;
         document.documentElement.dataset.admin=window.__superlistIsAdmin?'true':'false';
+        const adminLink=$('.admin-only');if(adminLink)adminLink.style.display=window.__superlistIsAdmin?'flex':'none';
       }).catch(()=>{window.__superlistProfileLoaded=false;});}
     } else if(s.userEmail===null) {
       window.__superlistSignedIn=false;window.__superlistProfileLoaded=false;window.__superlistIsAdmin=false;
