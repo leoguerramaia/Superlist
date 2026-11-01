@@ -1308,11 +1308,12 @@ function addCatalogProductToList() {
         <div class="form-actions">
           <button type="button" class="btn secondary"
             id="scanNewProductBarcode">
-            ▣ Ler com a câmera
+            ▣ Abrir câmera
           </button>
+          <button type="button" class="btn secondary" id="readNewProductBarcodeAI">✨ Ler com IA</button>
           <button type="button" class="btn primary"
             id="lookupNewProductBarcode">
-            Consultar código
+            Pesquisar com IA
           </button>
         </div>
         <div id="addBarcodeCamera" class="camera-box"
@@ -1352,59 +1353,46 @@ function addCatalogProductToList() {
         }
       };
 
+      let aiCameraControls = null;
       $('#scanNewProductBarcode').onclick = async () => {
-        const cameraBox = $('#addBarcodeCamera');
-        const button = $('#scanNewProductBarcode');
-
-        let controls = null;
-
+        const cameraBox = $('#addBarcodeCamera'), button = $('#scanNewProductBarcode');
         try {
-          if (!navigator.mediaDevices?.getUserMedia) {
-            throw new Error('A câmera exige acesso HTTPS pelo Safari.');
-          }
-
-          cameraBox.style.display = 'block';
-          cameraBox.innerHTML = '<video autoplay muted playsinline style="width:100%"></video>';
-          button.disabled = true;
-
-          if (!window.ZXingBrowser) {
-            let script = document.querySelector('script[data-superlist-zxing]');
-
-            if (!script) {
-              script = document.createElement('script');
-              script.src = 'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
-              script.dataset.superlistZxing = 'true';
-              document.head.appendChild(script);
-            }
-
-            await new Promise((resolve, reject) => {
-              if (window.ZXingBrowser) return resolve();
-              script.addEventListener('load', resolve, { once: true });
-              script.addEventListener('error', reject, { once: true });
-            });
-          }
-
-          const reader = new ZXingBrowser.BrowserMultiFormatReader();
-          const video = cameraBox.querySelector('video');
-
-          const devices = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
-          const backCamera = devices.find(device => /back|rear|environment|traseira/i.test(device.label));
-          const selectedDeviceId = backCamera?.deviceId || devices[devices.length - 1]?.deviceId;
-          controls = await startLiveBarcodeScanner(video, code => {
-            $('#addProductBarcode').value = code;
-            if (controls) controls.stop();
-            cameraBox.style.display = 'none';
-            button.disabled = false;
-            toast('Código identificado. Toque em Consultar código.');
-          });
-
-        } catch (error) {
-          console.error(error);
-          if (controls) controls.stop();
-          cameraBox.style.display = 'none';
-          button.disabled = false;
-          toast('Não foi possível iniciar a câmera.');
-        }
+          cameraBox.style.display = 'block'; cameraBox.innerHTML = '<video autoplay muted playsinline style="width:100%;height:100%;object-fit:contain"></video>';
+          button.disabled = true; button.textContent = 'Abrindo câmera…';
+          aiCameraControls = await startLiveBarcodeScanner(cameraBox.querySelector('video'));
+          button.textContent = 'Câmera aberta'; toast('Centralize o código e toque em Ler com IA.');
+        } catch (error) { console.error(error); cameraBox.style.display = 'none'; toast(error.message || 'Não foi possível iniciar a câmera.'); button.textContent = 'Abrir câmera'; }
+        finally { button.disabled = false; }
+      };
+      $('#readNewProductBarcodeAI').onclick = async () => {
+        const button = $('#readNewProductBarcodeAI');
+        if (!aiCameraControls) { toast('Abra a câmera primeiro.'); return; }
+        button.disabled = true; button.textContent = 'IA analisando…';
+        try {
+          const image = await aiCameraControls.capture();
+          const result = await window.SuperlistCloud.analyzeBarcode({ image });
+          const code = normalizeBarcodeCode(result.barcode);
+          if (!code || result.needs_confirmation || result.barcode_confidence === 'low') { toast('A IA não conseguiu ler o código com segurança. Aproxime e tente novamente.'); return; }
+          $('#addProductBarcode').value = code;
+          if (!result.product_found || !result.name) { toast('Código ' + code + ' identificado, mas sem produto confirmado na pesquisa.'); return; }
+          let product = db.products.find(p => normalizeBarcodeCode(p.barcode) === code);
+          if (!product) { const name = formatDisplayName(result.name); product = { id: uid(), name, category: seedCategories.includes(result.category) ? result.category : 'Outros', unit: 'un', ...packageInfo(name, 'un'), barcode: code, brand: formatDisplayName(result.brand || ''), photo: '', active: true, description: result.description || '', barcodeSources: result.sources || [] }; db.products.push(product); save(); }
+          aiCameraControls.stop(); aiCameraControls = null; cameraBox.style.display = 'none';
+          addProductToCurrentList(product, Number($('#addProductQty').value) || 1, $('#addProductBrand')?.value || product.brand || '');
+        } catch (error) { console.error(error); toast(error.message || 'Falha na análise da imagem.'); }
+        finally { button.disabled = false; button.textContent = '✨ Ler com IA'; }
+      };
+      $('#lookupNewProductBarcode').onclick = async () => {
+        const code = normalizeBarcodeCode($('#addProductBarcode').value);
+        if (!code) { toast('Informe um código de barras válido.'); return; }
+        if (![8, 12, 13, 14].includes(code.length)) { toast('O código deve ter 8, 12, 13 ou 14 números.'); return; }
+        const button = $('#lookupNewProductBarcode'); button.disabled = true; button.textContent = 'IA pesquisando…';
+        try {
+          const product = await findProductByBarcode(code);
+          if (!product) { toast('A IA não encontrou uma correspondência confiável para esse código.'); return; }
+          addProductToCurrentList(product, Number($('#addProductQty').value) || 1, $('#addProductBrand')?.value || product.brand || '');
+        } catch (error) { console.error(error); toast(error.message || 'Falha na pesquisa com IA.'); }
+        finally { button.disabled = false; button.textContent = 'Pesquisar com IA'; }
       };
     }
   }
