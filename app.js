@@ -2317,258 +2317,53 @@ async function scanBarcode(itemId) {
     </div>
     <div class="camera-controls">
       <button type="button" class="btn secondary" id="startCamera">▣ Abrir câmera</button>
+      <button type="button" class="btn secondary" id="readBarcodeAI">✨ Ler com IA</button>
       <button type="button" class="btn secondary" id="stopCamera">Parar câmera</button>
-      <button type="button" class="btn primary" id="lookupBarcode">Consultar código</button>
+      <button type="button" class="btn primary" id="lookupBarcode">Pesquisar com IA</button>
     </div>
     <p class="helper">
-      A leitura utiliza a câmera traseira. Permita o acesso quando o Safari solicitar.
-      Se não funcionar, digite o código manualmente.
+      A câmera captura o código e a IA identifica os números e pesquisa o produto na internet. Você também pode digitar o código.
     </p>`,
     'SUPERLIST'
   );
 
-  let controls=null;
-  let reader=null;
-  let stopped=false;
-  let lookupStarted=false;
-
-  const stop=()=>{
-    stopped=true;
-
-    if(controls) {
-      try {
-        controls.stop();
-      } catch(e) {
-        console.warn('Erro ao parar leitor:',e);
-      }
-      controls=null;
-    }
-
-    const video=$('#cameraBox')?.querySelector('video');
-
-    if(video?.srcObject) {
-      video.srcObject.getTracks().forEach(track=>track.stop());
-      video.srcObject=null;
-    }
-
-    reader=null;
+  let controls = null;
+  let lookupStarted = false;
+  const videoMarkup = () => { const video = document.createElement('video'); video.style.width = '100%'; video.style.height = '100%'; video.style.objectFit = 'contain'; return video; };
+  const stop = () => { if (controls) { controls.stop(); controls = null; } };
+  $('#startCamera').onclick = async () => {
+    const button = $('#startCamera'), box = $('#cameraBox');
+    try { button.disabled = true; button.textContent = 'Abrindo câmera…'; box.innerHTML = ''; const video = videoMarkup(); box.appendChild(video); controls = await startLiveBarcodeScanner(video); button.textContent = 'Câmera aberta'; toast('Câmera pronta. Centralize as barras e toque em Ler com IA.'); }
+    catch (error) { console.error(error); box.textContent = 'Não foi possível abrir a câmera.'; toast(error.message || 'Falha ao abrir a câmera.'); button.textContent = 'Abrir câmera'; }
+    finally { button.disabled = false; }
   };
-
-  const loadZXing=()=>new Promise((resolve,reject)=>{
-    if(window.ZXingBrowser) {
-      resolve(window.ZXingBrowser);
-      return;
-    }
-
-    const existing=document.querySelector('script[data-superlist-zxing]');
-
-    if(existing) {
-      if(existing.dataset.loaded==='true'&&window.ZXingBrowser) {
-        resolve(window.ZXingBrowser);
-        return;
-      }
-
-      existing.addEventListener('load',()=>{
-        window.ZXingBrowser
-          ? resolve(window.ZXingBrowser)
-          : reject(new Error('Não foi possível carregar o leitor.'));
-      },{once:true});
-
-      existing.addEventListener('error',()=>{
-        reject(new Error('Falha ao carregar a biblioteca de leitura.'));
-      },{once:true});
-
-      return;
-    }
-
-    const script=document.createElement('script');
-
-    script.src='https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
-    script.async=true;
-    script.dataset.superlistZxing='true';
-
-    script.onload=()=>{
-      script.dataset.loaded='true';
-
-      if(window.ZXingBrowser) {
-        resolve(window.ZXingBrowser);
-      } else {
-        reject(new Error('Biblioteca de leitura indisponível.'));
-      }
-    };
-
-    script.onerror=()=>{
-      reject(new Error('Não foi possível baixar o leitor. Verifique sua conexão.'));
-    };
-
-    document.head.appendChild(script);
-  });
-
-  $('#stopCamera').onclick=()=>{
-    stop();
-    const button=$('#startCamera');
-    if(button)button.textContent='Abrir câmera novamente';
-
-    const box=$('#cameraBox');
-    if(box)box.textContent='Câmera desligada.';
-  };
-
-  $('#startCamera').onclick=async()=>{
-    const button=$('#startCamera');
-    const box=$('#cameraBox');
-
+  $('#readBarcodeAI').onclick = async () => {
+    if (!controls) { toast('Abra a câmera primeiro.'); return; }
+    const button = $('#readBarcodeAI'); button.disabled = true; button.textContent = 'IA analisando…';
     try {
-      stop();
-      stopped=false;
-
-      if(!navigator.mediaDevices?.getUserMedia) {
-        throw new Error(
-          'A câmera não está disponível. Acesse o Superlist pelo endereço HTTPS no Safari.'
-        );
-      }
-
-      button.disabled=true;
-      button.textContent='Carregando leitor...';
-
-      const ZXing=await loadZXing();
-
-      if(stopped||!$('#cameraBox'))return;
-
-      if(!ZXing.BrowserMultiFormatReader) {
-        throw new Error('O leitor de códigos não foi carregado corretamente.');
-      }
-
-      reader=new ZXing.BrowserMultiFormatReader();
-
-      const video=document.createElement('video');
-
-      video.setAttribute('autoplay','');
-      video.setAttribute('muted','');
-      video.setAttribute('playsinline','');
-      video.playsInline=true;
-      video.muted=true;
-      video.style.width='100%';
-      video.style.height='100%';
-      video.style.objectFit='contain';
-
-      box.innerHTML='';
-      box.appendChild(video);
-
-      button.textContent='Câmera aberta';
-
-      // Usa o leitor nativo do navegador quando disponível e ZXing como alternativa.
-      controls=await startLiveBarcodeScanner(video, code=>{
-        if(stopped)return;
-        $('#barcodeInput').value=code;
-        box.textContent='Código lido: '+code;
-        stop();
-        button.textContent='Abrir câmera novamente';
-        button.disabled=false;
-        toast('Código de barras identificado!');
-      });
-
-      if(stopped&&controls) {
-        controls.stop();
-        controls=null;
-      }
-
-    } catch(e) {
-      console.error('Erro na câmera:',e);
-
-      stop();
-
-      if(box)box.textContent='Não foi possível iniciar a câmera.';
-
-      button.disabled=false;
-      button.textContent='Abrir câmera';
-
-      let message=e.message||'Não foi possível abrir a câmera.';
-
-      if(e.name==='NotAllowedError') {
-        message='Acesso à câmera negado. Verifique as permissões do Safari.';
-      } else if(e.name==='NotFoundError') {
-        message='Nenhuma câmera foi encontrada neste dispositivo.';
-      } else if(e.name==='NotReadableError') {
-        message='A câmera está sendo utilizada por outro aplicativo.';
-      }
-
-      toast(message);
-
-    } finally {
-      button.disabled=false;
-
-      if(button.textContent==='Carregando leitor...') {
-        button.textContent='Abrir câmera';
-      }
-    }
+      const image = await controls.capture(); const result = await window.SuperlistCloud.analyzeBarcode({ image }); const code = normalizeBarcodeCode(result.barcode);
+      if (!code || result.needs_confirmation || result.barcode_confidence === 'low') { toast('A IA não conseguiu ler os números com segurança. Aproxime a câmera e tente novamente.'); return; }
+      $('#barcodeInput').value = code;
+      if (!result.product_found || !result.name) { toast('Código ' + code + ' identificado, mas o produto não foi confirmado na pesquisa.'); return; }
+      let product = db.products.find(p => normalizeBarcodeCode(p.barcode) === code);
+      if (!product) { const name = formatDisplayName(result.name); product = { id: uid(), name, category: seedCategories.includes(result.category) ? result.category : 'Outros', unit: 'un', ...packageInfo(name, 'un'), barcode: code, brand: formatDisplayName(result.brand || ''), photo: '', active: true, description: result.description || '', barcodeSources: result.sources || [] }; db.products.push(product); }
+      item.productId = product.id; item.name = product.name; item.category = product.category || 'Outros'; item.unit = product.unit || item.unit || 'un';
+      stop(); save(); closeModal(); renderShopping(); toast('Produto identificado pela IA e associado à lista.');
+    } catch (error) { console.error(error); toast(error.message || 'Não foi possível analisar a imagem com IA.'); }
+    finally { button.disabled = false; button.textContent = '✨ Ler com IA'; }
   };
-
-  $('#lookupBarcode').onclick=async()=>{
-    if(lookupStarted)return;
-
-    const code=normalizeBarcodeCode($('#barcodeInput').value);
-
-    if(!code) {
-      toast('Informe um código de barras válido.');
-      return;
-    }
-    if (![8, 12, 13, 14].includes(code.length)) {
-      toast('O código deve ter 8, 12, 13 ou 14 números (EAN/UPC/GTIN).');
-      return;
-    }
-
-    lookupStarted=true;
-
-    const lookupButton=$('#lookupBarcode');
-    lookupButton.disabled=true;
-    lookupButton.textContent='Consultando...';
-
-    try {
-      let match = db.products.find(p =>
-        normalizeBarcodeCode(p.barcode) === code && normalizeBarcodeCode(p.barcode)
-      ) || db.products.find(p =>
-        String(p.name || '').trim().toLocaleLowerCase('pt-BR') ===
-        String(item.name || '').trim().toLocaleLowerCase('pt-BR')
-      );
-
-      const product = match || await findProductByBarcode(code);
-      if (!product) {
-        toast('Código não encontrado nas bases consultadas. Você pode cadastrar o produto manualmente.');
-        return;
-      }
-
-      product.barcode = code;
-      item.productId=product.id;
-      item.name=product.name;
-      item.category=product.category || 'Outros';
-      item.unit=product.unit || item.unit || 'un';
-
-      stop();
-      save();
-      closeModal();
-      renderShopping();
-      toast('Código associado com sucesso!');
-
-    } catch(e) {
-      console.error('Erro na consulta:',e);
-      toast('Não foi possível consultar. Verifique sua conexão.');
-
-    } finally {
-      lookupStarted=false;
-
-      if($('#lookupBarcode')) {
-        $('#lookupBarcode').disabled=false;
-        $('#lookupBarcode').textContent='Consultar código';
-      }
-    }
+  $('#stopCamera').onclick = () => { stop(); $('#cameraBox').textContent = 'Câmera desligada.'; $('#startCamera').textContent = 'Abrir câmera novamente'; };
+  $('#lookupBarcode').onclick = async () => {
+    if (lookupStarted) return; const code = normalizeBarcodeCode($('#barcodeInput').value);
+    if (!code) { toast('Informe um código de barras válido.'); return; }
+    if (![8, 12, 13, 14].includes(code.length)) { toast('O código deve ter 8, 12, 13 ou 14 números.'); return; }
+    lookupStarted = true; const button = $('#lookupBarcode'); button.disabled = true; button.textContent = 'IA pesquisando…';
+    try { const product = await findProductByBarcode(code); if (!product) { toast('A IA não encontrou uma correspondência confiável para esse código.'); return; } item.productId = product.id; item.name = product.name; item.category = product.category || 'Outros'; item.unit = product.unit || item.unit || 'un'; stop(); save(); closeModal(); renderShopping(); toast('Produto encontrado pela IA e associado à lista.'); }
+    catch (error) { console.error(error); toast(error.message || 'Falha na pesquisa com IA.'); }
+    finally { lookupStarted = false; if ($('#lookupBarcode')) { $('#lookupBarcode').disabled = false; $('#lookupBarcode').textContent = 'Pesquisar com IA'; } }
   };
-
-  // Desliga a câmera ao fechar o modal.
-  $('#closeModal').addEventListener('click',stop);
-
-  $('#modalBackdrop').addEventListener('click',e=>{
-    if(e.target.id==='modalBackdrop')stop();
-  });
+  $('#closeModal').addEventListener('click', stop);
+  $('#modalBackdrop').addEventListener('click', e => { if (e.target.id === 'modalBackdrop') stop(); });
 }
 function finishList() {
   if(!currentList)return;
