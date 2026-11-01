@@ -2863,7 +2863,7 @@ if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
   if ($('#registerPurchaseBtn')) $('#registerPurchaseBtn').onclick = openPurchaseModal;
 
   $('#backToLists').onclick=()=>page('lists');
-  $('#finishList').onclick=finishList;
+  if ($('#finishList')) $('#finishList').onclick=finishList;
   $('#finishListBottom').onclick=finishList;
 
   $('#shoppingItems').addEventListener('change',e=>{
