@@ -493,9 +493,23 @@ function createListModal() {
     renderValidation();
   }
 
+  function brandsForProduct(productId) {
+    const values = new Set();
+    const product = db.products.find(p => p.id === productId);
+    (product?.brands || []).forEach(b => { if (b) values.add(formatDisplayName(b)); });
+    (db.prices || []).filter(p => p.productId === productId).forEach(p => { if (p.brand) values.add(formatDisplayName(p.brand)); });
+    (db.lists || []).forEach(list => (list.items || []).filter(item => item.productId === productId && item.brand).forEach(item => values.add(formatDisplayName(item.brand))));
+    return [...values].sort((a,b) => a.localeCompare(b,'pt-BR'));
+  }
+
   function renderValidation() {
-    validationRows.innerHTML = '<table class="receipt-items-table"><thead><tr><th>Produto</th><th>Quantidade</th><th>Unidade</th><th>Associar ao catálogo</th><th></th></tr></thead><tbody>' +
-      reviewRows.map((row,i) => '<tr data-review-row="' + i + '"><td><input data-review="name" value="' + esc(row.name) + '"></td><td><input data-review="quantity" type="number" min="0.01" step="0.01" value="' + row.quantity + '"></td><td><select data-review="unit">' + ['un','kg','g','l','ml','cx','pct'].map(u => '<option value="' + u + '"' + (row.unit === u ? ' selected' : '') + '>' + u + '</option>').join('') + '</select></td><td><select data-review="product"><option value="">Criar novo produto</option>' + db.products.map(p => '<option value="' + esc(p.id) + '"' + (row.productId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></td><td><button type="button" data-remove-review="' + i + '">×</button></td></tr>').join('') +
+    validationRows.innerHTML = '<table class="receipt-items-table"><thead><tr><th>Produto</th><th>Quantidade</th><th>Unidade</th><th>Associar ao catálogo</th><th>Marca (opcional)</th><th></th></tr></thead><tbody>' +
+      reviewRows.map((row,i) => {
+        const brands = brandsForProduct(row.productId);
+        const selectedBrand = row.brand || '';
+        const hasNew = selectedBrand && !brands.some(b => norm(b) === norm(selectedBrand));
+        return '<tr data-review-row="' + i + '"><td><input data-review="name" value="' + esc(row.name) + '"></td><td><input data-review="quantity" type="number" min="0.01" step="0.01" value="' + row.quantity + '"></td><td><select data-review="unit">' + ['un','kg','g','l','ml','cx','pct'].map(u => '<option value="' + u + '"' + (row.unit === u ? ' selected' : '') + '>' + u + '</option>').join('') + '</select></td><td><select data-review="product"><option value="">Criar novo produto</option>' + db.products.map(p => '<option value="' + esc(p.id) + '"' + (row.productId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></td><td><select data-review="brand"><option value="">Sem marca</option>' + brands.map(b => '<option value="' + esc(b) + '"' + (norm(b) === norm(selectedBrand) ? ' selected' : '') + '>' + esc(b) + '</option>').join('') + '<option value="__new__"' + (hasNew ? ' selected' : '') + '>＋ Nova marca</option></select><input data-review="newBrand" value="' + (hasNew ? esc(selectedBrand) : '') + '" placeholder="Digite a nova marca" style="display:' + (hasNew ? 'block' : 'none') + ';margin-top:6px;max-width:150px"></td><td><button type="button" data-remove-review="' + i + '">×</button></td></tr>';
+      }).join('') +
       '</tbody></table>';
     validation.style.display = 'block';
   }
@@ -538,7 +552,9 @@ function createListModal() {
     const row = reviewRows[Number(tr.dataset.reviewRow)]; if (!row) return;
     const field = e.target.dataset.review;
     if (field === 'quantity') row.quantity = Number(e.target.value);
-    else if (field === 'product') row.productId = e.target.value;
+    else if (field === 'product') { row.productId = e.target.value; row.brand = ''; renderValidation(); }
+    else if (field === 'brand') { row.brand = e.target.value === '__new__' ? '' : e.target.value; const input = tr.querySelector('[data-review="newBrand"]'); if (input) input.style.display = e.target.value === '__new__' ? 'block' : 'none'; }
+    else if (field === 'newBrand') row.brand = e.target.value;
     else if (field) row[field] = e.target.value;
   });
   validationRows.addEventListener('click', e => {
@@ -552,7 +568,12 @@ function createListModal() {
     confirmedItems = reviewRows.map(row => {
       let product = row.productId ? db.products.find(p => p.id === row.productId) : null;
       if (!product) product = findOrCreateProduct({ name: formatDisplayName(row.name), category:'Outros', unit:row.unit });
-      return { id:uid(), productId:product.id, name:product.name, category:product.category || 'Outros', unit:row.unit || product.unit || 'un', qty:row.quantity, brand:formatDisplayName(row.brand), price:0, checked:false };
+      const brand = formatDisplayName(row.brand || '');
+      if (brand) {
+        product.brands = Array.isArray(product.brands) ? product.brands : [];
+        if (!product.brands.some(existing => norm(existing) === norm(brand))) product.brands.push(brand);
+      }
+      return { id:uid(), productId:product.id, name:product.name, category:product.category || 'Outros', unit:row.unit || product.unit || 'un', qty:row.quantity, brand, price:0, checked:false };
     });
     validation.style.display = 'none';
     toast(confirmedItems.length + ' produto(s) confirmado(s).');
