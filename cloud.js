@@ -7,9 +7,9 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
 
 (function(){
   const cfg=window.SUPERLIST_CONFIG;
-  let client=null, householdId=null, timer=null, callback=null, app=null, channel=null, syncing=false, onlineMembers=0;
+  let client=null, householdId=null, timer=null, callback=null, app=null, channel=null, syncing=false, onlineMembers=0, currentUserEmail=null;
   const configured=()=>cfg.supabaseUrl&&!cfg.supabaseUrl.includes('YOUR_PROJECT')&&cfg.supabaseAnonKey&&!cfg.supabaseAnonKey.includes('YOUR_SUPABASE');
-  const emit=(label,state='')=>{if(callback)callback({label,state,onlineMembers})};
+  const emit=(label,state='')=>{if(callback)callback({label,state,onlineMembers,userEmail:currentUserEmail})};
   const localKey='superlist-v1';
   function status(){return client?'Supabase conectado — entre para sincronizar':'Configure o Supabase para ativar a nuvem'}
   async function requireHousehold(){
@@ -46,11 +46,11 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
       .on('presence',{event:'sync'},()=>{let state=channel.presenceState();onlineMembers=Object.keys(state).length;emit(onlineMembers>1?`Compartilhado · ${onlineMembers} online`:'Sincronizado · só você online','online')})
       .subscribe(async status=>{if(status==='SUBSCRIBED'){const {data:{user}}=await client.auth.getUser();await channel.track({user_id:user?.id||'member',online_at:new Date().toISOString()})}});
   }
-  async function signIn(email,password){if(!client)throw new Error('Configure o Supabase primeiro.');let {error}=await client.auth.signInWithPassword({email,password});if(error)throw error;await loadIntoApp()}
+  async function signIn(email,password){if(!client)throw new Error('Configure o Supabase primeiro.');let {data,error}=await client.auth.signInWithPassword({email,password});if(error)throw error;currentUserEmail=data?.user?.email||data?.session?.user?.email||email;emit('Conta conectada','online');await loadIntoApp()}
   async function signUp(email,password){if(!client)throw new Error('Configure o Supabase primeiro.');let {error}=await client.auth.signUp({email,password});if(error)throw error}
   async function sendRecoveryCode(email){if(!client)throw new Error('Configure o Supabase primeiro.');const {error}=await client.auth.resetPasswordForEmail(email);if(error)throw error}
   async function verifyRecoveryCode(email,token,newPassword){if(!client)throw new Error('Configure o Supabase primeiro.');const {error:verifyError}=await client.auth.verifyOtp({email,token,type:'recovery'});if(verifyError)throw verifyError;const {error:updateError}=await client.auth.updateUser({password:newPassword});if(updateError)throw updateError}
-  async function signOut(){if(!client)return;await client.auth.signOut();householdId=null;if(channel)client.removeChannel(channel);emit('Somente neste dispositivo','')}
+  async function signOut(){if(!client)return;await client.auth.signOut();currentUserEmail=null;householdId=null;if(channel)client.removeChannel(channel);emit('Somente neste dispositivo','')}
   async function getInviteCode(){if(!client||!householdId)throw new Error('Entre em um espaço primeiro.');let {data,error}=await client.from('households').select('invite_code').eq('id',householdId).single();if(error)throw error;return data.invite_code}
   async function join(code){if(!client)throw new Error('Configure o Supabase primeiro.');let {data,error}=await client.rpc('join_household',{invite_code_input:code});if(error)throw error;householdId=data;await loadIntoApp()}
 
@@ -85,8 +85,8 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     if(!configured()){emit('Somente neste dispositivo','');return}
     if(!window.supabase||!window.supabase.createClient){emit('Biblioteca Supabase indisponível','pending');return}
     client=window.supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-    const {data:{session}}=await client.auth.getSession();if(session)await loadIntoApp();else emit('Entre para sincronizar','');
-    client.auth.onAuthStateChange((event,session)=>{if(session&&event!=='TOKEN_REFRESHED')setTimeout(loadIntoApp,0);else if(!session){householdId=null;emit('Entre para sincronizar','')}});
+    const {data:{session}}=await client.auth.getSession();currentUserEmail=session?.user?.email||null;if(session)await loadIntoApp();else emit('Entre para sincronizar','');
+    client.auth.onAuthStateChange((event,session)=>{currentUserEmail=session?.user?.email||null;if(session){emit('Conta conectada','online');if(event!=='TOKEN_REFRESHED')setTimeout(loadIntoApp,0)}else{householdId=null;emit('Entre para sincronizar','')}});
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
   }
   window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,scheduleSync,analyzeReceipt,analyzeListPhoto,onStatus(fn){callback=fn},loadIntoApp};
