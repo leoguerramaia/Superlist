@@ -588,7 +588,7 @@ function parseImported(text) {
   });
 }
 
-function addStoreModal() {
+function addStoreModal(onSaved) {
   openModal('Adicionar supermercado',`<form id="modalForm">
     <div class="field">
       <label>Nome do supermercado</label>
@@ -611,6 +611,7 @@ function addStoreModal() {
     save();
     closeModal();
     toast('Supermercado cadastrado!');
+    if (typeof onSaved === 'function') onSaved();
   });
 }
 
