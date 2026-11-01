@@ -1316,59 +1316,30 @@ function addCatalogProductToList() {
       `;
 
       $('#lookupNewProductBarcode').onclick = async () => {
-        const code = $('#addProductBarcode').value.trim();
-
-        if (!code) {
-          toast('Informe o código de barras.');
+        const code = normalizeBarcodeCode($('#addProductBarcode').value);
+        if (!code) { toast('Informe um código de barras válido.'); return; }
+        if (![8, 12, 13, 14].includes(code.length)) {
+          toast('O código deve ter 8, 12, 13 ou 14 números (EAN/UPC/GTIN).');
           return;
         }
 
         const button = $('#lookupNewProductBarcode');
         button.disabled = true;
         button.textContent = 'Consultando...';
-
         try {
-          let product = db.products.find(p => p.barcode === code);
-
+          const product = await findProductByBarcode(code);
           if (!product) {
-            const response = await fetch(
-              `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`
-            );
-
-            if (!response.ok) throw new Error('Falha na consulta.');
-
-            const data = await response.json();
-            const prod = data.product;
-
-            if (data.status !== 1 || !prod) {
-              toast('Produto não encontrado. Cadastre pelo nome.');
-              return;
-            }
-
-            product = {
-              id: uid(),
-              name: prod.product_name_pt || prod.product_name || `Produto ${code}`,
-              category: inferProductCategory(prod),
-              unit: 'un',
-              ...packageInfo(prod.product_name || '', 'un'),
-              barcode: code,
-              photo: prod.image_url || '',
-              photoPath: '',
-              active: true
-            };
-
-            db.products.push(product);
+            toast('Código não encontrado nas bases consultadas. Cadastre o produto pelo nome ou informe outro código.');
+            return;
           }
-
           addProductToCurrentList(
             product,
             Number($('#addProductQty').value) || 1,
-            $('#addProductBrand')?.value || ''
+            $('#addProductBrand')?.value || product.brand || ''
           );
-
         } catch (error) {
-          console.error(error);
-          toast('Não foi possível consultar o código.');
+          console.error('Erro ao consultar código:', error);
+          toast('Falha na consulta do código. Verifique a conexão e tente novamente.');
         } finally {
           if ($('#lookupNewProductBarcode')) {
             $('#lookupNewProductBarcode').disabled = false;
@@ -1397,7 +1368,7 @@ function addCatalogProductToList() {
 
             if (!script) {
               script = document.createElement('script');
-              script.src = 'https://unpkg.com/@zxing/browser@latest';
+              script.src = 'https://unpkg.com/@zxing/browser@0.2.1';
               script.dataset.superlistZxing = 'true';
               document.head.appendChild(script);
             }
@@ -1857,7 +1828,7 @@ async function loadZXingLibrary() {
     let script = document.querySelector('script[data-superlist-zxing]');
     if (!script) {
       script = document.createElement('script');
-      script.src = 'https://unpkg.com/@zxing/browser@latest';
+      script.src = 'https://unpkg.com/@zxing/browser@0.2.1';
       script.async = true;
       script.dataset.superlistZxing = 'true';
       document.head.appendChild(script);
@@ -2287,6 +2258,68 @@ function openPurchaseModal() {
   });
 }
 
+
+// Normaliza EAN/UPC/GTIN sem converter para número (preserva zeros à esquerda).
+function normalizeBarcodeCode(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+async function findProductByBarcode(value) {
+  const code = normalizeBarcodeCode(value);
+  if (!code) throw new Error('Informe um código de barras válido.');
+
+  // Primeiro consulta o catálogo compartilhado/local, comparando apenas dígitos.
+  const local = db.products.find(p =>
+    normalizeBarcodeCode(p.barcode) === code && normalizeBarcodeCode(p.barcode)
+  );
+  if (local) return local;
+
+  // Open Food Facts v3 é a API atual; product_type=all também consulta bases irmãs.
+  const urls = [
+    `https://world.openfoodfacts.org/api/v3/product/${encodeURIComponent(code)}.json?product_type=all`,
+    `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`
+  ];
+  let lastError = null;
+  for (let index = 0; index < urls.length; index++) {
+    try {
+      const response = await fetch(urls[index], { headers: { Accept: 'application/json' } });
+      if (!response.ok) {
+        if (response.status === 404) continue;
+        throw new Error(`Consulta de código retornou HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      const prod = data.product;
+      const found = index === 0
+        ? (data.status === 'success' || !!prod?.code)
+        : (data.status === 1);
+      if (!found || !prod) continue;
+
+      const name = formatDisplayName(
+        prod.product_name_pt || prod.product_name || prod.generic_name_pt ||
+        prod.generic_name || `Produto ${code}`
+      );
+      const product = {
+        id: uid(),
+        name,
+        category: inferProductCategory(prod),
+        unit: 'un',
+        ...packageInfo(name, 'un'),
+        barcode: code,
+        brand: formatDisplayName(prod.brands || ''),
+        photo: prod.image_front_url || prod.image_url || '',
+        photoPath: '',
+        active: true
+      };
+      db.products.push(product);
+      return product;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) throw lastError;
+  return null;
+}
+
 // Leitor de código de barras compatível com Safari e outros navegadores.
 async function scanBarcode(itemId) {
   let item=currentList?.items.find(i=>i.id===itemId);
@@ -2373,7 +2406,7 @@ async function scanBarcode(itemId) {
 
     const script=document.createElement('script');
 
-    script.src='https://unpkg.com/@zxing/browser@0.2.1/umd/index.min.js';
+    script.src='https://unpkg.com/@zxing/browser@0.2.1';
     script.async=true;
     script.dataset.superlistZxing='true';
 
@@ -2524,55 +2557,30 @@ async function scanBarcode(itemId) {
     lookupButton.textContent='Consultando...';
 
     try {
-      const response=await fetch(
-        `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`
+      let match = db.products.find(p =>
+        normalizeBarcodeCode(p.barcode) === code && normalizeBarcodeCode(p.barcode)
+      ) || db.products.find(p =>
+        String(p.name || '').trim().toLocaleLowerCase('pt-BR') ===
+        String(item.name || '').trim().toLocaleLowerCase('pt-BR')
       );
 
-      if(!response.ok) {
-        throw new Error('Falha na consulta.');
+      const product = match || await findProductByBarcode(code);
+      if (!product) {
+        toast('Código não encontrado nas bases consultadas. Você pode cadastrar o produto manualmente.');
+        return;
       }
 
-      const data=await response.json();
-      const prod=data.product;
+      product.barcode = code;
+      item.productId=product.id;
+      item.name=product.name;
+      item.category=product.category || 'Outros';
+      item.unit=product.unit || item.unit || 'un';
 
-      if(data.status===1&&prod) {
-        let match=
-          db.products.find(p=>p.barcode===code)||
-          db.products.find(p=>p.name.toLowerCase()===item.name.toLowerCase());
-
-        if(match) {
-          item.productId=match.id;
-          item.name=match.name;
-          item.category=match.category;
-          item.unit=match.unit;
-          match.barcode=code;
-        } else {
-          let p={
-            id:uid(),
-            name:prod.product_name_pt||prod.product_name||item.name,
-            category:inferProductCategory(prod),
-            unit:item.unit,
-            barcode:code,
-            photo:prod.image_url||'',
-            active:true
-          };
-
-          db.products.push(p);
-
-          item.productId=p.id;
-          item.name=p.name;
-          item.category=p.category;
-        }
-
-        stop();
-        save();
-        closeModal();
-        renderShopping();
-        toast('Código associado com sucesso!');
-
-      } else {
-        toast('Produto não encontrado no catálogo. Você pode cadastrá-lo manualmente.');
-      }
+      stop();
+      save();
+      closeModal();
+      renderShopping();
+      toast('Código associado com sucesso!');
 
     } catch(e) {
       console.error('Erro na consulta:',e);
