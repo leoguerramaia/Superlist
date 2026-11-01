@@ -614,7 +614,7 @@ function createListModal() {
   form.addEventListener('submit', e => {
     e.preventDefault();
     if (!form.reportValidity()) return;
-    if (importNeedsConfirmation) return toast('Confirme os produtos importados antes de criar a lista.');
+    if (importNeedsConfirmation) return toast('Confirme os produtos antes de Criar a Lista');
     createListAndOpen(confirmedItems);
   });
 }
