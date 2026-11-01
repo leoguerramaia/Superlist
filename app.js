@@ -2370,6 +2370,45 @@ function exportCSV() {
   toast('Arquivo de preços exportado!');
 }
 
+// Perfil pessoal: nome/e-mail e família somente leitura; telefone e foto editáveis.
+function formatProfilePhone(value='') {
+  const d=String(value).replace(/\D/g,'').slice(0,11);
+  if(d.length<=2)return d?`(${d}`:'';
+  if(d.length<=6)return `(${d.slice(0,2)}) ${d.slice(2)}`;
+  if(d.length<=10)return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+}
+async function profileModal() {
+  const cloud=window.SuperlistCloud;
+  if(!cloud){toast('Não foi possível conectar ao perfil.');return;}
+  openModal('Meu perfil','<p class="muted">Carregando seus dados...</p>','MINHA CONTA');
+  try {
+    const profile=await cloud.getProfile();
+    const avatar=profile.avatarUrl?`<img src="${esc(profile.avatarUrl)}" alt="Foto do perfil" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:'<span style="font-size:30px">👤</span>';
+    $('#modalBody').innerHTML=`
+      <style>.profile-edit-grid{display:grid;gap:12px}.profile-photo-row{display:flex;align-items:center;gap:16px;margin-bottom:16px}.profile-photo{width:88px;height:88px;border-radius:50%;overflow:hidden;background:#e8f2ed;display:grid;place-items:center;border:3px solid #d8e9df;flex:none}.profile-readonly{background:#f4f6f5!important;color:#52615b!important}.profile-code{display:flex;gap:8px}.profile-code input{font-family:monospace;font-weight:700;letter-spacing:1px}.profile-actions{display:flex;gap:8px;flex-wrap:wrap}</style>
+      <div class="profile-photo-row"><div class="profile-photo" id="profilePhotoPreview">${avatar}</div><div><strong>Foto do perfil</strong><p class="muted" style="margin:4px 0 10px">A foto aparecerá ao lado do seu usuário.</p><div class="profile-actions"><button type="button" class="btn secondary" id="chooseProfilePhoto">Enviar foto</button><button type="button" class="btn secondary" id="takeProfilePhoto">Usar câmera</button></div><input id="profilePhotoFile" type="file" accept="image/*" hidden><input id="profileCameraFile" type="file" accept="image/*" capture="user" hidden></div></div>
+      <div class="profile-edit-grid">
+        <div class="field"><label>Nome completo</label><input class="profile-readonly" value="${esc(profile.fullName)}" readonly aria-readonly="true"></div>
+        <div class="field"><label>E-mail</label><input class="profile-readonly" type="email" value="${esc(profile.email)}" readonly aria-readonly="true"></div>
+        <div class="field"><label>Telefone com DDD</label><input id="profilePhone" type="tel" inputmode="numeric" maxlength="15" value="${esc(formatProfilePhone(profile.phone))}" placeholder="(00) 00000-0000"></div>
+        <div class="field"><label>Nome da Família</label><input class="profile-readonly" value="${esc(profile.familyName||'Não identificado')}" readonly aria-readonly="true"></div>
+        <div class="field"><label>Código de vinculação da família</label><div class="profile-code"><input id="profileFamilyCode" class="profile-readonly" value="${esc(profile.familyCode||'Indisponível')}" readonly aria-readonly="true"><button type="button" class="btn secondary" id="copyFamilyCode">Copiar</button></div><small class="muted">Compartilhe esse código somente com pessoas que deseja adicionar à família.</small></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:18px"><button type="button" class="btn primary" id="saveProfilePhone">Salvar telefone</button><button type="button" class="btn secondary" id="closeProfile">Fechar</button></div><p id="profileFeedback" class="auth-note" aria-live="polite"></p>`;
+    const phone=$('#profilePhone');phone.addEventListener('input',()=>phone.value=formatProfilePhone(phone.value));
+    $('#saveProfilePhone').addEventListener('click',async()=>{const digits=phone.value.replace(/\D/g,'');if(digits.length!==10&&digits.length!==11){toast('Informe um telefone válido com DDD.');return;}const btn=$('#saveProfilePhone');btn.disabled=true;try{await cloud.updatePhone(digits);toast('Telefone atualizado com sucesso!');}catch(e){toast(e.message||'Não foi possível atualizar o telefone.');}finally{btn.disabled=false;}});
+    $('#chooseProfilePhoto').onclick=()=>$('#profilePhotoFile').click();$('#takeProfilePhoto').onclick=()=>$('#profileCameraFile').click();
+    async function handlePhoto(input){const file=input.files?.[0];if(!file)return;try{const url=await cloud.uploadAvatar(file);$('#profilePhotoPreview').innerHTML=`<img src="${esc(url)}" alt="Foto do perfil" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;applyProfileAvatar(url);toast('Foto de perfil atualizada!');}catch(e){toast(e.message||'Não foi possível enviar a foto.');}finally{input.value='';}}
+    $('#profilePhotoFile').addEventListener('change',e=>handlePhoto(e.target));$('#profileCameraFile').addEventListener('change',e=>handlePhoto(e.target));
+    $('#copyFamilyCode').onclick=()=>{const code=profile.familyCode;if(!code){toast('Código de vinculação indisponível.');return;}if(navigator.clipboard?.writeText)navigator.clipboard.writeText(code).then(()=>toast('Código copiado!')).catch(()=>toast('Não foi possível copiar o código.'));else{const input=$('#profileFamilyCode');input.select();document.execCommand('copy');toast('Código copiado!');}};
+    $('#closeProfile').onclick=closeModal;
+  } catch(e) { $('#modalBody').innerHTML=`<p>Não foi possível carregar seu perfil: ${esc(e.message||'Tente novamente.')}</p><button type="button" class="btn secondary" id="closeProfile">Fechar</button>`;$('#closeProfile').onclick=closeModal; }
+}
+function applyProfileAvatar(url){
+  document.querySelectorAll('.avatar').forEach(el=>{el.innerHTML=url?`<img src="${esc(url)}" alt="Foto do perfil" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:'SL';});
+}
+
 // Conta, login, cadastro e recuperação de senha.
 function accountModal() {
   const cloud=window.SuperlistCloud;
@@ -2537,7 +2576,8 @@ if (e.target.closest('#addShoppingProduct')) {
     $('#sidebar').classList.toggle('open');
   };
 
-  $('#accountBtn').onclick=accountModal;
+  $('#accountBtn').onclick=()=>window.__superlistSignedIn?profileModal():accountModal();
+  const sideProfile=$('.profile');if(sideProfile){sideProfile.style.cursor='pointer';sideProfile.title='Abrir meu perfil';sideProfile.addEventListener('click',()=>window.__superlistSignedIn?profileModal():accountModal());}
 
   $('#listSearch').addEventListener('input',renderLists);
   $('#listFilter').addEventListener('change',renderLists);
@@ -2598,10 +2638,12 @@ if(window.SuperlistCloud) {
     const accountButton=$('#accountBtn');
 
     if(accountButton&&s.userEmail) {
-      accountButton.textContent=s.userEmail;
-      accountButton.title='Conta conectada: '+s.userEmail;
-
+      window.__superlistSignedIn=true;
+      accountButton.textContent='Meu perfil';
+      accountButton.title='Abrir meu perfil';
+      if(!window.__superlistProfileLoaded){window.__superlistProfileLoaded=true;window.SuperlistCloud.getProfile().then(p=>{if(p.avatarUrl)applyProfileAvatar(p.avatarUrl);const label=$('.profile strong');if(label&&p.fullName)label.textContent=p.fullName;const sub=$('.profile small');if(sub&&p.familyName)sub.textContent=p.familyName;}).catch(()=>{window.__superlistProfileLoaded=false;});}
     } else if(accountButton&&s.userEmail===null) {
+      window.__superlistSignedIn=false;window.__superlistProfileLoaded=false;
       accountButton.textContent='Conta';
       accountButton.title='Entrar ou criar conta';
     }

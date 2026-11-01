@@ -60,6 +60,44 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
   async function getInviteCode(){if(!client||!householdId)throw new Error('Entre em um espaço primeiro.');let {data,error}=await client.from('households').select('invite_code').eq('id',householdId).single();if(error)throw error;return data.invite_code}
   async function join(code){if(!client)throw new Error('Configure o Supabase primeiro.');let {data,error}=await client.rpc('join_household',{invite_code_input:code});if(error)throw error;householdId=data;await loadIntoApp()}
 
+  async function getProfile(){
+    if(!client) throw new Error('Supabase não está conectado.');
+    const {data:{user},error:userError}=await client.auth.getUser();
+    if(userError) throw userError;
+    if(!user) throw new Error('Faça login novamente.');
+    let family=null;
+    if(householdId){
+      const {data,error}=await client.from('households').select('id,name,invite_code').eq('id',householdId).maybeSingle();
+      if(error) throw error;
+      family=data;
+    }
+    return {id:user.id,email:user.email||'',fullName:user.user_metadata?.full_name||'',phone:user.user_metadata?.phone||'',avatarUrl:user.user_metadata?.avatar_url||'',familyName:family?.name||'',familyCode:family?.invite_code||''};
+  }
+  async function updatePhone(phoneDigits){
+    if(!client) throw new Error('Supabase não está conectado.');
+    if(!/^\d{10,11}$/.test(phoneDigits)) throw new Error('Informe um telefone válido com DDD.');
+    const {data,error}=await client.auth.updateUser({data:{phone:phoneDigits}});
+    if(error) throw error;
+    return data.user;
+  }
+  async function uploadAvatar(file){
+    if(!client) throw new Error('Supabase não está conectado.');
+    if(!file||!file.type?.startsWith('image/')) throw new Error('Selecione uma imagem válida.');
+    if(file.size>5*1024*1024) throw new Error('A foto deve ter no máximo 5 MB.');
+    const {data:{user},error:userError}=await client.auth.getUser();
+    if(userError) throw userError;
+    if(!user) throw new Error('Faça login novamente.');
+    const ext=(file.type.split('/')[1]||'jpg').replace('jpeg','jpg').replace(/[^a-z0-9]/gi,'')||'jpg';
+    const path=`${user.id}/avatar.${ext}`;
+    const {error:uploadError}=await client.storage.from('profile-photos').upload(path,file,{upsert:true,contentType:file.type,cacheControl:'3600'});
+    if(uploadError) throw uploadError;
+    const {data}=client.storage.from('profile-photos').getPublicUrl(path);
+    const avatarUrl=data.publicUrl+`?v=${Date.now()}`;
+    const {error:updateError}=await client.auth.updateUser({data:{avatar_url:avatarUrl}});
+    if(updateError) throw updateError;
+    return avatarUrl;
+  }
+
   async function analyzeImage(file, mode='receipt', products=[]) {
     if (!client) throw new Error('Supabase não está configurado.');
     const { data: { session } } = await client.auth.getSession();
@@ -96,5 +134,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
     return true;
   }
-  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,scheduleSync,analyzeReceipt,analyzeListPhoto,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,scheduleSync,analyzeReceipt,analyzeListPhoto,onStatus(fn){callback=fn},loadIntoApp};
 })();
