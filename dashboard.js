@@ -6,12 +6,10 @@
   const lists=db.lists||[], done=lists.filter(x=>x.done), active=lists.filter(x=>!x.done);
   const today=new Date(), ym=today.toISOString().slice(0,7), yr=today.getFullYear().toString();
   const sumList=l=>(l.items||[]).reduce((s,i)=>s+(Number(i.qty)||0)*(Number(i.price)||0),0);
-  const purchases=db.purchases||[];
-  const sumPurchases=fn=>purchases.filter(p=>fn(String(p.date||''))).reduce((s,p)=>s+(Number(p.total)||0),0);
   const sumLists=fn=>done.filter(l=>fn(String(l.created||''))).reduce((s,l)=>s+sumList(l),0);
-  const month=sumPurchases(d=>d.slice(0,7)===ym)+sumLists(d=>d.slice(0,7)===ym);
-  const year=sumPurchases(d=>d.slice(0,4)===yr)+sumLists(d=>d.slice(0,4)===yr);
-  const total=sumPurchases(()=>true)+sumLists(()=>true);
+  const month=sumLists(d=>d.slice(0,7)===ym);
+  const year=sumLists(d=>d.slice(0,4)===yr);
+  const total=sumLists(()=>true);
   const counts={};
   [...done.flatMap(l=>l.items||[]),...db.prices.filter(p=>p.purchaseId)].forEach(i=>{
     const name=i.name||i.productName||'';
