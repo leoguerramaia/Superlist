@@ -2524,7 +2524,7 @@ if (e.target.closest('#addShoppingProduct')) {
       return;
     }
   });
-$('#shoppingSearch').addEventListener('input', renderShopping);
+  $('#shoppingSearch')?.addEventListener('input', renderShopping);
   $('#closeModal').onclick=closeModal;
 
   $('#modalBackdrop').addEventListener('click',e=>{
@@ -2549,7 +2549,7 @@ $('#shoppingSearch').addEventListener('input', renderShopping);
   $('#priceSearch').addEventListener('input',renderPrices);
 
   $('#exportPrices').onclick=exportCSV;
-  $('#registerPurchaseBtn').onclick=openPurchaseModal;
+  if ($('#registerPurchaseBtn')) $('#registerPurchaseBtn').onclick = openPurchaseModal;
 
   $('#backToLists').onclick=()=>page('lists');
   $('#finishList').onclick=finishList;

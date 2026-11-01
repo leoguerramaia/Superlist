@@ -17,9 +17,9 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     const {data:members,error}=await client.from('household_members').select('household_id').eq('user_id',user.id).limit(1);
     if(error)throw error;
     if(members&&members.length){householdId=members[0].household_id;return householdId}
-    const familyName=String(user.user_metadata?.family_name||'Minha casa').trim();
-    const {data:house,error:e1}=await client.rpc('create_household',{family_name_input:familyName});if(e1)throw e1;
-    householdId=house;return householdId;
+    const {data:house,error:e1}=await client.from('households').insert({name:'Minha casa',owner_id:user.id}).select('id').single();if(e1)throw e1;
+    const {error:e2}=await client.from('household_members').insert({household_id:house.id,user_id:user.id,role:'owner'});if(e2)throw e2;
+    householdId=house.id;return householdId;
   }
   async function loadIntoApp(){
     if(!client)return false;const {data:{session}}=await client.auth.getSession();if(!session){emit('Entre para sincronizar','');return false}
