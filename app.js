@@ -1330,11 +1330,11 @@ function addCatalogProductToList() {
 
         const button = $('#lookupNewProductBarcode');
         button.disabled = true;
-        button.textContent = 'Consultando...';
+        button.textContent = 'IA pesquisando…';
         try {
           const product = await findProductByBarcode(code);
           if (!product) {
-            toast('Código não encontrado nas bases consultadas. Cadastre o produto pelo nome ou informe outro código.');
+            toast('A IA não encontrou uma correspondência confiável para esse código.');
             return;
           }
           addProductToCurrentList(
@@ -1344,7 +1344,7 @@ function addCatalogProductToList() {
           );
         } catch (error) {
           console.error('Erro ao consultar código:', error);
-          toast('Falha na consulta do código. Verifique a conexão e tente novamente.');
+          toast(error.message || 'Falha na pesquisa com IA.');
         } finally {
           if ($('#lookupNewProductBarcode')) {
             $('#lookupNewProductBarcode').disabled = false;
@@ -1370,6 +1370,7 @@ function addCatalogProductToList() {
         button.disabled = true; button.textContent = 'IA analisando…';
         try {
           const image = await aiCameraControls.capture();
+          const cameraBox = $('#addBarcodeCamera');
           const result = await window.SuperlistCloud.analyzeBarcode({ image });
           const code = normalizeBarcodeCode(result.barcode);
           if (!code || result.needs_confirmation || result.barcode_confidence === 'low') { toast('A IA não conseguiu ler o código com segurança. Aproxime e tente novamente.'); return; }
