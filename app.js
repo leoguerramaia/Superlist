@@ -2821,11 +2821,15 @@ if(window.SuperlistCloud) {
     getData:()=>db,
     emptyData:()=>({categories:[...seedCategories],products:JSON.parse(JSON.stringify(seedProducts)),stores:[],lists:[],prices:[],purchases:[]}),
     setData:d=>{
-      db=normalizeProductNames(d);
+      const original = JSON.stringify(d || {});
+      db=normalizeProductNames(d || {});
       db.lists.forEach(list => (list.items || []).forEach(item => { item.brand = formatDisplayName(item.brand); }));
       db.prices.forEach(price => { price.brand = formatDisplayName(price.brand); });
-      localStorage.setItem(KEY,JSON.stringify(db));
+      const normalized = JSON.stringify(db);
+      localStorage.setItem(KEY,normalized);
       renderAll();
+      // Se dados antigos vierem da nuvem, grava a versão padronizada no snapshot compartilhado.
+      if (original !== normalized && window.SuperlistCloud?.scheduleSync) window.SuperlistCloud.scheduleSync(db);
     },
     key:KEY
   }).then(ready=>{
