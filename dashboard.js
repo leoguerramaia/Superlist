@@ -1,1 +1,1 @@
-// Dashboard da Visao Geral do SuperList
+// Dashboard inicial do SuperList - implementacao em andamento
