@@ -156,6 +156,7 @@ function page(name) {
   })[name]||name;
   $('#sidebar').classList.remove('open');
   if(name!=='shopping') renderAll();
+  if(name==='admin') loadAdminDashboard();
 }
 
 function openModal(title,body,eyebrow='SUPERLIST') {
@@ -2463,6 +2464,26 @@ function accountModal() {
   showLogin();
 }
 
+let adminCache={users:[],families:[],audit:[]};
+function adminEscape(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function adminDate(v){return v?new Date(v).toLocaleString('pt-BR'):'—';}
+function adminNotice(message,error=false){const el=$('#adminNotice');if(el){el.textContent=message;el.classList.toggle('error',!!error);}}
+async function adminRequest(action,extra={}){if(!window.SuperlistCloud?.adminRequest)throw new Error('Atualize os arquivos do SuperList para habilitar o painel administrativo.');return window.SuperlistCloud.adminRequest(action,extra);}
+async function loadAdminDashboard(){
+ if(!window.__superlistIsAdmin){adminNotice('Acesso não autorizado.',true);return;}
+ adminNotice('Consultando dados administrativos…');
+ try{
+  const data=await adminRequest('dashboard');adminCache={users:data.users||[],families:data.families||[],audit:data.audit||[]};
+  const stats=[['Usuários',adminCache.users.length],['Famílias',adminCache.families.length],['Usuários bloqueados',adminCache.users.filter(u=>u.banned).length],['Administradores',adminCache.users.filter(u=>u.isAdmin).length]];
+  $('#adminStats').innerHTML=stats.map(([label,value])=>`<article class="stat-card"><span>${label}</span><strong>${value}</strong></article>`).join('');
+  renderAdminUsers();renderAdminFamilies();renderAdminAudit();adminNotice('Dados atualizados. A consulta e as ações administrativas são registradas para auditoria.');
+ }catch(e){console.error(e);adminNotice(e.message||'Não foi possível carregar o painel administrativo.',true);}
+}
+function renderAdminUsers(){const q=($('#adminUserSearch')?.value||'').toLowerCase();const rows=adminCache.users.filter(u=>`${u.email} ${u.fullName}`.toLowerCase().includes(q));$('#adminUsersRows').innerHTML=rows.length?rows.map(u=>`<tr><td><strong>${adminEscape(u.fullName||'Sem nome')}</strong><small class="admin-sub">${adminEscape(u.email)}</small></td><td>${adminDate(u.createdAt)}</td><td><span class="admin-pill ${u.banned?'blocked':'active'}">${u.banned?'Bloqueado':'Ativo'}</span></td><td>${u.isAdmin?(u.adminRole==='super_admin'?'Administrador principal':'Administrador'):'Usuário'}</td><td class="admin-actions">${u.isPrincipal?'<span class="muted">Conta principal</span>':`<button class="text-button" data-admin-action="ban" data-user-id="${u.id}" data-banned="${u.banned}">${u.banned?'Reativar':'Bloquear'}</button>${window.__superlistAdminRole==='super_admin'?`<button class="text-button" data-admin-action="role" data-user-id="${u.id}" data-admin="${u.isAdmin}">${u.isAdmin?'Remover admin':'Tornar admin'}</button>`:''}`}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum usuário encontrado.</td></tr>';}
+function renderAdminFamilies(){const q=($('#adminFamilySearch')?.value||'').toLowerCase();const rows=adminCache.families.filter(f=>`${f.name} ${f.ownerEmail}`.toLowerCase().includes(q));$('#adminFamiliesRows').innerHTML=rows.length?rows.map(f=>`<tr><td><strong>Família ${adminEscape(f.name)}</strong><small class="admin-sub">Código: ${adminEscape(f.inviteCode)}</small></td><td>${adminEscape(f.ownerName||f.ownerEmail||'—')}<small class="admin-sub">${adminEscape(f.ownerEmail||'')}</small></td><td>${f.memberCount}</td><td>${f.listCount}</td><td>${f.productCount}</td><td>${adminDate(f.createdAt)}</td></tr>`).join(''):'<tr><td colspan="6">Nenhuma família encontrada.</td></tr>';}
+function renderAdminAudit(){const rows=adminCache.audit;$('#adminAuditRows').innerHTML=rows.length?rows.map(a=>`<tr><td>${adminDate(a.createdAt)}</td><td>${adminEscape(a.adminEmail)}</td><td>${adminEscape(a.action)}</td><td>${adminEscape(a.target||'—')}</td><td>${adminEscape(a.details||'—')}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum registro de auditoria.</td></tr>';}
+async function adminUserAction(button){const id=button.dataset.userId;const action=button.dataset.adminAction;try{button.disabled=true;if(action==='ban'){const banned=button.dataset.banned!=='true';if(!confirm(banned?'Confirma bloquear este usuário? Ele não poderá entrar enquanto estiver bloqueado.':'Confirma reativar este usuário?'))return;await adminRequest('set_user_ban',{userId:id,banned});}else{const isAdmin=button.dataset.admin==='true';if(!confirm(isAdmin?'Remover privilégios administrativos deste usuário?':'Conceder privilégios de administrador a este usuário?'))return;await adminRequest('set_admin',{userId:id,isAdmin});}toast('Ação administrativa concluída.');await loadAdminDashboard();}catch(e){toast(e.message||'Não foi possível executar a ação.');}finally{button.disabled=false;}}
+
 function init() {
   $('#todayLabel').textContent=new Date().toLocaleDateString(
     'pt-BR',
@@ -2470,8 +2491,13 @@ function init() {
   );
 
   renderAll();
+  $('#adminRefresh')?.addEventListener('click',loadAdminDashboard);
+  $('#adminUserSearch')?.addEventListener('input',renderAdminUsers);
+  $('#adminFamilySearch')?.addEventListener('input',renderAdminFamilies);
 
   document.addEventListener('click',e=>{
+    const adminTab=e.target.closest('[data-admin-tab]');if(adminTab){const tab=adminTab.dataset.adminTab;$$('.admin-tab').forEach(b=>b.classList.toggle('active',b===adminTab));$('#adminUsersPanel').hidden=tab!=='users';$('#adminFamiliesPanel').hidden=tab!=='families';$('#adminAuditPanel').hidden=tab!=='audit';return;}
+    const adminAction=e.target.closest('[data-admin-action]');if(adminAction){adminUserAction(adminAction);return;}
     let nav=e.target.closest('[data-page]');
 
     if(nav) {
@@ -2655,7 +2681,7 @@ if(window.SuperlistCloud) {
         if(name)name.textContent=p.fullName||'Usuário';
         if(family)family.textContent=p.familyName?`Família ${p.familyName}`:'Família não identificada';
         if(email)email.textContent=p.email||s.userEmail;
-        window.__superlistIsAdmin=!!p.isAdmin;
+        window.__superlistIsAdmin=!!p.isAdmin;window.__superlistAdminRole=p.adminRole||'';
         document.documentElement.dataset.admin=window.__superlistIsAdmin?'true':'false';
         const adminLink=$('.admin-only');if(adminLink)adminLink.style.display=window.__superlistIsAdmin?'flex':'none';
       }).catch(()=>{window.__superlistProfileLoaded=false;});}

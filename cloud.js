@@ -71,7 +71,7 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
       if(error) throw error;
       family=data;
     }
-    return {id:user.id,email:user.email||'',fullName:user.user_metadata?.full_name||'',phone:user.user_metadata?.phone||'',avatarUrl:user.user_metadata?.avatar_url||'',familyName:family?.name||'',familyCode:family?.invite_code||'',isAdmin:user.app_metadata?.is_admin===true};
+    return {id:user.id,email:user.email||'',fullName:user.user_metadata?.full_name||'',phone:user.user_metadata?.phone||'',avatarUrl:user.user_metadata?.avatar_url||'',familyName:family?.name||'',familyCode:family?.invite_code||'',isAdmin:user.app_metadata?.is_admin===true,adminRole:user.app_metadata?.admin_role||''};
   }
   async function updatePhone(phoneDigits){
     if(!client) throw new Error('Supabase não está conectado.');
@@ -96,6 +96,14 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     const {error:updateError}=await client.auth.updateUser({data:{avatar_url:avatarUrl}});
     if(updateError) throw updateError;
     return avatarUrl;
+  }
+
+  async function adminRequest(action, payload={}){
+    if(!client)throw new Error('Supabase não está conectado.');
+    const {data,error}=await client.functions.invoke('admin-panel',{body:{action,...payload}});
+    if(error){let message=error.message||'Falha na operação administrativa.';try{const body=await error.context?.json?.();if(body?.error)message=body.error;}catch(_){}throw new Error(message);}
+    if(!data?.ok)throw new Error(data?.error||'A operação administrativa não foi concluída.');
+    return data;
   }
 
   async function analyzeImage(file, mode='receipt', products=[]) {
@@ -134,5 +142,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
     return true;
   }
-  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,scheduleSync,analyzeReceipt,analyzeListPhoto,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,scheduleSync,analyzeReceipt,analyzeListPhoto,adminRequest,onStatus(fn){callback=fn},loadIntoApp};
 })();
