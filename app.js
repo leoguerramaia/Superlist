@@ -1535,7 +1535,7 @@ function importItemsIntoOpenList() {
       '<button type="button" class="btn secondary" id="shoppingImportPhotoTab" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-2h6l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="3"/></svg>Fotografar lista</button>' +
       '<button type="button" class="btn secondary" id="shoppingImportAudioTab" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>Lista por áudio</button>' +
     '</div>' +
-    '<section id="shoppingImportTextPanel" class="invite-box" style="display:none" role="tabpanel"><div class="field"><label for="shoppingImportText">Cole ou digite os produtos, um por linha</label><textarea id="shoppingImportText" rows="5" placeholder="2 arroz 5 kg&#10;1 kg de banana&#10;3 unidades de leite"></textarea></div><button type="button" class="btn primary" id="analyzeShoppingText">Analisar texto</button></section>' +
+    '<section id="shoppingImportTextPanel" class="invite-box" style="display:none" role="tabpanel"><div class="field"><label for="shoppingImportText">Cole ou digite os produtos, um por linha</label><textarea id="shoppingImportText" rows="5" placeholder="2 arroz 5 kg&#10;1 kg de banana&#10;3 unidades de leite"></textarea></div><button type="button" class="btn primary" id="analyzeShoppingText">Revisar itens</button></section>' +
     '<section id="shoppingImportPhotoPanel" class="invite-box" style="display:none" role="tabpanel"><p class="muted">Escolha uma foto ou use a câmera para fotografar sua lista.</p><div class="shopping-import-file-actions"><label for="shoppingImportGallery" class="btn secondary">Escolher foto</label><button type="button" class="btn secondary" id="shoppingImportTakePhoto">Usar câmera</button></div><input id="shoppingImportGallery" type="file" accept="image/*" style="display:none"><input id="shoppingImportCamera" type="file" accept="image/*" capture="environment" style="display:none"><small id="shoppingImportPhotoName" class="helper"></small><button type="button" class="btn primary" id="analyzeShoppingPhoto" disabled>Ler foto com IA</button></section>' +
     '<section id="shoppingImportAudioPanel" class="invite-box" style="display:none" role="tabpanel"><p class="muted">Envie um arquivo ou grave sua lista pelo microfone.</p><div class="shopping-import-file-actions"><label for="shoppingImportAudio" class="btn secondary">Enviar áudio</label><input id="shoppingImportAudio" type="file" accept="audio/mpeg,audio/mp4,audio/mpga,audio/m4a,audio/wav,audio/webm,audio/ogg,audio/flac,.mp3,.mp4,.m4a,.wav,.webm,.ogg,.flac" style="display:none"><button type="button" class="btn secondary" id="shoppingImportStartRecording">Gravar voz</button><button type="button" class="btn secondary" id="shoppingImportStopRecording" style="display:none">Parar</button></div><small id="shoppingImportAudioName" class="helper" aria-live="polite">Nenhum áudio selecionado.</small><button type="button" class="btn primary" id="analyzeShoppingAudio" disabled>Ler áudio com IA</button></section>' +
     '<div id="shoppingImportProgress" class="receipt-progress list-ai-progress" style="display:none" aria-live="polite"><div class="receipt-progress-top"><span class="receipt-spinner"></span><strong id="shoppingImportProgressText">Preparando a análise...</strong><b id="shoppingImportProgressPercent">0%</b></div><div class="receipt-progress-track" role="progressbar" aria-label="Progresso da análise" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="shoppingImportProgressBar"></span></div></div>' +
@@ -1587,29 +1587,14 @@ function importItemsIntoOpenList() {
     confirmButton.textContent = rows.length ? 'Adicionar ' + rows.length + ' item(ns) à lista' : 'Adicionar itens à lista';
   }
 
-  async function analyzeCandidates(candidates, message) {
-    if (!candidates.length) return toast('Inclua ao menos um produto para analisar.');
-    if (!window.SuperlistCloud?.validateListItems) return toast('A revisão dos produtos não está disponível no momento.');
-    startProgress(message);
-    try {
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const checked = await window.SuperlistCloud.validateListItems(candidates.map(row => ({ name:row.name, quantity:row.quantity, unit:row.unit })));
-      const checkedItems = Array.isArray(checked.items) ? checked.items : candidates;
-      rows = checkedItems.map((item,index) => {
-        const source = candidates[index] || {};
-        const name = String(item.original_name || item.name || source.name || '').trim();
-        const suggestedName = String(item.suggested_name || name).trim();
-        return { name, suggestedName, hasCorrection:!!item.has_correction && suggestedName.toLocaleLowerCase('pt-BR') !== name.toLocaleLowerCase('pt-BR'), brand:String(source.brand || '').trim(), quantity:Number(item.quantity || source.quantity) || 1, unit:String(item.unit || source.unit || 'un').toLowerCase() };
-      }).filter(row => row.name);
-      renderReview();
-      status.textContent = 'Confira os itens. Eles serão acrescentados à lista atual após a confirmação.';
-      completeProgress();
-    } catch (error) {
-      console.error(error); stopProgress(); status.textContent = error.message || 'Não foi possível analisar os produtos. Tente novamente.'; toast(status.textContent);
-    }
-  }
+  $('#analyzeShoppingText').addEventListener('click', () => {
+    const candidates = parseText($('#shoppingImportText').value);
+    if (!candidates.length) return toast('Cole ou digite ao menos um produto.');
+    rows = candidates.map(row => ({ ...row, suggestedName:'', hasCorrection:false, brand:String(row.brand || '') }));
+    renderReview();
+    status.textContent = 'Confira os nomes, quantidades e unidades. Os itens só entram na lista após clicar em Adicionar itens à lista.';
+  });
 
-  $('#analyzeShoppingText').addEventListener('click', () => analyzeCandidates(parseText($('#shoppingImportText').value), 'A IA está revisando o texto...'));
   const photoName = $('#shoppingImportPhotoName');
   const photoAnalyzeButton = $('#analyzeShoppingPhoto');
   ['shoppingImportGallery','shoppingImportCamera'].forEach(id => $('#' + id).addEventListener('change', event => {
