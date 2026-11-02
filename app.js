@@ -341,6 +341,12 @@ function renderLists() {
   $('#allLists').innerHTML=ls.length
     ? ls.map(l=>`<article class="list-card" data-open-list="${l.id}">${listCardInner(l).replace('<h3>', '<div class="list-card-title-row"><h3>').replace('</h3>', '</h3><div class="list-card-actions"><button type="button" class="list-card-action" data-rename-list="${l.id}" aria-label="Renomear lista" title="Renomear lista"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button type="button" class="list-card-action danger" data-delete-list="${l.id}" aria-label="Excluir lista" title="Excluir lista"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button></div></div>')}</article>`).join('')
     : '<div class="empty-state">Nenhuma lista encontrada. Clique em “Nova lista” para começar.</div>';
+  $('#allLists').querySelectorAll('[data-rename-list]').forEach(button => button.addEventListener('click', event => {
+    event.preventDefault(); event.stopPropagation(); renameListById(button.dataset.renameList);
+  }));
+  $('#allLists').querySelectorAll('[data-delete-list]').forEach(button => button.addEventListener('click', event => {
+    event.preventDefault(); event.stopPropagation(); deleteListById(button.dataset.deleteList);
+  }));
 }
 
 function renameListById(id) {
@@ -1585,13 +1591,14 @@ function importItemsIntoOpenList() {
       '<button type="button" class="btn secondary" id="shoppingImportAudioTab" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>Lista por áudio</button>' +
     '</div>' +
     '<section id="shoppingImportTextPanel" class="invite-box" style="display:none" role="tabpanel"><div class="field"><label for="shoppingImportText">Cole ou digite os produtos, um por linha</label><textarea id="shoppingImportText" rows="5" placeholder="2 arroz 5 kg&#10;1 kg de banana&#10;3 unidades de leite"></textarea></div><button type="button" class="btn primary" id="analyzeShoppingText">Revisar itens</button></section>' +
-    '<section id="shoppingImportPhotoPanel" class="invite-box" style="display:none" role="tabpanel"><p class="muted">Escolha uma foto ou use a câmera para fotografar sua lista.</p><div class="shopping-import-file-actions"><label for="shoppingImportGallery" class="btn secondary">Escolher foto</label><button type="button" class="btn secondary" id="shoppingImportTakePhoto">Usar câmera</button></div><input id="shoppingImportGallery" type="file" accept="image/*" style="display:none"><input id="shoppingImportCamera" type="file" accept="image/*" capture="environment" style="display:none"><small id="shoppingImportPhotoName" class="helper"></small><button type="button" class="btn primary" id="analyzeShoppingPhoto" disabled>Ler foto com IA</button></section>' +
+    '<section id="shoppingImportPhotoPanel" class="invite-box" style="display:none" role="tabpanel"><p class="muted">Escolha uma foto ou use a câmera para fotografar sua lista.</p><div class="shopping-import-file-actions"><label for="shoppingImportGallery" class="btn secondary">Escolher foto</label><button type="button" class="btn secondary" id="shoppingImportTakePhoto">Usar câmera</button></div><input id="shoppingImportGallery" type="file" accept="image/*" style="display:none"><input id="shoppingImportCamera" type="file" accept="image/*" capture="environment" style="display:none"><small id="shoppingImportPhotoName" class="helper"></small><div id="shoppingImportPhotoPreview" style="display:none;margin:10px 0"><img id="shoppingImportPhotoPreviewImage" alt="Prévia da lista fotografada" style="display:block;width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:#fff"></div><button type="button" class="btn primary" id="analyzeShoppingPhoto" disabled>Ler foto com IA</button></section>' +
     '<section id="shoppingImportAudioPanel" class="invite-box" style="display:none" role="tabpanel"><p class="muted">Envie um arquivo ou grave sua lista pelo microfone.</p><div class="shopping-import-file-actions"><label for="shoppingImportAudio" class="btn secondary">Enviar áudio</label><input id="shoppingImportAudio" type="file" accept="audio/mpeg,audio/mp4,audio/mpga,audio/m4a,audio/wav,audio/webm,audio/ogg,audio/flac,.mp3,.mp4,.m4a,.wav,.webm,.ogg,.flac" style="display:none"><button type="button" class="btn secondary" id="shoppingImportStartRecording">Gravar voz</button><button type="button" class="btn secondary" id="shoppingImportStopRecording" style="display:none">Parar</button></div><small id="shoppingImportAudioName" class="helper" aria-live="polite">Nenhum áudio selecionado.</small><button type="button" class="btn primary" id="analyzeShoppingAudio" disabled>Ler áudio com IA</button></section>' +
     '<div id="shoppingImportProgress" class="receipt-progress list-ai-progress" style="display:none" aria-live="polite"><div class="receipt-progress-top"><span class="receipt-spinner"></span><strong id="shoppingImportProgressText">Preparando a análise...</strong><b id="shoppingImportProgressPercent">0%</b></div><div class="receipt-progress-track" role="progressbar" aria-label="Progresso da análise" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="shoppingImportProgressBar"></span></div></div>' +
     '<section id="shoppingImportReview" class="shopping-import-review" style="display:none"><h3>Revise os itens</h3><p class="helper">Os produtos só serão incluídos na lista quando você confirmar.</p><div id="shoppingImportRows" class="receipt-table-wrap"></div></section>' +
     '<p id="shoppingImportStatus" class="helper" aria-live="polite"></p><div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button type="button" class="btn primary" id="confirmShoppingImport" disabled>Adicionar itens à lista</button></div></div>', '');
 
   let rows = [], selectedPhoto = null, selectedAudio = null, recorder = null, stream = null, chunks = [];
+  let shoppingPhotoPreviewUrl = null;
   const textPanel = $('#shoppingImportTextPanel'), photoPanel = $('#shoppingImportPhotoPanel'), audioPanel = $('#shoppingImportAudioPanel');
   const review = $('#shoppingImportReview'), rowsWrap = $('#shoppingImportRows');
   const status = $('#shoppingImportStatus'), confirmButton = $('#confirmShoppingImport');
@@ -1666,6 +1673,10 @@ function importItemsIntoOpenList() {
     selectedPhoto = event.target.files?.[0] || null;
     photoName.textContent = selectedPhoto ? selectedPhoto.name : '';
     photoAnalyzeButton.disabled = !selectedPhoto;
+    if (shoppingPhotoPreviewUrl) URL.revokeObjectURL(shoppingPhotoPreviewUrl);
+    shoppingPhotoPreviewUrl = selectedPhoto ? URL.createObjectURL(selectedPhoto) : null;
+    $('#shoppingImportPhotoPreview').style.display = shoppingPhotoPreviewUrl ? 'block' : 'none';
+    if (shoppingPhotoPreviewUrl) $('#shoppingImportPhotoPreviewImage').src = shoppingPhotoPreviewUrl;
   }));
   $('#shoppingImportTakePhoto').addEventListener('click', () => $('#shoppingImportCamera').click());
   photoAnalyzeButton.addEventListener('click', async () => {
@@ -2859,6 +2870,8 @@ function init() {
   );
 
   renderAll();
+  $('#renameCurrentList')?.addEventListener('click',event=>{event.stopPropagation();renameCurrentList();});
+  $('#deleteCurrentList')?.addEventListener('click',event=>{event.stopPropagation();deleteCurrentList();});
   $('#adminRefresh')?.addEventListener('click',loadAdminDashboard);
   $('#saveAdminProviderOrder')?.addEventListener('click',saveAdminProviderOrder);
   $('#adminUserSearch')?.addEventListener('input',renderAdminUsers);
