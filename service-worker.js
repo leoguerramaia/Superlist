@@ -4,6 +4,9 @@ const CACHE = 'superlist-shell';
 const ASSETS = [
   './',
   './index.html',
+  './demo.html',
+  './demo.css',
+  './demo.js',
   './styles.css',
   './app.js',
   './cloud.js',

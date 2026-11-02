@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#176b52">
+  <meta name="description" content="Experimente o SuperList sem cadastro, com uma lista e preços de demonstração.">
+  <title>Experimente o SuperList — demonstração</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./demo.css">
+  <script src="./demo.js" defer></script>
+</head>
+<body>
+  <header class="demo-header">
+    <div class="demo-header-inner">
+      <a class="demo-brand" href="./index.html" aria-label="SuperList, voltar ao início"><span class="demo-mark">S</span><span>superlist<span class="demo-dot">.</span></span></a>
+      <div class="demo-header-actions">
+        <span class="demo-header-label">Demonstração · sem login</span>
+        <a class="demo-back" href="./index.html">Voltar ao início</a>
+        <a class="demo-account" href="./auth.html?mode=signup">Criar conta grátis</a>
+      </div>
+    </div>
+  </header>
+  <main class="demo-wrap">
+    <section class="demo-intro">
+      <div class="demo-eyebrow">EXPERIÊNCIA INTERATIVA</div>
+      <h1>Experimente o SuperList antes de criar uma conta.</h1>
+      <p>Marque itens, adicione produtos e compare alguns preços de exemplo. Nada aqui é salvo: ao recarregar, a demonstração recomeça.</p>
+    </section>
+    <div class="demo-grid">
+      <div class="demo-main-column">
+        <section class="demo-panel" aria-labelledby="listTitle">
+          <div class="demo-panel-head">
+            <div>
+              <div class="demo-overline">LISTA DE EXEMPLO</div>
+              <h2 id="listTitle">Compras da semana</h2>
+            </div>
+            <span class="demo-status">Em andamento</span>
+          </div>
+          <div class="demo-stats" aria-live="polite">
+            <div><span>Itens</span><strong id="demoItemCount">5</strong></div>
+            <div><span>Marcados</span><strong id="demoCheckedCount">0</strong></div>
+            <div><span>Estimativa</span><strong id="demoEstimate">R$ 63,58</strong></div>
+          </div>
+          <div class="demo-list-heading"><span>Produto</span><span>Preço de exemplo</span></div>
+          <div class="demo-items" id="demoItems" aria-label="Itens da lista de demonstração"></div>
+          <form class="demo-add-form" id="demoAddForm">
+            <label class="sr-only" for="demoProduct">Escolha um produto de exemplo</label>
+            <select id="demoProduct" required>
+              <option value="">Adicionar um produto de exemplo…</option>
+              <option value="0">Pão de forma — R$ 8,90</option>
+              <option value="1">Ovos, 12 unidades — R$ 11,50</option>
+              <option value="2">Maçã, 1 kg — R$ 9,20</option>
+            </select>
+            <button type="submit" class="demo-add-button"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> Adicionar item</button>
+          </form>
+          <div class="demo-total"><div><span>Total dos itens marcados</span><small id="demoCheckedLabel">0 de 5 itens</small></div><strong id="demoCheckedTotal">R$ 0,00</strong></div>
+          <p class="demo-reset-note"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M5.6 9a7 7 0 0 1 11.8-2L20 12M4 12l2.6 5a7 7 0 0 0 11.8-2"/></svg> Seus dados de teste são temporários e reiniciam ao atualizar a página.</p>
+        </section>
+        <section class="demo-panel price-panel" aria-labelledby="priceTitle">
+          <div class="demo-panel-head">
+            <div>
+              <div class="demo-overline">DADOS FICTÍCIOS</div>
+              <h2 id="priceTitle">Comparação de preços</h2>
+            </div>
+            <span class="demo-status demo-status-muted">Exemplo</span>
+          </div>
+          <p class="demo-panel-copy">Uma prévia de como comparar valores entre supermercados.</p>
+          <div class="demo-table-wrap">
+            <table>
+              <caption class="sr-only">Preços fictícios de produtos em dois supermercados</caption>
+              <thead><tr><th scope="col">Produto</th><th scope="col">Mercado Verde</th><th scope="col">Super Bom</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">Arroz 5 kg</th><td class="demo-best">R$ 28,90 <span>menor</span></td><td>R$ 31,50</td></tr>
+                <tr><th scope="row">Leite integral</th><td>R$ 5,49</td><td class="demo-best">R$ 4,99 <span>menor</span></td></tr>
+                <tr><th scope="row">Café 500 g</th><td class="demo-best">R$ 18,90 <span>menor</span></td><td>R$ 19,50</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="demo-small-note">Os nomes e valores desta tela são apenas ilustrativos.</p>
+        </section>
+      </div>
+      <aside class="demo-account-panel" aria-labelledby="accountTitle">
+        <span class="demo-account-tag">RECURSOS COM CADASTRO</span>
+        <h2 id="accountTitle">Crie uma conta gratuita para continuar</h2>
+        <p>Na demonstração você explora os exemplos. Com uma conta, suas informações passam a acompanhar você.</p>
+        <ul class="demo-gated-list">
+          <li><span aria-hidden="true">✓</span><div><strong>Salvar e sincronizar</strong><small>Acesse suas listas depois e em outros dispositivos.</small></div></li>
+          <li><span aria-hidden="true">✓</span><div><strong>Guardar histórico</strong><small>Registre preços e acompanhe compras e gastos.</small></div></li>
+          <li><span aria-hidden="true">✓</span><div><strong>Compartilhar com a família</strong><small>Organize as listas com os membros da sua casa.</small></div></li>
+        </ul>
+        <button class="demo-gated-button" type="button" data-requires-account="save">Salvar esta lista</button>
+        <button class="demo-gated-link" type="button" data-requires-account="family">Convidar minha família</button>
+        <p class="demo-small-note">Esses recursos exigem cadastro. A demonstração não pede seus dados.</p>
+        <a class="demo-account-cta" href="./auth.html?mode=signup">Criar conta gratuita <span aria-hidden="true">→</span></a>
+      </aside>
+    </div>
+    <p class="demo-footer"><a href="./index.html">Voltar ao SuperList</a><span>·</span> Esta demonstração usa somente dados de exemplo.</p>
+  </main>
+  <dialog class="demo-dialog" id="accountDialog" aria-labelledby="dialogTitle">
+    <form method="dialog">
+      <button class="demo-dialog-close" aria-label="Fechar"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    </form>
+    <div class="demo-eyebrow">CONTA GRATUITA</div>
+    <h2 id="dialogTitle">Este recurso precisa de cadastro</h2>
+    <p id="dialogMessage">Crie uma conta gratuita para salvar suas listas e voltar a elas depois.</p>
+    <div class="demo-dialog-actions">
+      <a class="demo-account-cta" href="./auth.html?mode=signup">Criar conta gratuita <span aria-hidden="true">→</span></a>
+      <form method="dialog"><button class="demo-dialog-secondary">Continuar explorando</button></form>
+    </div>
+  </dialog>
+</body>
+</html>
