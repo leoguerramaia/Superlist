@@ -1997,15 +1997,20 @@ function renderShopping() {
   $('#shoppingMeta').textContent=`Criada em ${dateBR(l.created)} · ${l.items.length} produtos`;
   $('#shoppingStore').textContent=storeName(l.storeId);
 
-  const search = ($('#shoppingSearch')?.value || '')
-  .trim()
-  .toLocaleLowerCase('pt-BR');
-
-const visibleItems = l.items.filter(i =>
-  i.name.toLocaleLowerCase('pt-BR').includes(search)
-);
-
-let cats=[...new Set(visibleItems.map(i=>i.category||'Outros'))];
+  const search = ($('#shoppingSearch')?.value || '').trim().toLocaleLowerCase('pt-BR');
+  const departmentFilter=$('#shoppingDepartmentFilter');
+  const selectedDepartment=departmentFilter?.value||'';
+  const departments=[...new Set(l.items.map(item=>item.category||'Outros'))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  if(departmentFilter){
+    departmentFilter.innerHTML='<option value="">Todas as seções</option>'+departments.map(name=>'<option value="'+esc(name)+'">'+esc(name)+'</option>').join('');
+    departmentFilter.value=departments.includes(selectedDepartment)?selectedDepartment:'';
+  }
+  const department=departmentFilter?.value||'';
+  const visibleItems = l.items.filter(item=>{
+    const productText=(item.name+' '+(item.brand||'')).toLocaleLowerCase('pt-BR');
+    return productText.includes(search)&&(!department||(item.category||'Outros')===department);
+  });
+  let cats=[...new Set(visibleItems.map(i=>i.category||'Outros'))];
 
   $('#shoppingItems').innerHTML=cats.length
     ? cats.map(cat=>{
@@ -2039,7 +2044,7 @@ let cats=[...new Set(visibleItems.map(i=>i.category||'Outros'))];
           </div>`).join('')}
         </section>`;
       }).join('')
-    : '<div class="empty-state">Sua lista está vazia. Adicione produtos para começar.</div>';
+    : l.items.length ? '<div class="empty-state">Nenhum produto corresponde à pesquisa ou seção selecionada.</div>' : '<div class="empty-state">Sua lista está vazia. Adicione produtos para começar.</div>';
 
   const actionBar = document.createElement('div');
   actionBar.className = 'shopping-list-actions';
@@ -2057,6 +2062,24 @@ function renameCurrentList() {
     const name = formData(e.currentTarget).name.trim();
     if (!name) return toast('Informe o nome da lista.');
     currentList.name = name; save(); closeModal(); renderShopping(); toast('Lista renomeada.');
+  });
+}
+
+function changeShoppingStore() {
+  if(!currentList)return;
+  const stores=[...db.stores].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+  if(!stores.length)return toast('Cadastre um supermercado antes de alterar esta lista.');
+  openModal('Alterar supermercado', '<form id="changeListStoreForm"><div class="field"><label for="changeListStoreSelect">Supermercado</label><select id="changeListStoreSelect" name="storeId" required>'+stores.map(store=>'<option value="'+esc(store.id)+'"'+(String(store.id)===String(currentList.storeId)?' selected':'')+'>'+esc(store.name)+'</option>').join('')+'</select></div><div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button type="submit" class="btn primary">Salvar supermercado</button></div></form>');
+  $('#changeListStoreForm').addEventListener('submit',event=>{
+    event.preventDefault();
+    const selectedStore=stores.find(store=>String(store.id)===String($('#changeListStoreSelect').value));
+    if(!selectedStore)return toast('Selecione um supermercado válido.');
+    currentList.storeId=selectedStore.id;
+    save();
+    closeModal();
+    currentList=db.lists.find(list=>String(list.id)===String(currentList.id))||currentList;
+    renderShopping();
+    toast('Supermercado da lista atualizado.');
   });
 }
 
@@ -3090,6 +3113,7 @@ function init() {
   renderAll();
   $('#renameCurrentList')?.addEventListener('click',event=>{event.stopPropagation();renameCurrentList();});
   $('#deleteCurrentList')?.addEventListener('click',event=>{event.stopPropagation();deleteCurrentList();});
+  $('#changeShoppingStore')?.addEventListener('click',changeShoppingStore);
   $('#adminRefresh')?.addEventListener('click',loadAdminDashboard);
   $('#saveAdminProviderOrder')?.addEventListener('click',saveAdminProviderOrder);
   $('#adminUserSearch')?.addEventListener('input',renderAdminUsers);
@@ -3209,6 +3233,7 @@ if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
     }
   });
   $('#shoppingSearch')?.addEventListener('input', renderShopping);
+  $('#shoppingDepartmentFilter')?.addEventListener('change', renderShopping);
   $('#closeModal').onclick=closeModal;
 
   $('#modalBackdrop').addEventListener('click',e=>{
