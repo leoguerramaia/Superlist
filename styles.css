@@ -81,3 +81,11 @@
   .new-list-store-row{grid-template-columns:1fr}
   .new-list-import-options .btn{padding:9px 7px;font-size:11px}
 }
+
+
+/* Importação de listas por texto, foto e áudio com percentual de progresso */
+.new-list-import-options{grid-template-columns:repeat(3,minmax(0,1fr))}
+#listAudioInput{width:100%;font-size:11px}
+.list-ai-progress .receipt-progress-top{display:grid;grid-template-columns:17px minmax(0,1fr) auto;gap:9px;align-items:center}
+.list-ai-progress .receipt-progress-track span{width:0;animation:none;transition:width .35s ease}
+@media(max-width:420px){.new-list-import-options{grid-template-columns:1fr}.new-list-import-options .btn{width:100%}}
