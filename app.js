@@ -533,17 +533,17 @@ function createListModal() {
     return;
   }
 
-  openModal('Criar nova lista',
-    '<form id="modalForm">' +
-      '<div class="field"><label>Nome da lista</label><input name="name" required maxlength="80" placeholder="Ex.: Compra do mês"></div>' +
-      '<div class="field"><label>Supermercado</label><div class="form-grid"><select name="storeId" required><option value="">Selecione um supermercado</option>' + storeOptions() + '</select><button type="button" class="btn secondary" id="newListAddStore">＋ Cadastrar supermercado</button></div></div>' +
-      '<div class="field"><label>Adicionar produtos à lista</label><div class="form-grid"><button type="button" class="btn secondary" id="openTextImport">Importar Lista de Texto</button><button type="button" class="btn secondary" id="openPhotoImport">Fotografar Lista</button></div><button type="button" class="btn secondary full" id="manualListItems" style="margin-top:10px">＋ Adicionar Itens Manualmente</button></div>' +
+  openModal('Nova lista',
+    '<form id="modalForm" class="new-list-form">' +
+      '<div class="field"><label>Nome</label><input name="name" required maxlength="80" placeholder="Ex.: Compra do mês"></div>' +
+      '<div class="field"><label>Supermercado</label><div class="form-grid new-list-store-row"><select name="storeId" required><option value="">Selecionar supermercado</option>' + storeOptions() + '</select><button type="button" class="btn secondary" id="newListAddStore">＋ Cadastrar</button></div></div>' +
+      '<div class="field new-list-products"><label>Adicionar produtos</label><div class="form-grid new-list-import-options"><button type="button" class="btn secondary" id="openTextImport">Importar texto</button><button type="button" class="btn secondary" id="openPhotoImport">Fotografar lista</button></div><button type="button" class="new-list-manual" id="manualListItems">＋ Adicionar manualmente</button></div>' +
       '<section id="textImportPanel" class="invite-box" style="display:none"><div class="field"><label for="newListText">Cole ou digite os produtos, um por linha</label><textarea id="newListText" rows="6" placeholder="2 arroz 5kg&#10;1 kg de banana&#10;3 unidades de leite"></textarea></div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button type="button" class="btn primary" id="validateTextList">Validar produtos</button><span id="validateTextWarning" role="alert" style="display:none;color:#c62828;font-size:12px;font-weight:600"><span aria-hidden="true">*</span> Valide os produtos antes de Criar a Lista</span></div></section>' +
       '<section id="photoImportPanel" class="invite-box" style="display:none"><p class="muted">Escolha uma foto da galeria ou tire uma foto da lista escrita à mão. A IA vai transcrever os produtos para você revisar.</p><div class="form-grid"><button type="button" class="btn secondary" id="chooseListGallery">Escolher da galeria</button><button type="button" class="btn secondary" id="takeListPhoto">Usar câmera</button></div><input id="listGalleryInput" type="file" accept="image/*" style="display:none"><input id="listCameraInput" type="file" accept="image/*" capture="environment" style="display:none"><div id="listPhotoName" class="helper"></div><div id="listPhotoPreview" style="display:none;margin:10px 0"><img id="listPhotoPreviewImage" alt="Prévia da lista fotografada" style="display:block;width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:#fff"></div><button type="button" class="btn primary" id="readListPhoto" disabled>✨ Transcrever com IA</button></section>' +
       '<div id="listImportProgress" class="receipt-progress" style="display:none" aria-live="polite"><div class="receipt-progress-top"><span class="receipt-spinner"></span><strong id="listImportProgressText">Organizando seus produtos...</strong></div><div class="receipt-progress-track"><span></span></div></div>' +
       '<section id="listValidationPanel" style="display:none;margin-top:14px"><h3>Revise os produtos</h3><p class="helper">Confirme o nome, a quantidade e a associação ao catálogo. Nenhum produto será incluído antes de você confirmar.</p><div id="listValidationRows" class="receipt-table-wrap"></div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn primary" id="confirmValidatedItems">Confirmar produtos</button><span id="confirmProductsWarning" role="alert" style="display:none;color:#c62828;font-size:12px;font-weight:600"><span aria-hidden="true">*</span> Confirme os produtos antes de Criar a Lista</span></div></section>' +
-      '<div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button type="submit" class="btn primary" id="createNewListButton">Criar lista</button></div>' +
-    '</form>', 'NOVA LISTA');
+      '<div class="form-actions new-list-actions"><button type="button" class="new-list-cancel" data-cancel>Cancelar</button><button type="submit" class="btn primary" id="createNewListButton">Criar lista</button></div>' +
+    '</form>', '');
 
   let reviewRows = [];
   let confirmedItems = [];
@@ -728,8 +728,6 @@ function createListModal() {
     createListAndOpen(confirmedItems);
   });
 }
-
-
 function parseImported(text) {
   return text.split(/\n|,/).map(line=>line.trim()).filter(Boolean).map(line=>{
     let qty=1,unit=null,name=line;
