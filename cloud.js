@@ -183,6 +183,25 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     return data;
   }
   async function analyzeReceipt(file, products = []) { return analyzeImage(file, 'receipt', products); }
+  async function lookupProductByBarcode(gtin) {
+    if (!client) throw new Error('Supabase não está conectado.');
+    const { data: { session } } = await client.auth.getSession();
+    if (!session?.access_token) throw new Error('Entre na sua conta para consultar o produto pelo código.');
+    const { data, error } = await client.functions.invoke('lookup-product', {
+      body: { gtin: String(gtin || '').replace(/[^0-9]/g, '') }
+    });
+    if (error) {
+      let detail = error.message || 'Falha ao consultar a API GTIN.';
+      try {
+        const body = await error.context?.json?.();
+        if (body?.error) detail = body.error;
+      } catch (_) {}
+      throw new Error(detail);
+    }
+    if (!data || typeof data !== 'object') throw new Error('A API GTIN retornou uma resposta inesperada.');
+    return data;
+  }
+
   async function analyzeListPhoto(file) { return analyzeImage(file, 'list'); }
   async function validateListItems(items = []) {
     if (!client) throw new Error('Supabase não está configurado.');
@@ -233,5 +252,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
     return true;
   }
-  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,uploadStorePhoto,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,uploadStorePhoto,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,lookupProductByBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
 })();
