@@ -44,7 +44,7 @@ const seedProducts = [
   return {
     id:'p'+(i+1),name:p[0],category:p[1],unit:p[2],
     netAmount:pack.amount,netUnit:pack.unit,
-    barcode:'',photo:'',active:true
+    active:true
   };
 });
 
@@ -62,7 +62,7 @@ const extraSeedProducts = [
   ['Fio dental','Higiene pessoal','un'],['Enxaguante bucal','Higiene pessoal','un'],['Escova de dentes','Higiene pessoal','un'],['Absorvente','Higiene pessoal','un'],['Hastes flexíveis','Higiene pessoal','un'],['Algodão','Higiene pessoal','un'],['Papel facial','Higiene pessoal','un'],['Protetor solar','Higiene pessoal','un'],['Aparelho de barbear','Higiene pessoal','un'],['Fralda descartável','Higiene pessoal','un'],
   ['Lasanha congelada','Congelados','un'],['Hambúrguer congelado','Congelados','un'],['Nuggets','Congelados','un'],['Polpa de fruta','Congelados','un'],['Legumes congelados','Congelados','un'],['Pão de alho','Congelados','un'],
   ['Ração para gato','Pet shop','kg'],['Petisco para cachorro','Pet shop','un'],['Petisco para gato','Pet shop','un'],['Shampoo para pets','Pet shop','un']
-].map((p,i)=>{const pack=packageInfo(p[0],p[2]);return {id:'seed-extra-'+(i+1),name:formatDisplayName(p[0]),category:p[1],unit:['kg','l','g','ml'].includes(p[2])?p[2]:'un',netAmount:pack.amount,netUnit:pack.unit,barcode:'',photo:'',active:true};});
+].map((p,i)=>{const pack=packageInfo(p[0],p[2]);return {id:'seed-extra-'+(i+1),name:formatDisplayName(p[0]),category:p[1],unit:['kg','l','g','ml'].includes(p[2])?p[2]:'un',netAmount:pack.amount,netUnit:pack.unit,active:true};});
 seedProducts.push(...extraSeedProducts);
 
 function inferProductCategory(product={}) {
@@ -164,17 +164,57 @@ function parseShoppingText(input) {
     return { name, quantity:Number.isFinite(quantity) && quantity > 0 ? quantity : 1, unit, brand:'' };
   });
 }
+function formatPackageContent(product={}) {
+  if (String(product.packageContent || '').trim()) return String(product.packageContent).trim();
+  const inferred=packageInfo(product.name||'',product.unit||'un');
+  const amount=Number(product.netAmount)>0?Number(product.netAmount):inferred.amount;
+  const unit=product.netUnit||inferred.unit||product.unit||'un';
+  return String(amount).replace('.',',')+(unit==='un'?' un':' '+unit);
+}
+function parsePackageContent(value,fallbackUnit='un') {
+  const text=String(value||'').trim();
+  const match=text.match(/(\d+(?:[,.]\d+)?)\s*(kg|g|l|ml|un|unidades?)?/i);
+  if(!match)return {packageContent:text,netAmount:1,netUnit:fallbackUnit||'un'};
+  const amount=Number(match[1].replace(',','.')),unit=String(match[2]||fallbackUnit||'un').toLowerCase();
+  if(unit==='g')return {packageContent:text,netAmount:amount/1000,netUnit:'kg'};
+  if(unit==='ml')return {packageContent:text,netAmount:amount/1000,netUnit:'l'};
+  if(unit==='unidades')return {packageContent:text,netAmount:amount,netUnit:'un'};
+  return {packageContent:text,netAmount:amount,netUnit:unit};
+}
+function normalizeProductBrandData(data) {
+  (data.products||[]).forEach(product=>{
+    const names=Array.isArray(product.brands)?product.brands:(product.brand?[product.brand]:[]);
+    if(product.brand)names.push(product.brand);
+    product.brands=[...new Set(names.map(value=>formatDisplayName(typeof value==='string'?value:value?.name)).filter(Boolean))];
+    product.brandDetails=Array.isArray(product.brandDetails)?product.brandDetails:[];
+    product.brandDetails=product.brandDetails.map(brand=>({id:brand.id||uid(),name:formatDisplayName(brand.name),barcode:String(brand.barcode||''),photo:String(brand.photo||''),photoPath:String(brand.photoPath||'')})).filter(brand=>brand.name);
+    if(product.brandDetailsMigratedV1)return;
+    const legacy={barcode:String(product.barcode||''),photo:String(product.photo||''),photoPath:String(product.photoPath||'')};
+    if(product.brands.length===1){
+      const name=product.brands[0];
+      let brand=product.brandDetails.find(value=>value.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR'));
+      if(!brand){brand={id:uid(),name,barcode:'',photo:'',photoPath:''};product.brandDetails.push(brand);}
+      brand.barcode||=legacy.barcode;brand.photo||=legacy.photo;brand.photoPath||=legacy.photoPath;
+    }else if(legacy.barcode||legacy.photo||legacy.photoPath)product.legacyBrandData||=legacy;
+    product.brandDetailsMigratedV1=true;
+  });
+}
+function productBrandNames(product={}) {
+  const names=[...(Array.isArray(product.brands)?product.brands:[])];
+  (product.brandDetails||[]).forEach(brand=>names.push(brand.name));
+  return [...new Set(names.map(formatDisplayName).filter(Boolean))];
+}
 function normalizeProductNames(data) {
   if (!data || typeof data !== 'object') return data;
   data.products ||= [];
   data.lists ||= [];
   data.prices ||= [];
   data.products.forEach(product => { product.name = formatDisplayName(product.name); });
+  normalizeProductBrandData(data);
   data.lists.forEach(list => (list.items || []).forEach(item => { item.name = formatDisplayName(item.name); }));
   data.prices.forEach(price => { price.productName = formatDisplayName(price.productName); });
   return data;
 }
-
 function loadDB() {
   try {
     let d = JSON.parse(localStorage.getItem(KEY));
@@ -549,34 +589,39 @@ function renderProducts() {
   let q=($('#productSearch')?.value||'').toLowerCase();
   let cat=$('#categoryFilter')?.value||'all';
   let cats=['all',...db.categories];
-
   $('#categoryFilter').innerHTML=cats.map(c=>`<option value="${esc(c)}" ${c===cat?'selected':''}>${c==='all'?'Todas as categorias':esc(c)}</option>`).join('');
-
   let counts=db.categories.map(c=>[c,db.products.filter(p=>p.category===c).length]);
-
   $('#categoryList').innerHTML=
     `<button class="category-item ${activeCategory==='all'?'active':''}" data-cat="all">Todas <small>${db.products.length}</small></button>`+
     counts.map(([c,n])=>`<button class="category-item ${activeCategory===c?'active':''}" data-cat="${esc(c)}">${esc(c)} <small>${n}</small></button>`).join('');
-
-  let products=db.products.filter(p=>
-    (activeCategory==='all'||p.category===activeCategory)&&
-    (cat==='all'||p.category===cat)&&
-    p.name.toLowerCase().includes(q)
-  );
-
+  let products=db.products.filter(p=>(activeCategory==='all'||p.category===activeCategory)&&(cat==='all'||p.category===cat)&&(p.name+' '+productBrandNames(p).join(' ')).toLowerCase().includes(q));
   $('#productCount').textContent=`${products.length} produtos`;
-
   $('#productTable').innerHTML=products.length
-    ? products.map(p=>`<div class="product-row">
-        <div class="product-thumb">${p.photo && /^https?:\/\//i.test(String(p.photo).trim()) ? `<img src="${esc(String(p.photo).trim())}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span aria-hidden="true">◈</span></div>
-        <div><strong>${esc(p.name)}</strong><small>${esc(p.category)} ${p.barcode?'· '+esc(p.barcode):''}</small></div>
-        <span class="unit-tag">${unitLabel(p.unit)}</span>
-        <span class="product-price muted">${p.barcode?'EAN cadastrado':'Sem código'}</span>
-        <button data-edit-product="${p.id}" title="Editar">✎</button>
-      </div>`).join('')
+    ? products.map(p=>{
+        const brands=productBrandNames(p),pending=p.legacyBrandData&&!p.legacyBrandData.importedTo;
+        const photoBrand=(p.brandDetails||[]).find(brand=>brand.photo||brand.photoPath);
+        return `<div class="product-row">
+          <div class="product-thumb" data-brand-photo data-photo-url="${esc(photoBrand?.photo||'')}" data-photo-path="${esc(photoBrand?.photoPath||'')}"><span aria-hidden="true">◈</span></div>
+          <div><strong>${esc(p.name)}</strong><small>${esc(p.category)} · ${esc(formatPackageContent(p))}${brands.length?' · '+esc(brands.join(', ')):''}${pending?' · EAN/foto para revisar':''}</small></div>
+          <span class="unit-tag">${unitLabel(p.unit)}</span>
+          <button data-manage-product-brands="${esc(p.id)}" title="Gerenciar marcas">${brands.length} marca${brands.length===1?'':'s'}</button>
+          <button data-edit-product="${esc(p.id)}" title="Editar">✎</button>
+        </div>`;
+      }).join('')
     : '<div class="empty-state">Nenhum produto nesta seleção.</div>';
+  hydrateProductBrandPhotos();
 }
-
+function hydrateProductBrandPhotos() {
+  document.querySelectorAll('#productTable [data-brand-photo]').forEach(async element=>{
+    let url='';
+    const direct=String(element.dataset.photoUrl||'').trim();
+    try { if(direct){const parsed=new URL(direct,location.href);if(parsed.protocol==='https:'||parsed.protocol==='http:')url=parsed.href;} } catch(_) {}
+    if(!url&&element.dataset.photoPath&&window.SuperlistCloud?.getProductPhotoUrl){
+      try { url=await window.SuperlistCloud.getProductPhotoUrl(element.dataset.photoPath); } catch(error) { console.warn('Não foi possível carregar a imagem da marca:',error); }
+    }
+    if(url&&element.isConnected)element.innerHTML=`<img src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`;
+  });
+}
 function renderPrices() {
   let store=$('#priceStoreFilter')?.value||'all';
   let q=($('#priceSearch')?.value||'').toLowerCase();
@@ -857,7 +902,7 @@ function createListModal() {
   function brandsForProduct(productId) {
     const values = new Set();
     const product = db.products.find(p => p.id === productId);
-    (product?.brands || []).forEach(b => { if (b) values.add(formatDisplayName(b)); });
+    productBrandNames(product||{}).forEach(b => values.add(formatDisplayName(b)));
     (db.prices || []).filter(p => p.productId === productId).forEach(p => { if (p.brand) values.add(formatDisplayName(p.brand)); });
     (db.lists || []).forEach(list => (list.items || []).filter(item => item.productId === productId && item.brand).forEach(item => values.add(formatDisplayName(item.brand))));
     return [...values].sort((a,b) => a.localeCompare(b,'pt-BR'));
@@ -1005,7 +1050,7 @@ function parseImported(text) {
     if(m){qty=Number(m[1].replace(',','.'));let u=(m[2]||'').toLowerCase();name=m[3].trim();if(/kg|quilo/.test(u))unit='kg';else if(u==='g'||u.startsWith('gram'))unit='g';else if(u==='l'||u.startsWith('litro'))unit='l';else if(u==='ml')unit='ml';else if(u.startsWith('un')||u==='x')unit='un'}
     const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     let found=db.products.find(p=>norm(name)===norm(p.name));
-    if(!found){found={id:uid(),name,category:'Outros',unit:unit||'un',...packageInfo(name,unit||'un'),barcode:'',photo:'',photoPath:'',active:true};db.products.push(found)}
+    if(!found){found={id:uid(),name,category:'Outros',unit:unit||'un',...packageInfo(name,unit||'un'),active:true};db.products.push(found)}
     return {id:uid(),productId:found.id,name:found.name,category:found.category||'Outros',unit:unit||found.unit||'un',qty,brand:'',price:0,checked:false};
   });
 }
@@ -1144,171 +1189,85 @@ function addStoreModal(onSaved, store=null) {
 
 
 function addProductModal(product = null) {
-  const p = product || {};
-  const photoPath = p.photoPath || '';
-  const photoUrl = p.photo || '';
-
-  openModal(product ? 'Editar produto' : 'Novo produto', `
+  const p=product||{},content=formatPackageContent(p);
+  openModal(product?'Editar produto':'Novo produto',`
     <form id="modalForm">
-      <div class="field">
-        <label>Nome do produto</label>
-        <input name="name" required
-          placeholder="Ex.: Arroz tipo 1 — 5 kg"
-          value="${esc(p.name || '')}">
-      </div>
-
+      <div class="field"><label>Nome do produto</label><input name="name" required placeholder="Ex.: Arroz tipo 1" value="${esc(p.name||'')}"></div>
       <div class="form-grid">
-        ${selectField('Categoria', 'category', db.categories,
-          p.category || 'Mercearia')}
-        ${selectField('Unidade de compra', 'unit',
-          ['un','kg','g','l','ml'], p.unit || 'un')}
+        ${selectField('Categoria','category',db.categories,p.category||'Mercearia')}
+        ${selectField('Unidade de compra','unit',['un','kg','g','l','ml'],p.unit||'un')}
       </div>
-
-      <div class="form-grid">
-        ${field('Conteúdo da embalagem', 'netAmount',
-          'Ex.: 5', 'number',
-          p.netAmount ?? packageInfo(p.name || '', p.unit || 'un').amount)}
-        ${selectField('Unidade do conteúdo', 'netUnit',
-          ['un','kg','l'],
-          p.netUnit || packageInfo(p.name || '', p.unit || 'un').unit)}
-      </div>
-
-      <div class="field">
-        <label>Código de barras (EAN/GTIN)</label>
-        <input name="barcode" placeholder="Digite o código"
-          value="${esc(p.barcode || '')}">
-      </div>
-
-      <div class="field">
-        <label>Foto por URL</label>
-        <input name="photo" type="url"
-          placeholder="https://..."
-          value="${esc(photoUrl)}">
-      </div>
-
-      <div class="field">
-        <label>Foto pela câmera ou galeria</label>
-        <input id="productPhotoFile"
-          accept="image/*">
-        <small class="helper">
-          No celular, você poderá escolher a câmera ou uma foto da galeria.
-          Limite de 5 MB.
-        </small>
-      </div>
-
-      <div id="productPhotoPreview" class="field">
-        ${photoUrl
-          ? `<img src="${esc(photoUrl)}" alt="Foto do produto"
-              style="max-width:130px;max-height:130px;object-fit:contain">`
-          : photoPath
-            ? '<span class="helper">Foto armazenada no Supabase.</span>'
-            : '<span class="helper">Nenhuma foto selecionada.</span>'}
-      </div>
-
-      <div class="form-actions">
-        <button type="button" class="btn secondary" data-cancel>
-          Cancelar
-        </button>
-        <button class="btn primary">Salvar produto</button>
-      </div>
-    </form>
-  `);
-
-  const form = $('#modalForm');
-  const fileInput = $('#productPhotoFile');
-
-  fileInput.addEventListener('change', () => {
-    const file = fileInput.files[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      fileInput.value = '';
-      toast('A imagem deve ter no máximo 5 MB.');
-      return;
-    }
-
-    const preview = $('#productPhotoPreview');
-    const url = URL.createObjectURL(file);
-
-    preview.innerHTML = `
-      <img src="${url}" alt="Prévia da foto"
-        style="max-width:130px;max-height:130px;object-fit:contain">
-    `;
-  });
-
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-
-    const button = form.querySelector('button[type="submit"], button.primary');
-    button.disabled = true;
-    button.textContent = 'Salvando...';
-
-    try {
-      const d = formData(form);
-      const file = fileInput.files[0];
-
-      d.name = formatDisplayName(d.name);
-      d.netAmount = Number(d.netAmount) || 1;
-
-      const barcode = d.barcode.trim();
-
-      const duplicate = db.products.find(x =>
-        x.id !== p.id &&
-        barcode &&
-        x.barcode === barcode
-      );
-
-      if (duplicate) {
-        throw new Error('Esse código de barras já está cadastrado em outro produto.');
-      }
-
-      let newPhotoPath = photoPath;
-      let photo = d.photo.trim();
-
-      if (file) {
-        if (!window.SuperlistCloud?.uploadProductPhoto) {
-          throw new Error('A integração de fotos não está disponível.');
-        }
-
-        newPhotoPath = await window.SuperlistCloud.uploadProductPhoto(file);
-        photo = '';
-      }
-
-      const productData = {
-        name: formatDisplayName(d.name),
-        category: d.category,
-        unit: d.unit,
-        netAmount: d.netAmount,
-        netUnit: d.netUnit,
-        barcode,
-        photo,
-        photoPath: newPhotoPath,
-        active: true
-      };
-
-      if (product) {
-        Object.assign(product, productData);
-      } else {
-        db.products.push({
-          id: uid(),
-          ...productData
-        });
-      }
-
-      save();
-      closeModal();
-      toast('Produto salvo com sucesso!');
-
-    } catch (error) {
-      console.error(error);
-      toast(error.message || 'Não foi possível salvar o produto.');
-      button.disabled = false;
-      button.textContent = 'Salvar produto';
-    }
+      <div class="field"><label>Conteúdo da embalagem</label><input name="packageContent" required placeholder="Ex.: 500 g, 1 L ou 12 unidades" value="${esc(content)}"><small class="helper">Informe o conteúdo e a unidade juntos.</small></div>
+      <div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button class="btn primary">Salvar produto</button></div>
+    </form>`);
+  $('#modalForm').addEventListener('submit',e=>{
+    e.preventDefault();const form=e.currentTarget,button=form.querySelector('.btn.primary');button.disabled=true;button.textContent='Salvando...';
+    try{
+      const d=formData(form),pack=parsePackageContent(d.packageContent,p.netUnit||p.unit||d.unit||'un');
+      const values={name:formatDisplayName(d.name),category:d.category,unit:d.unit,packageContent:pack.packageContent,netAmount:pack.netAmount,netUnit:pack.netUnit,active:true};
+      if(product)Object.assign(product,values);
+      else db.products.push({id:uid(),brands:[],brandDetails:[],brandDetailsMigratedV1:true,...values});
+      save();closeModal();toast('Produto salvo com sucesso!');
+    }catch(error){console.error(error);toast(error.message||'Não foi possível salvar o produto.');button.disabled=false;button.textContent='Salvar produto';}
   });
 }
-
-
+function manageProductBrands(productId) {
+  const product=db.products.find(p=>String(p.id)===String(productId));if(!product)return;
+  normalizeProductBrandData({products:[product]});
+  const names=productBrandNames(product),pending=product.legacyBrandData&&!product.legacyBrandData.importedTo;
+  openModal('Marcas de '+product.name,`
+    <div class="field"><p class="muted">Cada marca tem seu próprio EAN/GTIN e imagem.</p>${pending?'<p class="helper">Há EAN/foto antigo sem associação clara. Ele continua preservado e pode ser associado ao cadastrar uma marca.</p>':''}</div>
+    <div class="field">${names.length?names.map(name=>{
+      const brand=(product.brandDetails||[]).find(value=>value.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR'));
+      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)"><div><strong>${esc(name)}</strong><small style="display:block">${brand?.barcode?'EAN cadastrado':'Sem EAN'} · ${brand?.photo||brand?.photoPath?'Imagem cadastrada':'Sem imagem'}</small></div><button type="button" class="btn secondary" data-edit-brand-id="${esc(brand?.id||'')}" data-edit-brand-name="${esc(name)}">Editar</button></div>`;
+    }).join(''):'<p class="helper">Nenhuma marca cadastrada para este produto.</p>'}</div>
+    <div class="form-actions"><button type="button" class="btn secondary" data-cancel>Fechar</button><button type="button" class="btn primary" id="addProductBrand">＋ Cadastrar marca</button></div>`);
+  $('#addProductBrand').onclick=()=>addProductBrandModal(product);
+  $('#modalBody').querySelectorAll('[data-edit-brand-id]').forEach(button=>button.onclick=()=>{
+    const brand=(product.brandDetails||[]).find(value=>String(value.id)===String(button.dataset.editBrandId));
+    addProductBrandModal(product,brand||{name:button.dataset.editBrandName});
+  });
+}
+function addProductBrandModal(product,brand=null) {
+  const pending=product.legacyBrandData&&!product.legacyBrandData.importedTo;
+  const initial={name:brand?.name||'',barcode:brand?.barcode||(pending?product.legacyBrandData.barcode:'')||'',photo:brand?.photo||(pending?product.legacyBrandData.photo:'')||'',photoPath:brand?.photoPath||(pending?product.legacyBrandData.photoPath:'')||''};
+  openModal(brand?.id?'Editar marca':'Cadastrar marca',`
+    <form id="modalForm">
+      <div class="field"><label>Nome da marca</label><input name="name" required value="${esc(initial.name)}" placeholder="Ex.: Marca"></div>
+      <div class="field"><label>Código de barras (EAN/GTIN)</label><input name="barcode" inputmode="numeric" value="${esc(initial.barcode)}" placeholder="Digite o código"></div>
+      <div class="field"><label>Foto por URL</label><input name="photo" type="url" value="${esc(initial.photo)}" placeholder="https://..."></div>
+      <div class="field"><label>Foto pela câmera ou galeria</label><input id="brandPhotoFile" type="file" accept="image/*"><small class="helper">Limite de 5 MB.</small></div>
+      ${pending?'<label class="helper" style="display:flex;gap:8px;align-items:flex-start"><input name="useLegacy" type="checkbox" checked>Associar a esta marca os dados de EAN/foto antigos ainda sem marca.</label>':''}
+      <div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button class="btn primary">Salvar marca</button></div>
+    </form>`);
+  const form=$('#modalForm'),fileInput=$('#brandPhotoFile');
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();const button=form.querySelector('.btn.primary');button.disabled=true;button.textContent='Salvando...';
+    try{
+      const d=formData(form),name=formatDisplayName(d.name),code=normalizeBarcodeCode(d.barcode);
+      if(code&&(![8,12,13,14].includes(code.length)||!isValidBarcodeGTIN(code)))throw new Error('Informe um EAN/GTIN válido.');
+      const duplicateName=(product.brandDetails||[]).some(value=>String(value.id)!==String(brand?.id||'')&&value.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR'));
+      if(duplicateName)throw new Error('Esta marca já está cadastrada para o produto.');
+      const duplicate=(db.products||[]).some(other=>{
+        const details=other.brandDetails||[];
+        return details.some(value=>code&&String(value.id)!==String(brand?.id||'')&&normalizeBarcodeCode(value.barcode)===code)||(other!==product&&code&&normalizeBarcodeCode(other.barcode)===code);
+      });
+      if(duplicate)throw new Error('Esse EAN/GTIN já está associado a outra marca.');
+      const file=fileInput.files?.[0];if(file&&file.size>5*1024*1024)throw new Error('A imagem deve ter no máximo 5 MB.');
+      let photoPath=initial.photoPath,photo=String(d.photo||'').trim();
+      if(file){if(!window.SuperlistCloud?.uploadProductPhoto)throw new Error('A integração de fotos não está disponível.');const uploaded=await window.SuperlistCloud.uploadProductPhoto(file,product.id,record.id);photoPath=uploaded.path||uploaded;photo='';}
+      const record={id:brand?.id||uid(),name,barcode:code,photo,photoPath};
+      product.brandDetails||=[];const index=product.brandDetails.findIndex(value=>String(value.id)===String(record.id));
+      if(index>=0)product.brandDetails[index]=record;else product.brandDetails.push(record);
+      product.brands||=[];
+      const previousName=String(brand?.name||'');
+      if(previousName&&previousName.toLocaleLowerCase('pt-BR')!==name.toLocaleLowerCase('pt-BR')&&!product.brandDetails.some(value=>String(value.id)!==String(record.id)&&value.name.toLocaleLowerCase('pt-BR')===previousName.toLocaleLowerCase('pt-BR')))product.brands=product.brands.filter(value=>String(value).toLocaleLowerCase('pt-BR')!==previousName.toLocaleLowerCase('pt-BR'));
+      if(!product.brands.some(value=>String(value).toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR')))product.brands.push(name);
+      if(pending&&d.useLegacy)product.legacyBrandData.importedTo=record.id;
+      save();manageProductBrands(product.id);toast('Marca salva com sucesso!');
+    }catch(error){console.error(error);toast(error.message||'Não foi possível salvar a marca.');button.disabled=false;button.textContent='Salvar marca';}
+  });
+}
 function addCategory() {
   openModal('Nova categoria',`<form id="modalForm">
     <div class="field">
@@ -1461,9 +1420,6 @@ function findOrCreateProduct(item) {
       category: item.category || 'Outros',
       unit: item.unit || 'un',
       ...packageInfo(item.name, item.unit || 'un'),
-      barcode: '',
-      photo: '',
-      photoPath: '',
       active: true
     };
 
@@ -1570,7 +1526,7 @@ function addCatalogProductToList() {
             data-add-catalog="${p.id}"
             style="width:100%;text-align:left">
             <div class="product-thumb">
-              ${p.photo ? '▧' : '◈'}
+              ${(p.brandDetails||[]).some(b=>b.photo||b.photoPath) ? '▧' : '◈'}
             </div>
             <div>
               <strong>${esc(p.name)}</strong>
@@ -1634,9 +1590,6 @@ function addCatalogProductToList() {
             category: 'Outros',
             unit: 'un',
             ...packageInfo(name, 'un'),
-            barcode: '',
-            photo: '',
-            photoPath: '',
             active: true
           };
 
@@ -1730,7 +1683,7 @@ function addCatalogProductToList() {
         if(!name){toast('Informe o nome do produto.');return;}
         const brand=formatDisplayName($('#addProductBrand')?.value||'');
         const unit=$('#addProductUnit')?.value||'un';
-        const product={id:uid(),name,category:'Outros',unit,...packageInfo(name,unit),barcode:code,brand,brands:brand?[brand]:[],photo:'',photoPath:'',active:true,description:'',barcodeSources:[]};
+        const product={id:uid(),name,category:'Outros',unit,...packageInfo(name,unit),packageContent:formatPackageContent({name,unit,...packageInfo(name,unit)}),brands:brand?[brand]:[],brandDetails:[{id:uid(),name:brand||'Marca não identificada',barcode:code,photo:'',photoPath:''}],brandDetailsMigratedV1:true,active:true,description:'',barcodeSources:[]};
         db.products.push(product);save();
         addProductToCurrentList(product,Number($('#addProductQty').value)||1,brand,selectedManualUnit(product));
       };
@@ -2676,7 +2629,7 @@ function openPurchaseModal() {
     try {
       const analysis = await window.SuperlistCloud.analyzeReceipt(file, (db.products || []).map(p => ({
         id: p.id, name: p.name, category: p.category || 'Outros', unit: p.unit || 'un',
-        netAmount: p.netAmount || 1, netUnit: p.netUnit || p.unit || 'un', barcode: p.barcode || ''
+        netAmount: p.netAmount || 1, netUnit: p.netUnit || p.unit || 'un'
       })));
 
       aiReceiptAnalysis = analysis;
@@ -2768,7 +2721,7 @@ function openPurchaseModal() {
         product = {
           id: uid(), name: item.name, category: 'Outros', unit: item.unit,
           netAmount: 1, netUnit: ['kg','g','l','ml'].includes(item.unit) ? item.unit : 'un',
-          barcode: '', photo: '', active: true
+          active: true
         };
         db.products.push(product);
       }
@@ -2989,7 +2942,7 @@ function normalizeBarcodeCategory(value) {
 async function findProductByBarcode(value) {
   const code = normalizeBarcodeCode(value);
   if (!code) throw new Error('Informe um código de barras válido.');
-  const local = (db.products || []).find(p => normalizeBarcodeCode(p.barcode) === code && normalizeBarcodeCode(p.barcode));
+  const local = (db.products || []).find(p => normalizeBarcodeCode(p.barcode) === code || (p.brandDetails||[]).some(brand=>normalizeBarcodeCode(brand.barcode)===code));
   if (local) return local;
 
   let providerError = null;
@@ -3008,11 +2961,10 @@ async function findProductByBarcode(value) {
           id: uid(), name, category, unit,
           netAmount: Number.isFinite(amount) && amount > 0 ? amount : parsedPackage.amount,
           netUnit: productUnitFromBarcodeData(record.packageUnit || unit),
-          barcode: code,
-          brand: formatDisplayName(record.brand || ''),
-          brands: record.brand ? [formatDisplayName(record.brand)] : [],
-          photo: String(record.imageUrl || ''),
-          photoPath: '',
+          packageContent:formatPackageContent({name,unit,netAmount:Number.isFinite(amount)&&amount>0?amount:parsedPackage.amount,netUnit:productUnitFromBarcodeData(record.packageUnit||unit)}),
+          brands:record.brand?[formatDisplayName(record.brand)]:[],
+          brandDetails:[{id:uid(),name:formatDisplayName(record.brand||'Marca não identificada'),barcode:code,photo:String(record.imageUrl||''),photoPath:''}],
+          brandDetailsMigratedV1:true,
           active: true,
           description: '',
           barcodeSources: ['OSCBR']
@@ -3039,7 +2991,10 @@ async function findProductByBarcode(value) {
     const brand = formatDisplayName(String(data.brands || '').split(',')[0] || '');
     const product = {
       id: uid(), name, category, unit: 'un', ...packageInfo(name, 'un'),
-      barcode: code, brand, photo: '', photoPath: '', active: true,
+      packageContent:String(data.quantity||formatPackageContent({name,unit,...packageInfo(name,unit)})),
+      brands:brand?[brand]:[],
+      brandDetails:[{id:uid(),name:brand||'Marca não identificada',barcode:code,photo:'',photoPath:''}],
+      brandDetailsMigratedV1:true,active:true,
       description: data.quantity || '', barcodeSources: ['Open Food Facts']
     };
     db.products.push(product);
@@ -3078,7 +3033,7 @@ async function scanBarcode(itemId) {
     const button=$('#lookupBarcode');
     button.disabled=true;button.textContent='Associando…';
     try{
-      let product=db.products.find(p=>normalizeBarcodeCode(p.barcode)===code);
+      let product=db.products.find(p=>normalizeBarcodeCode(p.barcode)===code||(p.brandDetails||[]).some(brand=>normalizeBarcodeCode(brand.barcode)===code));
       if(!product) product=await findProductByBarcode(code);
       if(product){
         item.productId=product.id;
@@ -3087,7 +3042,10 @@ async function scanBarcode(itemId) {
         item.unit=product.unit||item.unit||'un';
       }else{
         product=findOrCreateProduct(item);
-        product.barcode=code;
+        const brandName=formatDisplayName(item.brand||'Marca não identificada');
+        product.brandDetails||=[];product.brands||=[];
+        product.brandDetails.push({id:uid(),name:brandName,barcode:code,photo:'',photoPath:''});
+        if(!product.brands.includes(brandName))product.brands.push(brandName);
       }
       stop();save();closeModal();renderShopping();
       toast('Código de barras associado ao produto.');
@@ -3370,6 +3328,9 @@ function init() {
       addCategory();
       return;
     }
+
+    let manageBrands=e.target.closest('[data-manage-product-brands]');
+    if(manageBrands) { manageProductBrands(manageBrands.dataset.manageProductBrands); return; }
 
     let edit=e.target.closest('[data-edit-product]');
 
