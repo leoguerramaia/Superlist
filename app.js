@@ -537,13 +537,13 @@ function createListModal() {
     '<form id="modalForm" class="new-list-form">' +
       '<div class="field"><label>Nome</label><input name="name" required maxlength="80" placeholder="Ex.: Compra do mês"></div>' +
       '<div class="field"><label>Supermercado</label><div class="form-grid new-list-store-row"><select name="storeId" required><option value="">Selecionar supermercado</option>' + storeOptions() + '</select><button type="button" class="btn secondary" id="newListAddStore">＋ Cadastrar</button></div></div>' +
-      '<div class="field new-list-products"><label>Adicionar produtos</label><div class="form-grid new-list-primary-actions"><button type="button" class="btn secondary" id="toggleListImport" aria-expanded="false" aria-controls="listImportOptions"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/><path d="m16 16 2 2 4-4"/></svg>Importar lista</button><button type="button" class="btn secondary" id="manualListItems"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Adicionar manualmente</button></div></div>' +
+      '<div class="field new-list-products"><label>Adicionar produtos</label><div class="form-grid new-list-primary-actions"><button type="button" class="btn secondary" id="toggleListImport" aria-expanded="false" aria-controls="listImportOptions" disabled><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/><path d="m16 16 2 2 4-4"/></svg>Importar lista</button><button type="button" class="btn secondary" id="manualListItems" disabled><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Adicionar manualmente</button></div></div>' +
       '<section id="listImportOptions" class="new-list-methods" style="display:none" aria-label="Opções de importação"><button type="button" class="btn secondary" id="openTextImport"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8l4 4v12H8z"/><path d="M16 4v5h5M11 13h6M11 17h6"/><path d="M5 7H4v14h12"/></svg>Colar texto</button><button type="button" class="btn secondary" id="openPhotoImport"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-2h6l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="3"/></svg>Fotografar lista</button><button type="button" class="btn secondary" id="openAudioImport"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>Lista por áudio</button></section>' +
       '<section id="textImportPanel" class="invite-box" style="display:none"><div class="field"><label for="newListText">Cole ou digite os produtos, um por linha</label><textarea id="newListText" rows="6" placeholder="2 arroz 5kg&#10;1 kg de banana&#10;3 unidades de leite"></textarea></div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button type="button" class="btn primary" id="validateTextList">Validar produtos</button><span id="validateTextWarning" role="alert" style="display:none;color:#c62828;font-size:12px;font-weight:600"><span aria-hidden="true">*</span> Valide os produtos antes de Criar a Lista</span></div></section>' +
       '<section id="photoImportPanel" class="invite-box" style="display:none"><p class="muted">Escolha uma foto da galeria ou tire uma foto da lista escrita à mão. A IA vai transcrever os produtos para você revisar.</p><div class="form-grid"><button type="button" class="btn secondary" id="chooseListGallery">Escolher da galeria</button><button type="button" class="btn secondary" id="takeListPhoto">Usar câmera</button></div><input id="listGalleryInput" type="file" accept="image/*" style="display:none"><input id="listCameraInput" type="file" accept="image/*" capture="environment" style="display:none"><div id="listPhotoName" class="helper"></div><div id="listPhotoPreview" style="display:none;margin:10px 0"><img id="listPhotoPreviewImage" alt="Prévia da lista fotografada" style="display:block;width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:#fff"></div><button type="button" class="btn primary" id="readListPhoto" disabled>✨ Transcrever com IA</button></section>' +
       '<section id="audioImportPanel" class="invite-box new-list-audio-panel" style="display:none"><p class="muted">Envie um arquivo de áudio ou grave sua lista pelo microfone.</p><div class="new-list-audio-actions"><label class="btn secondary new-list-audio-file" for="listAudioInput"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>Enviar arquivo</label><input id="listAudioInput" type="file" accept="audio/mpeg,audio/mp4,audio/mpga,audio/m4a,audio/wav,audio/webm,audio/ogg,audio/flac,.mp3,.mp4,.m4a,.wav,.webm,.ogg,.flac" style="display:none"><button type="button" class="btn secondary" id="startListRecording"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>Gravar voz</button><button type="button" class="btn secondary" id="stopListRecording" style="display:none"><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Parar</button></div><small id="listAudioStatus" class="helper" aria-live="polite">Nenhum áudio selecionado.</small><button type="button" class="btn primary" id="readListAudio" disabled><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg>Ler áudio com IA</button></section>' +
       '<div id="listImportProgress" class="receipt-progress list-ai-progress" style="display:none" aria-live="polite"><div class="receipt-progress-top"><span class="receipt-spinner"></span><strong id="listImportProgressText">Organizando seus produtos...</strong><b id="listImportProgressPercent">0%</b></div><div class="receipt-progress-track" role="progressbar" aria-label="Progresso da análise" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="listImportProgressBar"></span></div></div>' +
-      '<section id="listValidationPanel" style="display:none;margin-top:14px"><h3>Revise os produtos</h3><p class="helper">Confirme o nome, a quantidade e a associação ao catálogo. Nenhum produto será incluído antes de você confirmar.</p><div id="listValidationRows" class="receipt-table-wrap"></div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn primary" id="confirmValidatedItems">Confirmar produtos</button><span id="confirmProductsWarning" role="alert" style="display:none;color:#c62828;font-size:12px;font-weight:600"><span aria-hidden="true">*</span> Confirme os produtos antes de Criar a Lista</span></div></section>' +
+      '<section id="listValidationPanel" style="display:none;margin-top:14px"><h3>Revise os produtos</h3><p class="helper" id="listValidationHelp">Confirme os nomes, quantidades e associações ao catálogo. Depois, clique em Criar lista para concluir.</p><div id="listValidationRows" class="receipt-table-wrap"></div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn primary" id="confirmValidatedItems">Confirmar produtos</button><span id="confirmProductsWarning" role="alert" style="display:none;color:#c62828;font-size:12px;font-weight:600"><span aria-hidden="true">*</span> Confirme os produtos antes de Criar a Lista</span></div></section>' +
       '<div class="form-actions new-list-actions"><button type="button" class="new-list-cancel" data-cancel>Cancelar</button><button type="submit" class="btn primary" id="createNewListButton">Criar lista</button></div>' +
     '</form>', '');
 
@@ -560,6 +560,8 @@ function createListModal() {
   const confirmWarning = $('#confirmProductsWarning');
   const validateTextWarning = $('#validateTextWarning');
   const textInput = $('#newListText');
+  const nameInput = form.querySelector('[name="name"]');
+  const storeInput = form.querySelector('[name="storeId"]');
   const setCreateEnabled = enabled => { createButton.disabled = false; createButton.title = ''; if (enabled) confirmWarning.style.display = 'none'; };
   const textPanel = $('#textImportPanel'), photoPanel = $('#photoImportPanel'), audioPanel = $('#audioImportPanel'), importOptions = $('#listImportOptions');
   const validation = $('#listValidationPanel'), validationRows = $('#listValidationRows');
@@ -570,13 +572,36 @@ function createListModal() {
   const showProgress = message => { clearInterval(progressTimer); progressFinished = false; progressText.textContent = message; progress.style.display = 'block'; let value = 6; setProgress(value); progressTimer = setInterval(() => { value = Math.min(92, value + 1); setProgress(value); }, 450); };
   const finishProgress = () => { clearInterval(progressTimer); progressText.textContent = 'Análise concluída'; setProgress(100); progressFinished = true; };
   const hideProgress = () => { clearInterval(progressTimer); if (progressFinished) { progressFinished = false; setTimeout(() => { progress.style.display = 'none'; }, 700); } else progress.style.display = 'none'; };
+  const requireListBasics = () => {
+    if (!nameInput.value.trim()) { toast('Dê um nome à lista antes de adicionar produtos.'); nameInput.focus(); return false; }
+    if (!storeInput.value) { toast('Selecione um supermercado antes de adicionar produtos.'); storeInput.focus(); return false; }
+    return true;
+  };
+  const setEntryAvailability = () => {
+    const ready = !!nameInput.value.trim() && !!storeInput.value;
+    $('#toggleListImport').disabled = !ready;
+    $('#manualListItems').disabled = !ready;
+    if (!ready) { importOptions.style.display = 'none'; $('#toggleListImport').setAttribute('aria-expanded','false'); [textPanel,photoPanel,audioPanel].forEach(panel => panel.style.display = 'none'); }
+  };
+  nameInput.addEventListener('input', setEntryAvailability);
+  storeInput.addEventListener('change', setEntryAvailability);
+  setEntryAvailability();
+  const invalidateConfirmedItems = () => {
+    if (!confirmedItems.length) return;
+    confirmedItems = [];
+    importNeedsConfirmation = true;
+    const confirmButton = $('#confirmValidatedItems');
+    confirmButton.disabled = false; confirmButton.textContent = 'Confirmar produtos';
+    $('#listValidationHelp').textContent = 'Você alterou os itens. Confirme os produtos novamente; depois, clique em Criar lista para concluir.';
+    setCreateEnabled(false);
+  };
   const norm = value => String(value || '').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 
   $('#newListAddStore').addEventListener('click', () => { closeModal(); addStoreModal(createListModal); });
-  $('#toggleListImport').addEventListener('click', () => { const opening = importOptions.style.display === 'none'; importOptions.style.display = opening ? 'grid' : 'none'; $('#toggleListImport').setAttribute('aria-expanded', String(opening)); if (!opening) [textPanel,photoPanel,audioPanel].forEach(panel => panel.style.display = 'none'); });
-  $('#openTextImport').addEventListener('click', () => { photoPanel.style.display = 'none'; audioPanel.style.display = 'none'; textPanel.style.display = textPanel.style.display === 'none' ? 'block' : 'none'; validateTextWarning.style.display = 'none'; });
-  $('#openPhotoImport').addEventListener('click', () => { textPanel.style.display = 'none'; audioPanel.style.display = 'none'; photoPanel.style.display = photoPanel.style.display === 'none' ? 'block' : 'none'; validateTextWarning.style.display = 'none'; });
-  $('#openAudioImport').addEventListener('click', () => { textPanel.style.display = 'none'; photoPanel.style.display = 'none'; audioPanel.style.display = audioPanel.style.display === 'none' ? 'block' : 'none'; validateTextWarning.style.display = 'none'; });
+  $('#toggleListImport').addEventListener('click', () => { if (!requireListBasics()) return; const opening = importOptions.style.display === 'none'; importOptions.style.display = opening ? 'grid' : 'none'; $('#toggleListImport').setAttribute('aria-expanded', String(opening)); if (!opening) [textPanel,photoPanel,audioPanel].forEach(panel => panel.style.display = 'none'); });
+  $('#openTextImport').addEventListener('click', () => { if (!requireListBasics()) return; photoPanel.style.display = 'none'; audioPanel.style.display = 'none'; textPanel.style.display = textPanel.style.display === 'none' ? 'block' : 'none'; validateTextWarning.style.display = 'none'; });
+  $('#openPhotoImport').addEventListener('click', () => { if (!requireListBasics()) return; textPanel.style.display = 'none'; audioPanel.style.display = 'none'; photoPanel.style.display = photoPanel.style.display === 'none' ? 'block' : 'none'; validateTextWarning.style.display = 'none'; });
+  $('#openAudioImport').addEventListener('click', () => { if (!requireListBasics()) return; textPanel.style.display = 'none'; photoPanel.style.display = 'none'; audioPanel.style.display = audioPanel.style.display === 'none' ? 'block' : 'none'; validateTextWarning.style.display = 'none'; });
   const setSelectedAudio = file => { selectedAudio = file || null; $('#listAudioStatus').textContent = selectedAudio ? selectedAudio.name : 'Nenhum áudio selecionado.'; $('#readListAudio').disabled = !selectedAudio; importNeedsConfirmation = !!selectedAudio; confirmedItems = []; setCreateEnabled(!importNeedsConfirmation); confirmWarning.style.display = 'none'; validation.style.display = 'none'; };
   $('#listAudioInput').addEventListener('change', e => setSelectedAudio(e.target.files?.[0]));
   $('#startListRecording').addEventListener('click', async () => {
@@ -655,6 +680,7 @@ function createListModal() {
   }
 
   $('#validateTextList').addEventListener('click', async () => {
+    if (!requireListBasics()) return;
     const raw = textInput.value.trim();
     if (!raw) return toast('Cole ou digite os produtos primeiro.');
     importNeedsConfirmation = true;
@@ -691,6 +717,7 @@ function createListModal() {
   });
 
   $('#readListPhoto').addEventListener('click', async () => {
+    if (!requireListBasics()) return;
     if (!selectedPhoto) return toast('Escolha ou fotografe sua lista primeiro.');
     if (!window.SuperlistCloud?.analyzeListPhoto) return toast('A leitura por IA não está disponível no momento.');
     const button = $('#readListPhoto'); button.disabled = true; showProgress('A IA está transcrevendo sua lista...');
@@ -709,6 +736,7 @@ function createListModal() {
   });
 
   $('#readListAudio').addEventListener('click', async () => {
+    if (!requireListBasics()) return;
     if (!selectedAudio) return toast('Escolha ou grave um áudio primeiro.');
     if (!window.SuperlistCloud?.analyzeListAudio) return toast('A leitura por IA não está disponível no momento.');
     const button = $('#readListAudio'); button.disabled = true; showProgress('A IA está transcrevendo sua lista...');
@@ -731,6 +759,7 @@ function createListModal() {
   validationRows.addEventListener('change', e => {
     const tr = e.target.closest('[data-review-row]'); if (!tr) return;
     const row = reviewRows[Number(tr.dataset.reviewRow)]; if (!row) return;
+    invalidateConfirmedItems();
     const field = e.target.dataset.review;
     if (field === 'quantity') row.quantity = Number(e.target.value);
     else if (field === 'product') { row.productId = e.target.value; row.brand = ''; renderValidation(); }
@@ -740,12 +769,14 @@ function createListModal() {
   });
   validationRows.addEventListener('click', e => {
     const accept = e.target.closest('[data-accept-suggestion]');
-    if (accept) { const row = reviewRows[Number(accept.dataset.acceptSuggestion)]; if (row?.suggestedName) { row.name = row.suggestedName; row.hasCorrection = false; row.needsReview = false; renderValidation(); } return; }
+    if (accept) { invalidateConfirmedItems(); const row = reviewRows[Number(accept.dataset.acceptSuggestion)]; if (row?.suggestedName) { row.name = row.suggestedName; row.hasCorrection = false; row.needsReview = false; renderValidation(); } return; }
     const button = e.target.closest('[data-remove-review]'); if (!button) return;
+    invalidateConfirmedItems();
     reviewRows.splice(Number(button.dataset.removeReview), 1); renderValidation();
   });
 
   $('#confirmValidatedItems').addEventListener('click', () => {
+    if (!requireListBasics()) return;
     if (!reviewRows.length) return toast('Não há produtos para confirmar.');
     if (reviewRows.some(r => !r.name.trim() || !Number.isFinite(r.quantity) || r.quantity <= 0)) return toast('Revise os nomes e as quantidades.');
     confirmedItems = reviewRows.map(row => {
@@ -758,15 +789,18 @@ function createListModal() {
       }
       return { id:uid(), productId:product.id, name:product.name, category:product.category || 'Outros', unit:row.unit || product.unit || 'un', qty:row.quantity, brand, price:0, checked:false };
     });
-    validation.style.display = 'none';
+    validation.style.display = 'block';
     importNeedsConfirmation = false;
     setCreateEnabled(true);
     confirmWarning.style.display = 'none';
-    toast(confirmedItems.length + ' produto(s) confirmado(s).');
+    $('#listValidationHelp').textContent = 'Itens confirmados e mantidos na lista. Clique em Criar lista para concluir.';
+    const confirmButton = $('#confirmValidatedItems'); confirmButton.textContent = 'Produtos confirmados'; confirmButton.disabled = true;
+    toast(confirmedItems.length + ' produto(s) confirmado(s). Agora clique em Criar lista.');
   });
 
-  $('#manualListItems').addEventListener('click', () => { if (importNeedsConfirmation) return toast('Confirme ou descarte a importação antes de continuar.'); createListAndOpen([]); });
+  $('#manualListItems').addEventListener('click', () => { if (!requireListBasics()) return; if (importNeedsConfirmation) return toast('Confirme ou descarte a importação antes de continuar.'); createListAndOpen([]); });
   function createListAndOpen(items) {
+    if (!requireListBasics()) return;
     const name = form.elements.name.value.trim(), storeId = form.elements.storeId.value;
     if (!name) { form.elements.name.focus(); return toast('Informe o nome da lista.'); }
     if (!storeId) return toast('Selecione um supermercado.');
