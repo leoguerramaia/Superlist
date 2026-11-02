@@ -72,3 +72,5 @@ begin
   return target_id;
 end;
 $$;
+
+grant execute on function public.join_household(text) to authenticated;
