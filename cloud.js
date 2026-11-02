@@ -17,7 +17,10 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     const {data:members,error}=await client.from('household_members').select('household_id').eq('user_id',user.id).limit(1);
     if(error)throw error;
     if(members&&members.length){householdId=members[0].household_id;return householdId}
-    const {data:house,error:e1}=await client.from('households').insert({name:'Minha casa',owner_id:user.id}).select('id').single();if(e1)throw e1;
+    const inviteCode=String(user.user_metadata?.household_invite_code||'').trim().toUpperCase();
+    if(inviteCode){const {data,error:joinError}=await client.rpc('join_household',{invite_code_input:inviteCode});if(joinError)throw joinError;householdId=data;return householdId}
+    const familyName=String(user.user_metadata?.family_name||'').trim();
+    const {data:house,error:e1}=await client.from('households').insert({name:familyName||'Minha casa',owner_id:user.id}).select('id').single();if(e1)throw e1;
     const {error:e2}=await client.from('household_members').insert({household_id:house.id,user_id:user.id,role:'owner'});if(e2)throw e2;
     householdId=house.id;return householdId;
   }
