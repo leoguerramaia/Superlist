@@ -89,3 +89,17 @@
 .list-ai-progress .receipt-progress-top{display:grid;grid-template-columns:17px minmax(0,1fr) auto;gap:9px;align-items:center}
 .list-ai-progress .receipt-progress-track span{width:0;animation:none;transition:width .35s ease}
 @media(max-width:420px){.new-list-import-options{grid-template-columns:1fr}.new-list-import-options .btn{width:100%}}
+
+
+/* Ações enxutas para criar e importar listas */
+.new-list-primary-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.new-list-primary-actions .btn{min-height:42px;gap:8px}
+.new-list-primary-actions svg{width:16px;height:16px;flex:none}
+.new-list-methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0 12px}
+.new-list-methods .btn{min-height:42px;gap:7px;padding:9px 8px;font-size:11px}
+.new-list-methods svg,.new-list-audio-actions svg,.new-list-audio-panel>button svg{width:16px;height:16px;flex:none}
+.new-list-audio-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.new-list-audio-file{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.new-list-audio-panel .helper{display:block;margin-top:8px}
+.new-list-audio-panel>button{display:inline-flex;align-items:center;gap:8px}
+@media(max-width:420px){.new-list-primary-actions{grid-template-columns:1fr 1fr}.new-list-methods{grid-template-columns:1fr 1fr}.new-list-methods .btn:last-child{grid-column:1/-1}}
