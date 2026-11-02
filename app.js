@@ -1701,7 +1701,7 @@ function addCatalogProductToList() {
       $('#newBarcodePhotoInput').addEventListener('change',async event=>{
         const file=event.target.files?.[0];if(!file)return;
         barcodeCameraControls?.stop();
-        const status=$('#addBarcodeScanStatus');if(status){status.style.display='block';status.textContent='Lendo a foto com ZXing…';}
+        const status=$('#addBarcodeScanStatus');if(status){status.style.display='block';status.textContent='Lendo a foto com ZBar…';}
         try{const code=await readBarcodeFromImage(file);$('#addProductBarcode').value=code;if(status)status.textContent='Código lido: '+code+'; consultando catálogo…';toast('Código lido. Consultando catálogo…');await lookupBarcodeProduct();}
         catch(error){console.error(error);if(status)status.textContent=error.message||'Não foi possível ler esta foto.';toast(error.message||'Não foi possível ler esta foto.');}
         finally{event.target.value='';}
@@ -2805,137 +2805,201 @@ function isValidBarcodeGTIN(value) {
   return (10-sum%10)%10===Number(code.at(-1));
 }
 
-// O scanner usa ZXing no navegador e não chama IA para decodificar códigos de barras.
-async function loadQuaggaLibrary() {
-  if(window.Quagga?.init)return window.Quagga;
-  if(window.__superlistQuaggaPromise)return window.__superlistQuaggaPromise;
-  window.__superlistQuaggaPromise=new Promise((resolve,reject)=>{
-    const script=document.createElement('script');
-    script.src='https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js';
-    script.async=true;
-    script.onload=()=>window.Quagga?.init?resolve(window.Quagga):reject(new Error('O leitor Quagga2 não carregou corretamente.'));
-    script.onerror=()=>reject(new Error('Não foi possível carregar o leitor de código de barras.'));
-    document.head.appendChild(script);
-  });
-  return window.__superlistQuaggaPromise;
+// O scanner usa ZBar no navegador e não chama IA para decodificar códigos de barras.
+async function loadZBarLibrary() {
+  if (window.__superlistZBarPromise) return window.__superlistZBarPromise;
+  window.__superlistZBarPromise = import('https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/index.mjs')
+    .catch(error => {
+      window.__superlistZBarPromise = null;
+      console.error('Falha ao carregar ZBar:', error);
+      throw new Error('Não foi possível carregar o leitor ZBar. Verifique sua conexão e tente novamente.');
+    });
+  return window.__superlistZBarPromise;
 }
 
-function productBarcodeDecoderOptions() {
-  return {
-    locator:{patchSize:'medium',halfSample:false},
-    decoder:{readers:['ean_reader','ean_8_reader','upc_reader','i2of5_reader']},
-    locate:true
-  };
+function decodeZBarSymbols(symbols) {
+  for (const symbol of symbols || []) {
+    try {
+      const value = typeof symbol.decode === 'function' ? symbol.decode() : symbol.rawData;
+      const decoded = typeof value === 'string' ? value :
+        (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) ? new TextDecoder().decode(value) : String(value || '');
+      const code = normalizeBarcodeCode(decoded);
+      if (isValidBarcodeGTIN(code)) return code;
+    } catch (_) {}
+  }
+  return '';
 }
 
-// A câmera decodifica códigos lineares com Quagga2, um leitor diferente do ZXing.
 async function startLiveBarcodeScanner(video, onFound, onStatus) {
-  if(!navigator.mediaDevices?.getUserMedia)throw new Error('A câmera exige acesso HTTPS e permissão do navegador.');
-  const Quagga=await loadQuaggaLibrary();
-  const target=video?.parentElement;
-  if(!target)throw new Error('Área da câmera não encontrada.');
-  target.innerHTML='';
-  if(typeof onStatus==='function')onStatus('Aponte as barras para a câmera. Iniciando Quagga2…');
+  if (!navigator.mediaDevices?.getUserMedia) throw new Error('A câmera exige acesso HTTPS e permissão do navegador.');
+  const zbar = await loadZBarLibrary();
+  if (!zbar?.scanImageData) throw new Error('O leitor ZBar não ficou disponível.');
+  if (!video?.parentElement) throw new Error('Área da câmera não encontrada.');
 
-  const config={
-    ...productBarcodeDecoderOptions(),
-    inputStream:{
-      name:'SuperList barcode camera',
-      type:'LiveStream',
-      target,
-      constraints:{
-        facingMode:'environment',
-        width:{ideal:1280},
-        height:{ideal:720}
-      },
-      area:{top:'5%',right:'3%',left:'3%',bottom:'5%'}
-    },
-    frequency:12
-  };
-
-  let stopped=false;
-  let completed=false;
-  let detectedHandler;
-  let previousCode='';
-  let repeatCount=0;
-  let lastDetectionAt=0;
-  const stop=()=>{
-    if(stopped)return;
-    stopped=true;
-    Quagga.offDetected(detectedHandler);
-    try{Quagga.stop();}catch(_){}
-    target.innerHTML='';
-  };
-
-  await new Promise((resolve,reject)=>{
-    Quagga.init(config,error=>error?reject(error):resolve());
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
   });
+  let stopped = false, busy = false, previousCode = '', repeatCount = 0, timer = null;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) { stream.getTracks().forEach(track => track.stop()); throw new Error('Não foi possível iniciar o leitor da câmera.'); }
 
-  detectedHandler=result=>{
-    if(stopped||completed)return;
-    const code=normalizeBarcodeCode(result?.codeResult?.code);
-    if(!isValidBarcodeGTIN(code)){previousCode='';repeatCount=0;return;}
-    const now=Date.now();
-    if(code===previousCode&&now-lastDetectionAt<1200)repeatCount++;
-    else{previousCode=code;repeatCount=1;}
-    lastDetectionAt=now;
-    if(repeatCount<3){if(typeof onStatus==='function')onStatus('Código detectado. Mantenha as barras paradas…');return;}
-    completed=true;
-    stop();
-    if(typeof onFound==='function')onFound(code);
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    if (timer) clearInterval(timer);
+    stream.getTracks().forEach(track => track.stop());
+    if (video.srcObject === stream) video.srcObject = null;
   };
-  Quagga.onDetected(detectedHandler);
-  Quagga.start();
+  try {
+    video.setAttribute('playsinline', '');
+    video.playsInline = true;
+    video.muted = true;
+    video.autoplay = true;
+    video.style.width = '100%';
+    video.style.height = '100%';
+    video.style.objectFit = 'contain';
+    video.srcObject = stream;
+    await video.play();
+    if (!video.videoWidth) await new Promise(resolve => video.addEventListener('loadedmetadata', resolve, { once: true }));
+  } catch (_) {
+    stream.getTracks().forEach(track => track.stop());
+    throw new Error('Não foi possível iniciar a câmera. Confira a permissão do navegador e tente novamente.');
+  }
 
-  target.querySelectorAll('video').forEach(element=>{
-    element.setAttribute('playsinline','');
-    element.playsInline=true;
-    element.muted=true;
-    element.style.width='100%';
-    element.style.height='100%';
-    element.style.objectFit='contain';
-  });
-  return {stop};
+  if (typeof onStatus === 'function') onStatus('Aponte o código de barras para a câmera e mantenha-o centralizado.');
+  const scanFrame = async () => {
+    if (stopped || busy || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
+    busy = true;
+    try {
+      const scale = Math.min(1, 1100 / video.videoWidth);
+      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const code = decodeZBarSymbols(await zbar.scanImageData(ctx.getImageData(0, 0, canvas.width, canvas.height)));
+      if (!code) { previousCode = ''; repeatCount = 0; return; }
+      repeatCount = code === previousCode ? repeatCount + 1 : 1;
+      previousCode = code;
+      if (repeatCount < 3) {
+        if (typeof onStatus === 'function') onStatus('Código detectado. Mantenha as barras paradas para confirmar a leitura…');
+        return;
+      }
+      stop();
+      if (typeof onFound === 'function') onFound(code);
+    } catch (error) { console.warn('Erro ao ler um quadro da câmera:', error); }
+    finally { busy = false; }
+  };
+  timer = setInterval(scanFrame, 300);
+  scanFrame();
+  return { stop };
 }
 
 async function readBarcodeFromImage(file) {
-  if(!file||!file.type?.startsWith('image/'))throw new Error('Escolha uma foto válida do código de barras.');
-  const Quagga=await loadQuaggaLibrary();
-  const url=URL.createObjectURL(file);
-  try{
-    const image=await new Promise((resolve,reject)=>{
-      const element=new Image();
-      element.onload=()=>resolve(element);
-      element.onerror=()=>reject(new Error('Não foi possível abrir a foto.'));
-      element.src=url;
+  if (!file || !file.type?.startsWith('image/')) throw new Error('Escolha uma foto válida do código de barras.');
+  const zbar = await loadZBarLibrary();
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('Não foi possível abrir a foto.'));
+      element.src = url;
     });
-    const width=image.naturalWidth,height=image.naturalHeight;
-    const regions=[
-      [0,0,width,height],
-      [width*.06,height*.18,width*.88,height*.64],
-      [0,height*.45,width,height*.5]
-    ];
-    for(const [sx,sy,sw,sh] of regions){
-      const scale=Math.min(1,1800/Math.max(sw,sh));
-      const canvas=document.createElement('canvas');
-      canvas.width=Math.max(1,Math.round(sw*scale));
-      canvas.height=Math.max(1,Math.round(sh*scale));
-      const context=canvas.getContext('2d');
-      if(!context)continue;
-      context.drawImage(image,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
-      const source=canvas.toDataURL('image/jpeg',.94);
-      const result=await new Promise(resolve=>{
-        Quagga.decodeSingle({
-          ...productBarcodeDecoderOptions(),
-          src:source,
-          inputStream:{size:1800}
-        },resolve);
-      });
-      const code=normalizeBarcodeCode(result?.codeResult?.code);
-      if(isValidBarcodeGTIN(code))return code;
+    const width = image.naturalWidth, height = image.naturalHeight;
+    for (const [sx, sy, sw, sh] of [
+      [0, 0, width, height],
+      [width * .05, height * .2, width * .9, height * .6],
+      [0, height * .4, width, height * .55]
+    ]) {
+      const scale = Math.min(1, 1800 / Math.max(sw, sh));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(sw * scale));
+      canvas.height = Math.max(1, Math.round(sh * scale));
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) continue;
+      ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      const code = decodeZBarSymbols(await zbar.scanImageData(ctx.getImageData(0, 0, canvas.width, canvas.height)));
+      if (code) return code;
     }
-    throw new Error('Não consegui ler as barras nesta foto. Tente aproximar e manter o código bem iluminado.');
-  }finally{URL.revokeObjectURL(url);}
+    throw new Error('Não consegui ler as barras nesta foto. Aproxime o código, mantenha-o bem iluminado e tente novamente.');
+  } finally { URL.revokeObjectURL(url); }
+}
+
+function productUnitFromBarcodeData(value) {
+  const unit = String(value || '').toLocaleLowerCase('pt-BR').trim();
+  if (['kg','kgm','quilo','quilos'].includes(unit)) return 'kg';
+  if (['g','grm','grama','gramas'].includes(unit)) return 'g';
+  if (['l','ltr','litro','litros'].includes(unit)) return 'l';
+  if (['ml','mlt','mililitro','mililitros'].includes(unit)) return 'ml';
+  if (unit.includes('caixa') || unit === 'cx') return 'cx';
+  if (unit.includes('pacote') || unit === 'pct') return 'pct';
+  return 'un';
+}
+
+async function findProductByBarcode(value) {
+  const code = normalizeBarcodeCode(value);
+  if (!code) throw new Error('Informe um código de barras válido.');
+  const local = (db.products || []).find(p => normalizeBarcodeCode(p.barcode) === code && normalizeBarcodeCode(p.barcode));
+  if (local) return local;
+
+  let providerError = null;
+  try {
+    if (window.SuperlistCloud?.lookupProductByBarcode) {
+      const result = await window.SuperlistCloud.lookupProductByBarcode(code);
+      const record = result?.product;
+      const name = formatDisplayName(record?.name || '');
+      if (result?.found && name) {
+        const rawCategory = normalize(record.category || '');
+        const category = rawCategory ? (db.categories.find(value => rawCategory.includes(normalize(value)) || normalize(value).includes(rawCategory)) || inferProductCategory({ categories: rawCategory, product_name: name, brands: record.brand })) : inferProductCategory({ product_name: name, brands: record.brand });
+        const unit = productUnitFromBarcodeData(record.unit || record.packageUnit);
+        const parsedPackage = packageInfo(name, unit);
+        const amount = Number(record.packageQuantity);
+        const product = {
+          id: uid(), name, category, unit,
+          netAmount: Number.isFinite(amount) && amount > 0 ? amount : parsedPackage.amount,
+          netUnit: productUnitFromBarcodeData(record.packageUnit || unit),
+          barcode: code,
+          brand: formatDisplayName(record.brand || ''),
+          brands: record.brand ? [formatDisplayName(record.brand)] : [],
+          photo: String(record.imageUrl || ''),
+          photoPath: '',
+          active: true,
+          description: '',
+          barcodeSources: ['OSCBR']
+        };
+        db.products.push(product);
+        save();
+        return product;
+      }
+    }
+  } catch (error) {
+    providerError = error;
+    console.warn('Consulta OSCBR indisponível; tentando outra base:', error);
+  }
+
+  try {
+    const response = await fetch('https://world.openfoodfacts.org/api/v3/product/' + encodeURIComponent(code) + '?product_type=all&cc=br&lc=pt&tags_lc=pt&fields=product_name,product_name_en,generic_name,brands,categories,categories_hierarchy,quantity,product_type');
+    if (!response.ok) throw new Error('A base alternativa não respondeu.');
+    const result = await response.json();
+    const data = result?.product;
+    const name = formatDisplayName(data?.product_name || data?.product_name_en || data?.generic_name || '');
+    if (!name) { if (providerError) throw providerError; return null; }
+    const categoryText = normalize([data.categories || '', ...(data.categories_hierarchy || [])].join(' '));
+    const category = db.categories.find(value => categoryText.includes(normalize(value))) || 'Outros';
+    const brand = formatDisplayName(String(data.brands || '').split(',')[0] || '');
+    const product = {
+      id: uid(), name, category, unit: 'un', ...packageInfo(name, 'un'),
+      barcode: code, brand, photo: '', photoPath: '', active: true,
+      description: data.quantity || '', barcodeSources: ['Open Food Facts']
+    };
+    db.products.push(product);
+    save();
+    return product;
+  } catch (error) {
+    if (providerError) throw new Error(providerError.message || 'Não foi possível consultar a base de produtos.');
+    throw error;
+  }
 }
 
 async function findProductByBarcode(value) {
@@ -2964,7 +3028,7 @@ async function findProductByBarcode(value) {
   return product;
 }
 
-// A câmera decodifica o código no navegador com ZXing. Nenhuma IA participa da leitura.
+// A câmera decodifica o código no navegador com ZBar. Nenhuma IA participa da leitura.
 async function scanBarcode(itemId) {
   const item=currentList?.items.find(i=>String(i.id)===String(itemId));
   if(!item) return toast('Item não encontrado.');
@@ -2974,7 +3038,7 @@ async function scanBarcode(itemId) {
     '<div class="field"><label>Código de barras</label><input id="barcodeInput" inputmode="numeric" placeholder="Digite ou escaneie o código EAN"></div>' +
     '<div class="camera-box" id="cameraBox">Aponte a câmera para o código de barras</div>' +
     '<div class="camera-controls"><button type="button" class="btn secondary" id="startCamera">▣ Abrir câmera</button><button type="button" class="btn secondary" id="takeBarcodePhoto">📷 Fotografar código</button><button type="button" class="btn secondary" id="stopCamera">Parar câmera</button><button type="button" class="btn primary" id="lookupBarcode">Vincular código ao produto</button><input id="barcodePhotoInput" type="file" accept="image/*" capture="environment" hidden></div>' +
-    '<p id="barcodeScanStatus" class="helper">Aponte as barras para a câmera.</p>' + '<p class="helper">A leitura é feita no navegador pelo Quagga2. Nenhuma IA é usada.</p>',
+    '<p id="barcodeScanStatus" class="helper">Aponte as barras para a câmera.</p>' + '<p class="helper">A leitura é feita no navegador pelo ZBar. Nenhuma IA é usada.</p>',
     'SUPERLIST'
   );
 
@@ -2992,14 +3056,15 @@ async function scanBarcode(itemId) {
     button.disabled=true;button.textContent='Associando…';
     try{
       let product=db.products.find(p=>normalizeBarcodeCode(p.barcode)===code);
-      if(!product){
-        product=findOrCreateProduct(item);
-        product.barcode=code;
-      }else{
+      if(!product) product=await findProductByBarcode(code);
+      if(product){
         item.productId=product.id;
         item.name=product.name;
         item.category=product.category||'Outros';
         item.unit=product.unit||item.unit||'un';
+      }else{
+        product=findOrCreateProduct(item);
+        product.barcode=code;
       }
       stop();save();closeModal();renderShopping();
       toast('Código de barras associado ao produto.');
@@ -3028,7 +3093,7 @@ async function scanBarcode(itemId) {
   $('#barcodePhotoInput').addEventListener('change',async event=>{
     const file=event.target.files?.[0];if(!file)return;
     stop();
-    const status=$('#barcodeScanStatus');if(status)status.textContent='Lendo a foto com Quagga2…';
+    const status=$('#barcodeScanStatus');if(status)status.textContent='Lendo a foto com ZBar…';
     try{const code=await readBarcodeFromImage(file);$('#barcodeInput').value=code;if(status)status.textContent='Código lido: '+code;await associateCode(code);}
     catch(error){console.error(error);if(status)status.textContent=error.message||'Não foi possível ler esta foto.';toast(error.message||'Não foi possível ler esta foto.');}
     finally{event.target.value='';}
