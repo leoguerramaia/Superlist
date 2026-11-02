@@ -1609,7 +1609,7 @@ function importItemsIntoOpenList() {
 
   const parseText = value => parseShoppingText(value);
 
-  const importNorm = value => String(value || '').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+  const importNorm = value => String(value || '').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
   function suggestedImportProduct(row) {
     const query = importNorm(row.name);
     if (!query) return null;
