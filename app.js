@@ -740,8 +740,8 @@ function createListModal() {
           '<td><input data-review="quantity" type="number" min="0.01" step="0.01" value="' + row.quantity + '" aria-label="Quantidade"></td>' +
           '<td><select data-review="unit" aria-label="Unidade">' + ['un','kg','g','l','ml','cx','pct'].map(u => '<option value="' + u + '"' + (row.unit === u ? ' selected' : '') + '>' + u + '</option>').join('') + '</select></td>' +
           '<td><input data-review="name" value="' + esc(row.name) + '" aria-label="Produto">' + suggestion + '</td>' +
-          '<td><select data-review="product" aria-label="Associar ao catálogo"><option value="">Criar novo produto</option>' + db.products.map(p => '<option value="' + esc(p.id) + '"' + (row.productId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></td>' +
           '<td><select data-review="brand" aria-label="Marca opcional"><option value="">Sem marca</option>' + brands.map(b => '<option value="' + esc(b) + '"' + (norm(b) === norm(selectedBrand) ? ' selected' : '') + '>' + esc(b) + '</option>').join('') + '<option value="__new__"' + (hasNew ? ' selected' : '') + '>＋ Nova marca</option></select><input data-review="newBrand" value="' + (hasNew ? esc(selectedBrand) : '') + '" placeholder="Digite a nova marca" aria-label="Nova marca" style="display:' + (hasNew ? 'block' : 'none') + ';margin-top:6px;max-width:150px"></td>' +
+          '<td><select data-review="product" aria-label="Associar ao catálogo"><option value="">Criar novo produto</option>' + db.products.map(p => '<option value="' + esc(p.id) + '"' + (row.productId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></td>' +
           '<td><button type="button" data-remove-review="' + i + '" aria-label="Remover produto">×</button></td></tr>';
       }).join('') +
       '</tbody></table>';
