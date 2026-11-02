@@ -535,7 +535,7 @@ function createListModal() {
 
   openModal('Nova lista',
     '<form id="modalForm" class="new-list-form">' +
-      '<div class="field"><label>Nome</label><input name="name" required maxlength="80" placeholder="Ex.: Compra do mês"></div>' +
+      '<div class="field"><label>Nome</label><input name="name" required maxlength="80" placeholder="Ex.: Compra do mês"><small id="listNameDuplicateHint" class="helper list-entry-guidance" style="display:none">Já existe uma lista com esse nome. Altere o nome para continuar.</small></div>' +
       '<div class="field"><label>Supermercado</label><div class="form-grid new-list-store-row"><select name="storeId" required><option value="">Selecionar supermercado</option>' + storeOptions() + '</select><button type="button" class="btn secondary" id="newListAddStore">＋ Cadastrar</button></div></div>' +
       '<div class="field new-list-products"><label>Adicionar produtos</label><div class="form-grid new-list-primary-actions"><button type="button" class="btn secondary" id="toggleListImport" aria-expanded="false" aria-controls="listImportOptions" disabled><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/><path d="m16 16 2 2 4-4"/></svg>Importar lista</button><button type="button" class="btn secondary" id="manualListItems" disabled><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Adicionar manualmente</button></div><small id="listEntryHint" class="helper list-entry-guidance">Para incluir itens, preencha o nome da lista e selecione um supermercado.</small></div>' +
       '<section id="listImportOptions" class="new-list-methods" style="display:none" aria-label="Opções de importação"><button type="button" class="btn secondary" id="openTextImport"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8l4 4v12H8z"/><path d="M16 4v5h5M11 13h6M11 17h6"/><path d="M5 7H4v14h12"/></svg>Colar texto</button><button type="button" class="btn secondary" id="openPhotoImport"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-2h6l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="3"/></svg>Fotografar lista</button><button type="button" class="btn secondary" id="openAudioImport"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>Lista por áudio</button></section>' +
@@ -589,9 +589,10 @@ function createListModal() {
     const ready = !!nameInput.value.trim() && !!storeInput.value && !duplicate;
     $('#toggleListImport').disabled = !ready;
     $('#manualListItems').disabled = !ready;
+    $('#listNameDuplicateHint').style.display = duplicate ? 'block' : 'none';
     const hint = $('#listEntryHint');
-    hint.textContent = duplicate ? 'Já existe uma lista com esse nome. Altere o nome para continuar.' : 'Para incluir itens, preencha o nome da lista e selecione um supermercado.';
-    hint.style.display = ready ? 'none' : 'block';
+    hint.textContent = 'Para incluir itens, preencha o nome da lista e selecione um supermercado.';
+    hint.style.display = ready || duplicate ? 'none' : 'block';
     if (!ready) { importOptions.style.display = 'none'; $('#toggleListImport').setAttribute('aria-expanded','false'); [textPanel,photoPanel,audioPanel].forEach(panel => panel.style.display = 'none'); }
   };
   nameInput.addEventListener('input', setEntryAvailability);
