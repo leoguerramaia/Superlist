@@ -356,13 +356,14 @@ function renameListById(id) {
 }
 
 function deleteListById(id) {
-  const list=db.lists.find(item=>item.id===id);
-  if(!list)return;
+  const listId=String(id);
+  const list=db.lists.find(item=>String(item.id)===listId);
+  if(!list)return toast('Não foi possível localizar esta lista.');
   if(!confirm(`Excluir a lista "${list.name}"? Esta ação não pode ser desfeita.`))return;
-  db.lists=db.lists.filter(item=>item.id!==id);
-  db.prices=db.prices.filter(item=>item.listId!==id);
-  db.purchases=db.purchases.filter(item=>item.listId!==id);
-  if(currentList?.id===id)currentList=null;
+  db.lists=db.lists.filter(item=>String(item.id)!==listId);
+  db.prices=db.prices.filter(item=>String(item.listId)!==listId);
+  db.purchases=db.purchases.filter(item=>String(item.listId)!==listId);
+  if(currentList && String(currentList.id)===listId)currentList=null;
   save();
   if(!currentList && $('#page-shopping')?.classList.contains('active'))page('lists');
   toast('Lista excluída.');
