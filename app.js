@@ -2937,6 +2937,14 @@ function productUnitFromBarcodeData(value) {
   return 'un';
 }
 
+function normalizeBarcodeCategory(value) {
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase('pt-BR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 async function findProductByBarcode(value) {
   const code = normalizeBarcodeCode(value);
   if (!code) throw new Error('Informe um código de barras válido.');
@@ -2950,8 +2958,8 @@ async function findProductByBarcode(value) {
       const record = result?.product;
       const name = formatDisplayName(record?.name || '');
       if (result?.found && name) {
-        const rawCategory = normalize(record.category || '');
-        const category = rawCategory ? (db.categories.find(value => rawCategory.includes(normalize(value)) || normalize(value).includes(rawCategory)) || inferProductCategory({ categories: rawCategory, product_name: name, brands: record.brand })) : inferProductCategory({ product_name: name, brands: record.brand });
+        const rawCategory = normalizeBarcodeCategory(record.category || '');
+        const category = rawCategory ? (db.categories.find(value => rawCategory.includes(normalizeBarcodeCategory(value)) || normalizeBarcodeCategory(value).includes(rawCategory)) || inferProductCategory({ categories: rawCategory, product_name: name, brands: record.brand })) : inferProductCategory({ product_name: name, brands: record.brand });
         const unit = productUnitFromBarcodeData(record.unit || record.packageUnit);
         const parsedPackage = packageInfo(name, unit);
         const amount = Number(record.packageQuantity);
@@ -2985,8 +2993,8 @@ async function findProductByBarcode(value) {
     const data = result?.product;
     const name = formatDisplayName(data?.product_name || data?.product_name_en || data?.generic_name || '');
     if (!name) { if (providerError) throw providerError; return null; }
-    const categoryText = normalize([data.categories || '', ...(data.categories_hierarchy || [])].join(' '));
-    const category = db.categories.find(value => categoryText.includes(normalize(value))) || 'Outros';
+    const categoryText = normalizeBarcodeCategory([data.categories || '', ...(data.categories_hierarchy || [])].join(' '));
+    const category = db.categories.find(value => categoryText.includes(normalizeBarcodeCategory(value))) || 'Outros';
     const brand = formatDisplayName(String(data.brands || '').split(',')[0] || '');
     const product = {
       id: uid(), name, category, unit: 'un', ...packageInfo(name, 'un'),
@@ -3000,32 +3008,6 @@ async function findProductByBarcode(value) {
     if (providerError) throw new Error(providerError.message || 'Não foi possível consultar a base de produtos.');
     throw error;
   }
-}
-
-async function findProductByBarcode(value) {
-  const code = normalizeBarcodeCode(value);
-  if (!code) throw new Error('Informe um código de barras válido.');
-  const local = (db.products || []).find(p => normalizeBarcodeCode(p.barcode) === code && normalizeBarcodeCode(p.barcode));
-  if (local) return local;
-
-  const response = await fetch('https://world.openfoodfacts.org/api/v3/product/' + encodeURIComponent(code) + '?product_type=all&cc=br&lc=pt&tags_lc=pt&fields=product_name,product_name_en,generic_name,brands,categories,categories_hierarchy,quantity,product_type');
-  if (!response.ok) throw new Error('Não foi possível consultar o catálogo de produtos. Tente novamente ou cadastre manualmente.');
-  const result = await response.json();
-  const data = result?.product;
-  const name = formatDisplayName(data?.product_name || data?.product_name_en || data?.generic_name || '');
-  if (!name) return null;
-
-  const categoryText = normalize([data.categories || '', ...(data.categories_hierarchy || [])].join(' '));
-  const category = db.categories.find(value => categoryText.includes(normalize(value))) || 'Outros';
-  const brand = formatDisplayName(String(data.brands || '').split(',')[0] || '');
-  const product = {
-    id: uid(), name, category, unit: 'un', ...packageInfo(name, 'un'),
-    barcode: code, brand, photo: '', photoPath: '', active: true,
-    description: data.quantity || '', barcodeSources: ['Open Food Facts']
-  };
-  db.products.push(product);
-  save();
-  return product;
 }
 
 // A câmera decodifica o código no navegador com ZBar. Nenhuma IA participa da leitura.
