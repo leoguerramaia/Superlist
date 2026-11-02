@@ -177,6 +177,29 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     return data;
   }
 
+  async function analyzeListAudio(file) {
+    if (!client) throw new Error('Supabase não está configurado.');
+    const { data: { session } } = await client.auth.getSession();
+    if (!session?.access_token) throw new Error('Entre na sua conta antes de importar um áudio.');
+    if (!file || !file.type?.startsWith('audio/')) throw new Error('Selecione um arquivo de áudio válido.');
+    if (file.size > 12 * 1024 * 1024) throw new Error('O áudio excede 12 MB. Escolha um arquivo menor.');
+    const audio_base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => { const value = String(reader.result || ''); const comma = value.indexOf(','); resolve(comma >= 0 ? value.slice(comma + 1) : value); };
+      reader.onerror = () => reject(new Error('Não foi possível ler o áudio selecionado.'));
+      reader.readAsDataURL(file);
+    });
+    const { data, error } = await client.functions.invoke('analyze-receipt', {
+      body: { mode: 'audio-list', audio_base64, mime_type: file.type }
+    });
+    if (error) {
+      let detail = error.message || 'Falha ao transcrever o áudio.';
+      try { const context = error.context; if (context && typeof context.json === 'function') { const body = await context.json(); if (body?.error) detail = body.error; } } catch (_) {}
+      throw new Error(detail);
+    }
+    if (!data || !Array.isArray(data.items)) throw new Error('A IA retornou uma resposta inesperada.');
+    return data;
+  }
   async function boot(appApi){
     app=appApi;
     if(!configured()){emit('Supabase não configurado','pending');return false}
@@ -187,5 +210,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
     return true;
   }
-  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeBarcode,adminRequest,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,adminRequest,onStatus(fn){callback=fn},loadIntoApp};
 })();
