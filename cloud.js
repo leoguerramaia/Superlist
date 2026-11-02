@@ -116,6 +116,28 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     return {path,url:data.publicUrl+`?v=${Date.now()}`};
   }
 
+  async function uploadProductPhoto(file, productId, brandId){
+    if(!client||!householdId) throw new Error('Entre em uma família para enviar a foto da marca.');
+    if(!file||!['image/jpeg','image/png','image/webp'].includes(file.type)) throw new Error('Selecione uma foto JPG, PNG ou WebP.');
+    if(file.size>5*1024*1024) throw new Error('A foto deve ter no máximo 5 MB.');
+    const {data:{user},error:userError}=await client.auth.getUser();
+    if(userError) throw userError;
+    if(!user) throw new Error('Faça login novamente.');
+    const ext=({'image/jpeg':'jpg','image/png':'png','image/webp':'webp'})[file.type];
+    const safePart=value=>String(value||'item').replace(/[^a-z0-9_-]/gi,'_').slice(0,80);
+    const path=`${householdId}/${safePart(productId)}/${safePart(brandId)}-${Date.now()}.${ext}`;
+    const {error}=await client.storage.from('produtos').upload(path,file,{upsert:false,contentType:file.type,cacheControl:'3600'});
+    if(error) throw error;
+    return {path};
+  }
+  async function getProductPhotoUrl(path){
+    if(!client||!householdId) throw new Error('Entre em uma família para ver as fotos.');
+    const safePath=String(path||'');
+    if(!safePath.startsWith(`${householdId}/`)) throw new Error('A foto não pertence à família atual.');
+    const {data,error}=await client.storage.from('produtos').createSignedUrl(safePath,3600);
+    if(error) throw error;
+    return data?.signedUrl||'';
+  }
   async function adminRequest(action, payload={}){
     if(!client)throw new Error('Supabase não está conectado.');
     const {data,error}=await client.functions.invoke('admin-panel',{body:{action,...payload}});
@@ -234,5 +256,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     return data;
   }
 
-  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,uploadStorePhoto,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,lookupProductByBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,uploadStorePhoto,uploadProductPhoto,getProductPhotoUrl,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,lookupProductByBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
 })();
