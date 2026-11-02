@@ -215,5 +215,19 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
     return true;
   }
+  async function analyzeReceipt(file, products=[]) { return analyzeImage(file, 'receipt', products); }
+  async function lookupProductByBarcode(gtin) {
+    if (!client) throw new Error('Supabase não está configurado.');
+    const { data: { session } } = await client.auth.getSession();
+    if (!session?.access_token) throw new Error('Entre na sua conta antes de consultar o código de barras.');
+    const { data, error } = await client.functions.invoke('lookup-product', { body: { gtin: String(gtin || '') } });
+    if (error) {
+      let detail = error.message || 'Falha ao consultar o produto.';
+      try { const body = await error.context?.json?.(); if (body?.error) detail = body.error; } catch (_) {}
+      throw new Error(detail);
+    }
+    return data;
+  }
+
   window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,uploadStorePhoto,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,lookupProductByBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
 })();
