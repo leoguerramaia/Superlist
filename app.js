@@ -2838,9 +2838,10 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
 
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
-    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
   });
-  let stopped = false, busy = false, previousCode = '', repeatCount = 0, timer = null;
+  let stopped = false, busy = false, timer = null, frameCount = 0;
+  const recentReadings = [];
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) { stream.getTracks().forEach(track => track.stop()); throw new Error('Não foi possível iniciar o leitor da câmera.'); }
@@ -2868,21 +2869,42 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
     throw new Error('Não foi possível iniciar a câmera. Confira a permissão do navegador e tente novamente.');
   }
 
-  if (typeof onStatus === 'function') onStatus('Aponte o código de barras para a câmera e mantenha-o centralizado.');
+  if (typeof onStatus === 'function') onStatus('Aponte o código para a câmera, aproxime-o e mantenha as barras nítidas.');
   const scanFrame = async () => {
     if (stopped || busy || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
     busy = true;
+    frameCount++;
+    let code = '';
     try {
-      const scale = Math.min(1, 1100 / video.videoWidth);
-      canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-      canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const code = decodeZBarSymbols(await zbar.scanImageData(ctx.getImageData(0, 0, canvas.width, canvas.height)));
-      if (!code) { previousCode = ''; repeatCount = 0; return; }
-      repeatCount = code === previousCode ? repeatCount + 1 : 1;
-      previousCode = code;
-      if (repeatCount < 3) {
-        if (typeof onStatus === 'function') onStatus('Código detectado. Mantenha as barras paradas para confirmar a leitura…');
+      const width = video.videoWidth, height = video.videoHeight;
+      const regions = [
+        [0, 0, 1, 1],
+        [0.05, 0.18, 0.9, 0.64],
+        [0.12, 0.28, 0.76, 0.5]
+      ];
+      for (const [rx, ry, rw, rh] of regions) {
+        const sx = Math.round(width * rx), sy = Math.round(height * ry);
+        const sw = Math.max(1, Math.round(width * rw)), sh = Math.max(1, Math.round(height * rh));
+        const scale = Math.min(1, 1800 / Math.max(sw, sh));
+        canvas.width = Math.max(1, Math.round(sw * scale));
+        canvas.height = Math.max(1, Math.round(sh * scale));
+        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        code = decodeZBarSymbols(await zbar.scanImageData(ctx.getImageData(0, 0, canvas.width, canvas.height)));
+        if (code) break;
+      }
+
+      recentReadings.push(code);
+      if (recentReadings.length > 5) recentReadings.shift();
+      if (!code) {
+        if (frameCount % 12 === 0 && typeof onStatus === 'function') {
+          onStatus('Aproxime o código, centralize as barras e evite reflexos ou movimento.');
+        }
+        return;
+      }
+
+      const confirmations = recentReadings.filter(value => value === code).length;
+      if (confirmations < 3) {
+        if (typeof onStatus === 'function') onStatus('Código detectado. Mantendo a câmera estável para confirmar…');
         return;
       }
       stop();
@@ -2890,7 +2912,7 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
     } catch (error) { console.warn('Erro ao ler um quadro da câmera:', error); }
     finally { busy = false; }
   };
-  timer = setInterval(scanFrame, 300);
+  timer = setInterval(scanFrame, 350);
   scanFrame();
   return { stop };
 }
