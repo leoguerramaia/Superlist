@@ -2912,7 +2912,9 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
       const width = video.videoWidth, height = video.videoHeight;
       canvas.width = Math.min(width, 1280);
       canvas.height = Math.max(1, Math.round(height * canvas.width / width));
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const sx=Math.round(width*0.05), sy=Math.round(height*0.18), sw=Math.max(1,Math.round(width*0.9)), sh=Math.max(1,Math.round(height*0.64));
+      canvas.width=Math.min(sw,1600); canvas.height=Math.max(1,Math.round(sh*canvas.width/sw));
+      ctx.drawImage(video,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82));
       if (!blob) throw new Error('Não foi possível capturar o quadro da câmera.');
       const image = new File([blob], 'barcode-frame.jpg', { type: 'image/jpeg' });
@@ -2937,10 +2939,32 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
 async function readBarcodeFromImage(file) {
   if (!file || (file.type && !file.type.startsWith('image/'))) throw new Error('Escolha uma foto válida do código de barras.');
   if (!window.SuperlistCloud?.analyzeBarcode) throw new Error('A leitura por IA não está disponível.');
-  const result = await window.SuperlistCloud.analyzeBarcode({ image: file });
-  const code = normalizeBarcodeCode(result?.ean);
-  if (!isValidBarcodeGTIN(code)) throw new Error('A IA não conseguiu ler um EAN válido. Fotografe as barras de perto, sem reflexo.');
-  return code;
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('Não foi possível abrir a foto.'));
+      element.src = url;
+    });
+    const width = image.naturalWidth, height = image.naturalHeight;
+    const regions = [[0,0,1,1],[0.04,0.2,0.92,0.6],[0.12,0.28,0.76,0.44],[0,0.36,1,0.48]];
+    for (const [rx,ry,rw,rh] of regions) {
+      const sx=Math.round(width*rx), sy=Math.round(height*ry), sw=Math.max(1,Math.round(width*rw)), sh=Math.max(1,Math.round(height*rh));
+      const scale=Math.min(1,2200/Math.max(sw,sh));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(sw*scale)); canvas.height=Math.max(1,Math.round(sh*scale));
+      const ctx=canvas.getContext('2d'); if(!ctx) continue;
+      ctx.drawImage(image,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
+      const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.92));
+      if(!blob) continue;
+      const cropped=new File([blob],'barcode-crop.jpg',{type:'image/jpeg'});
+      const result=await window.SuperlistCloud.analyzeBarcode({image:cropped});
+      const code=normalizeBarcodeCode(result?.ean);
+      if(isValidBarcodeGTIN(code)) return code;
+    }
+    throw new Error('A IA não leu um EAN válido. Envie uma foto aproximada, nítida e sem reflexos, com as barras e os números visíveis.');
+  } finally { URL.revokeObjectURL(url); }
 }
 
 function productUnitFromBarcodeData(value) {
