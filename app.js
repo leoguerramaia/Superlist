@@ -344,7 +344,7 @@ function renderLists() {
 }
 
 function renameListById(id) {
-  const list=db.lists.find(item=>item.id===id);
+  const list=db.lists.find(item=>String(item.id)===String(id));
   if(!list)return;
   openModal('Renomear lista', `<form id="renameListCardForm"><div class="field"><label>Nome da lista</label><input name="name" maxlength="80" required value="${esc(list.name)}"></div><div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button class="btn primary">Salvar nome</button></div></form>`);
   $('#renameListCardForm').addEventListener('submit',e=>{
@@ -1095,7 +1095,7 @@ function addCategory() {
   });
 }
 function openList(id) {
-  currentList=db.lists.find(l=>l.id===id);
+  currentList=db.lists.find(l=>String(l.id)===String(id));
   if(!currentList)return;
   page('shopping');
   renderShopping();
@@ -2863,12 +2863,12 @@ function init() {
   renderAll();
   $('#renameCurrentList')?.addEventListener('click',event=>{event.stopPropagation();renameCurrentList();});
   $('#deleteCurrentList')?.addEventListener('click',event=>{event.stopPropagation();deleteCurrentList();});
-  $('#allLists')?.addEventListener('click',event=>{
-    const rename=event.target.closest('[data-rename-list]');
+  document.addEventListener('click',event=>{
+    const rename=event.target instanceof Element ? event.target.closest('[data-rename-list]') : null;
     if(rename){event.preventDefault();event.stopPropagation();renameListById(rename.dataset.renameList);return;}
-    const remove=event.target.closest('[data-delete-list]');
+    const remove=event.target instanceof Element ? event.target.closest('[data-delete-list]') : null;
     if(remove){event.preventDefault();event.stopPropagation();deleteListById(remove.dataset.deleteList);}
-  });
+  },true);
   $('#adminRefresh')?.addEventListener('click',loadAdminDashboard);
   $('#saveAdminProviderOrder')?.addEventListener('click',saveAdminProviderOrder);
   $('#adminUserSearch')?.addEventListener('input',renderAdminUsers);
