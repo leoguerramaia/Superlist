@@ -1677,7 +1677,7 @@ function addCatalogProductToList() {
     } else {
       area.innerHTML = '<div class="field"><label>Código de barras (EAN/GTIN)</label><input id="addProductBarcode" inputmode="numeric" placeholder="Digite ou escaneie o código"></div>' +
         '<div class="form-actions"><button type="button" class="btn secondary" id="scanNewProductBarcode">▣ Abrir câmera</button><button type="button" class="btn primary" id="lookupNewProductBarcode">Consultar catálogo</button></div>' +
-        '<div id="addBarcodeCamera" class="camera-box" style="display:none"></div>' +
+        '<div id="addBarcodeCamera" class="camera-box" style="display:none"></div>' + '<p id="addBarcodeScanStatus" class="helper" style="display:none"></p>' +
         '<div id="unknownBarcodeProduct" class="field" style="display:none"><p class="helper">O código foi lido, mas não encontramos o produto no catálogo. Você pode cadastrá-lo manualmente.</p><label for="unknownBarcodeName">Nome do produto</label><input id="unknownBarcodeName" placeholder="Ex.: Café torrado e moído"><button type="button" class="btn secondary" id="createProductFromBarcode">＋ Cadastrar e adicionar</button></div>';
 
       let barcodeCameraControls=null;
@@ -1702,10 +1702,12 @@ function addCatalogProductToList() {
           box.style.display='block';box.innerHTML='';
           const video=document.createElement('video');video.style.width='100%';video.style.height='100%';video.style.objectFit='contain';box.appendChild(video);
           button.disabled=true;button.textContent='Abrindo câmera…';
+          const status=$('#addBarcodeScanStatus');if(status)status.style.display='block';
           barcodeCameraControls=await startLiveBarcodeScanner(video,code=>{
             $('#addProductBarcode').value=code;box.textContent='Código lido: '+code;
+            if(status)status.textContent='Código lido: '+code+'; consultando catálogo…';
             toast('Código lido. Consultando catálogo…');lookupBarcodeProduct();
-          });
+          },message=>{if(status)status.textContent=message;});
           button.textContent='Câmera aberta';
         }catch(error){console.error(error);box.style.display='none';toast(error.message||'Não foi possível iniciar a câmera.');button.textContent='Abrir câmera';}
         finally{button.disabled=false;}
@@ -2860,7 +2862,7 @@ async function scanBarcode(itemId) {
     '<div class="field"><label>Código de barras</label><input id="barcodeInput" inputmode="numeric" placeholder="Digite ou escaneie o código EAN"></div>' +
     '<div class="camera-box" id="cameraBox">Aponte a câmera para o código de barras</div>' +
     '<div class="camera-controls"><button type="button" class="btn secondary" id="startCamera">▣ Abrir câmera</button><button type="button" class="btn secondary" id="stopCamera">Parar câmera</button><button type="button" class="btn primary" id="lookupBarcode">Vincular código ao produto</button></div>' +
-    '<p class="helper">A leitura é feita no navegador pela biblioteca ZXing. Nenhuma IA é usada.</p>',
+    '<p id="barcodeScanStatus" class="helper">Aponte as barras para a câmera.</p>' + '<p class="helper">A leitura é feita no navegador pela biblioteca ZXing. Nenhuma IA é usada.</p>',
     'SUPERLIST'
   );
 
@@ -2900,8 +2902,9 @@ async function scanBarcode(itemId) {
       video.style.width='100%';video.style.height='100%';video.style.objectFit='contain';box.appendChild(video);
       controls=await startLiveBarcodeScanner(video,code=>{
         $('#barcodeInput').value=code;box.textContent='Código lido: '+code;
+        const status=$('#barcodeScanStatus');if(status)status.textContent='Código lido: '+code;
         toast('Código lido.');associateCode(code);
-      });
+      },message=>{const status=$('#barcodeScanStatus');if(status)status.textContent=message;});
       button.textContent='Câmera aberta';toast('Centralize as barras no quadro.');
     }catch(error){console.error(error);box.textContent='Não foi possível abrir a câmera.';toast(error.message||'Falha ao abrir a câmera.');button.textContent='Abrir câmera';}
     finally{button.disabled=false;}
