@@ -116,6 +116,54 @@ function formatDisplayName(value) {
   ).join(' ');
 }
 
+function parseShoppingText(input) {
+  const slash = String.fromCharCode(92);
+  const unitPattern = '(kg|quilo(?:s)?|g|gramas?|l|litros?|ml|un(?:idades?)?|dúzias?|duzias?|pacotes?|pct|caixas?|cx|garrafas?|frascos?|pencas?)?';
+  const measurePattern = new RegExp('^(' + slash + 'd+(?:[,.]' + slash + 'd+)?)' + slash + 's*' + unitPattern + slash + 's*(.*)$', 'i');
+  const separatorPattern = new RegExp('^(.*?)' + slash + 's*(?:–|—|' + slash + 's-' + slash + 's|:)' + slash + 's*(.+)$');
+  const splitPattern = new RegExp(slash + 'r?' + slash + 'n|;|,(?!' + slash + 's*' + slash + 'd)', 'g');
+  const numberValue = value => Number(String(value || '1').replace(',', '.'));
+  const normalizeUnit = value => String(value || '').toLocaleLowerCase('pt-BR').normalize('NFD').replace(new RegExp('[' + String.fromCharCode(768) + '-' + String.fromCharCode(879) + ']', 'g'), '');
+  const unitCode = value => {
+    const unit = normalizeUnit(value);
+    if (unit === 'kg' || unit.startsWith('quilo')) return 'kg';
+    if (unit === 'g' || unit.startsWith('gram')) return 'g';
+    if (unit === 'l' || unit.startsWith('litro')) return 'l';
+    if (unit === 'ml') return 'ml';
+    if (unit.startsWith('pacote') || unit === 'pct') return 'pct';
+    if (unit.startsWith('caixa') || unit === 'cx') return 'cx';
+    return 'un';
+  };
+  const notePattern = new RegExp(slash + '(([^)]*)' + slash + ')');
+  const noteMeasurePattern = new RegExp('(' + slash + 'd+(?:[,.]' + slash + 'd+)?)' + slash + 's*(kg|g|l|ml)' + slash + 'b', 'i');
+  const noteUnitsPattern = new RegExp('(' + slash + 'd+(?:[,.]' + slash + 'd+)?)' + slash + 's*(?:unidades?|un)' + slash + 'b', 'i');
+  const lineStartNumber = new RegExp('^' + slash + 's*' + slash + 'd');
+  const bulletPrefix = new RegExp('^[•*]' + slash + 's*');
+  const dashPrefix = new RegExp('^-' + slash + 's*');
+  return String(input || '').split(splitPattern).map(line => line.trim().replace(bulletPrefix, '').replace(dashPrefix, '')).filter(Boolean).map(line => {
+    const separated = line.match(separatorPattern);
+    const namePart = separated ? separated[1].trim() : '';
+    const amountPart = separated ? separated[2].trim() : line;
+    const measure = amountPart.match(measurePattern);
+    if (!measure || (!separated && !lineStartNumber.test(amountPart))) return { name:line, quantity:1, unit:'un', brand:'' };
+    let name = namePart || String(measure[3] || '').replace(new RegExp('^de' + slash + 's+', 'i'), '').trim();
+    if (!name) name = line;
+    let quantity = numberValue(measure[1]);
+    const rawUnit = normalizeUnit(measure[2]);
+    const note = (measure[3] || '').match(notePattern);
+    const noteText = note ? note[1] : '';
+    const noteMeasure = noteText.match(noteMeasurePattern);
+    const noteUnits = noteText.match(noteUnitsPattern);
+    let unit = unitCode(rawUnit);
+    if (rawUnit.startsWith('duzia')) { quantity = noteUnits ? numberValue(noteUnits[1]) : quantity * 12; unit = 'un'; }
+    else if (rawUnit.startsWith('penca') && noteMeasure && noteMeasure[2].toLowerCase() === 'kg') { quantity = numberValue(noteMeasure[1]); unit = 'kg'; }
+    else if (['pacote','pct','caixa','cx','garrafa','frasco'].some(prefix => rawUnit.startsWith(prefix)) && noteMeasure) {
+      const size = noteMeasure[1].replace(',', '.') + ' ' + noteMeasure[2].toLowerCase();
+      if (!name.toLocaleLowerCase('pt-BR').includes(size.toLocaleLowerCase('pt-BR'))) name += ' ' + size;
+    }
+    return { name, quantity:Number.isFinite(quantity) && quantity > 0 ? quantity : 1, unit, brand:'' };
+  });
+}
 function normalizeProductNames(data) {
   if (!data || typeof data !== 'object') return data;
   data.products ||= [];
@@ -695,18 +743,7 @@ function createListModal() {
     if (!requireListBasics()) return;
     const raw = textInput.value.trim();
     if (!raw) return toast('Cole ou digite os produtos primeiro.');
-    const rows = raw.split(/\n|,/).map(line => line.trim()).filter(Boolean).map(line => {
-      let quantity = 1, unit = 'un', name = line;
-      const match = line.match(/^(\d+(?:[,.]\d+)?)\s*(kg|quilo[s]?|g|gramas?|l|litros?|ml|un(?:idades?)?|x)?\s+(?:de\s+)?(.+)$/i);
-      if (match) {
-        quantity = Number(match[1].replace(',', '.'));
-        const u = (match[2] || '').toLowerCase(); name = match[3].trim();
-        if (/kg|quilo/.test(u)) unit = 'kg'; else if (u === 'g' || u.startsWith('gram')) unit = 'g';
-        else if (u === 'l' || u.startsWith('litro')) unit = 'l'; else if (u === 'ml') unit = 'ml';
-        else if (u.startsWith('un') || u === 'x') unit = 'un';
-      }
-      return { name, quantity, unit };
-    });
+    const rows = parseShoppingText(raw);
     if (!rows.length) return toast('Cole ou digite ao menos um produto.');
     textNeedsValidation = false;
     validateTextWarning.style.display = 'none';
@@ -1559,18 +1596,7 @@ function importItemsIntoOpenList() {
   tabButtons[1].addEventListener('click', () => showPanel(photoPanel));
   tabButtons[2].addEventListener('click', () => showPanel(audioPanel));
 
-  const parseText = value => value.split(/\n|,/).map(line => line.trim()).filter(Boolean).map(line => {
-    let quantity = 1, unit = 'un', name = line;
-    const match = line.match(/^(\d+(?:[,.]\d+)?)\s*(kg|quilo[s]?|g|gramas?|l|litros?|ml|un(?:idades?)?|x)?\s+(?:de\s+)?(.+)$/i);
-    if (match) {
-      quantity = Number(match[1].replace(',','.'));
-      const u = (match[2] || '').toLowerCase(); name = match[3].trim();
-      if (/kg|quilo/.test(u)) unit = 'kg'; else if (u === 'g' || u.startsWith('gram')) unit = 'g';
-      else if (u === 'l' || u.startsWith('litro')) unit = 'l'; else if (u === 'ml') unit = 'ml';
-      else if (u.startsWith('un') || u === 'x') unit = 'un';
-    }
-    return { name, quantity, unit };
-  });
+  const parseText = value => parseShoppingText(value);
 
   function renderReview() {
     rowsWrap.innerHTML = rows.length ? '<table class="receipt-items-table"><thead><tr><th>Produto</th><th>Qtd.</th><th>Un.</th><th>Marca</th><th></th></tr></thead><tbody>' +
