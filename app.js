@@ -2026,7 +2026,7 @@ function renderShopping() {
               <small>
                 ${unitLabel(i.unit)}
                 ${i.productId?'· cadastrado':'· revisar produto'}
-                ${i.estimate?' · previsão '+money(i.estimate):''}
+                ${(()=>{const last=i.productId?latestPrice(i.productId,l.storeId):null;if(last)return ' · último preço cadastrado '+money(last.price)+(last.date?' · '+dateBR(last.date):'');return i.estimate?' · previsão '+money(i.estimate):'';})()}
                 ${(()=>{
                   let p=db.products.find(p=>p.id===i.productId);
                   return p&&p.netAmount>1?' · embalagem '+p.netAmount+' '+p.netUnit:'';
