@@ -467,8 +467,19 @@ function openStoreDetails(storeId) {
   const prices=db.prices.filter(item=>String(item.storeId)===String(store.id)).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const location=[store.city,store.state].filter(Boolean).join(' — ');
   const legacyAddress=!location&&!store.unitName?store.address||'Não informado':'';
-  const listContent=lists.length?lists.map(list=>`<article class="store-detail-list"><div><strong>${esc(list.name)}</strong><small>${dateBR(list.created)} · ${(list.items||[]).length} produtos · ${list.done?'Concluída':'Em andamento'}</small></div><strong>${money(listTotal(list))}</strong></article>`).join(''):'<p class="muted">Nenhuma lista vinculada a este supermercado.</p>';
-  const priceContent=prices.length?`<div class="store-detail-prices">${prices.map(item=>`<article class="store-detail-price"><div><strong>${esc(item.productName||'Produto')}</strong>${item.brand?`<small>${esc(item.brand)}</small>`:''}</div><span>${dateBR(item.date)}</span><strong>${money(item.price)} <small>/ ${esc(unitLabel(item.unit))}</small></strong></article>`).join('')}</div>`:'<p class="muted">Nenhum preço registrado neste supermercado.</p>';
+  const productGroups=new Map();
+  prices.forEach(item=>{
+    const name=String(item.productName||'Produto');
+    const key=String(item.productId||name.toLocaleLowerCase());
+    if(!productGroups.has(key))productGroups.set(key,[]);
+    productGroups.get(key).push(item);
+  });
+  const products=[...productGroups.values()].map(records=>({
+    name:records[0].productName||'Produto',
+    records:records.sort((a,b)=>(b.date||'').localeCompare(a.date||''))
+  })).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR'));
+  const listContent=lists.length?lists.map(list=>`<article class="store-detail-list" data-store-list><div><strong>${esc(list.name)}</strong><small>${dateBR(list.created)} · ${(list.items||[]).length} produtos · ${list.done?'Concluída':'Em andamento'}</small></div><strong>${money(listTotal(list))}</strong></article>`).join(''):'<p class="muted">Nenhuma lista vinculada a este supermercado.</p>';
+  const productContent=products.length?products.map(product=>`<article class="store-detail-product" data-store-product><div class="store-detail-product-head"><div><strong>${esc(product.name)}</strong><small>${product.records.length} ${product.records.length===1?'preço registrado':'preços registrados'}</small></div><strong>${money(product.records[0].price)} <small>/ ${esc(unitLabel(product.records[0].unit))}</small></strong></div><details class="store-detail-history"><summary>Ver preços registrados</summary>${product.records.map(item=>`<div class="store-detail-price"><div><span>${dateBR(item.date)}</span>${item.brand?`<small>${esc(item.brand)}</small>`:''}</div><strong>${money(item.price)} <small>/ ${esc(unitLabel(item.unit))}</small></strong></div>`).join('')}</details></article>`).join(''):'<p class="muted">Nenhum produto com preço registrado neste supermercado.</p>';
   openModal(store.name,`<div class="store-detail">
     <div class="store-detail-profile">
       ${store.photo?`<img class="store-detail-photo" src="${esc(store.photo)}" alt="Foto de ${esc(store.name)}">`:'<div class="store-detail-photo-placeholder">⌖</div>'}
@@ -481,10 +492,42 @@ function openStoreDetails(storeId) {
       <div><dt>Nome da unidade</dt><dd>${esc(store.unitName||'Não informado')}</dd></div>
       ${legacyAddress?`<div><dt>Endereço salvo anteriormente</dt><dd>${esc(legacyAddress)}</dd></div>`:''}
     </dl>
-    <div class="store-detail-section"><div class="store-detail-heading"><h3>Listas vinculadas</h3><span>${lists.length}</span></div>${listContent}</div>
-    <div class="store-detail-section"><div class="store-detail-heading"><h3>Preços registrados</h3><span>${prices.length}</span></div>${priceContent}</div>
+    <details class="store-detail-section" open>
+      <summary class="store-detail-heading"><h3>Listas vinculadas</h3><span>${lists.length}</span></summary>
+      <label class="store-detail-search-label" for="storeListSearch">Buscar lista</label>
+      <input class="store-detail-search" id="storeListSearch" type="search" placeholder="Digite o nome da lista">
+      <div id="storeDetailLists">${listContent}</div>
+      <p class="muted store-detail-no-results" id="storeListsNoResults" hidden>Nenhuma lista corresponde à busca.</p>
+    </details>
+    <details class="store-detail-section" open>
+      <summary class="store-detail-heading"><h3>Produtos e preços</h3><span>${products.length}</span></summary>
+      <label class="store-detail-search-label" for="storeProductSearch">Buscar produto</label>
+      <input class="store-detail-search" id="storeProductSearch" type="search" placeholder="Digite o nome do produto">
+      <div id="storeDetailProducts">${productContent}</div>
+      <p class="muted store-detail-no-results" id="storeProductsNoResults" hidden>Nenhum produto corresponde à busca.</p>
+    </details>
     <div class="form-actions"><button type="button" class="btn secondary" data-cancel>Fechar</button><button type="button" class="btn primary" id="editStoreFromDetails">Editar cadastro</button></div>
   </div>`);
+  $('#storeListSearch').addEventListener('input',event=>{
+    const query=event.currentTarget.value.trim().toLocaleLowerCase();
+    let visible=0;
+    document.querySelectorAll('#storeDetailLists [data-store-list]').forEach(item=>{
+      const matches=item.textContent.toLocaleLowerCase().includes(query);
+      item.hidden=!matches;
+      if(matches)visible++;
+    });
+    $('#storeListsNoResults').hidden=visible>0||!query;
+  });
+  $('#storeProductSearch').addEventListener('input',event=>{
+    const query=event.currentTarget.value.trim().toLocaleLowerCase();
+    let visible=0;
+    document.querySelectorAll('#storeDetailProducts [data-store-product]').forEach(item=>{
+      const matches=item.querySelector('.store-detail-product-head').textContent.toLocaleLowerCase().includes(query);
+      item.hidden=!matches;
+      if(matches)visible++;
+    });
+    $('#storeProductsNoResults').hidden=visible>0||!query;
+  });
   $('#editStoreFromDetails').addEventListener('click',()=>addStoreModal(()=>openStoreDetails(store.id),store));
 }
 

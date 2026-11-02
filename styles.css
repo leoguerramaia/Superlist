@@ -271,3 +271,24 @@ body.sidebar-open{overflow:hidden}
 .store-detail-price span{color:#87948c;font-size:10px;white-space:nowrap}
 .store-detail-price>strong{white-space:nowrap}
 @media(max-width:520px){.store-detail-fields{grid-template-columns:1fr}.store-card-clickable{gap:9px;padding:13px}.store-card-photo{width:44px;height:44px}.store-card-actions{gap:4px}.store-card-actions .list-card-action{width:28px;height:28px}}
+
+
+/* Filtros e seções expansíveis na ficha do supermercado */
+.store-detail-section{border-top:1px solid var(--line);padding-top:12px}
+.store-detail-section>summary{cursor:pointer;list-style:disclosure-closed}
+.store-detail-section[open]>summary{list-style:disclosure-open}
+.store-detail-section>summary h3{margin:0;font:700 13px Manrope;color:var(--ink)}
+.store-detail-section>summary span{margin-left:auto;font-size:10px;color:#87948c}
+.store-detail-search-label{display:block;margin:12px 0 5px;font-size:10px;font-weight:600;color:#64736a}
+.store-detail-search{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:11px;margin-bottom:8px}
+.store-detail-list[hidden],.store-detail-product[hidden]{display:none}
+.store-detail-no-results{padding:8px 0}
+.store-detail-product{padding:10px 0;border-bottom:1px solid var(--line)}
+.store-detail-product-head{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px}
+.store-detail-product-head>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.store-detail-product-head>div>strong{overflow-wrap:anywhere}
+.store-detail-product-head small{font-size:9px;color:#87948c;font-weight:400}
+.store-detail-product-head>strong{white-space:nowrap}
+.store-detail-history{margin:7px 0 0 8px}
+.store-detail-history>summary{cursor:pointer;color:#23835d;font-size:10px;padding:5px 0}
+.store-detail-history .store-detail-price{padding:7px 0}
