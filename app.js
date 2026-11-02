@@ -341,11 +341,28 @@ function renderLists() {
   $('#allLists').innerHTML=ls.length
     ? ls.map(l=>`<article class="list-card" data-open-list="${l.id}">${listCardInner(l).replace('<h3>', '<div class="list-card-title-row"><h3>').replace('</h3>', '</h3><div class="list-card-actions"><button type="button" class="list-card-action" data-rename-list="${l.id}" aria-label="Renomear lista" title="Renomear lista"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button type="button" class="list-card-action danger" data-delete-list="${l.id}" aria-label="Excluir lista" title="Excluir lista"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button></div></div>')}</article>`).join('')
     : '<div class="empty-state">Nenhuma lista encontrada. Clique em “Nova lista” para começar.</div>';
+  $('#allLists').querySelectorAll('.list-card').forEach((card,index)=>{
+    const list=ls[index];
+    card.querySelector('[data-rename-list]')?.addEventListener('click',event=>{
+      event.preventDefault();event.stopPropagation();renameListById(list);
+    });
+    card.querySelector('[data-delete-list]')?.addEventListener('click',event=>{
+      event.preventDefault();event.stopPropagation();deleteListById(list);
+    });
+  });
 }
 
-function renameListById(id) {
-  const list=db.lists.find(item=>String(item.id)===String(id));
-  if(!list)return;
+function resolveListActionTarget(target) {
+  if(target && typeof target === 'object') {
+    if(db.lists.includes(target)) return target;
+    target=target.id;
+  }
+  return db.lists.find(item=>String(item.id)===String(target));
+}
+
+function renameListById(target) {
+  const list=resolveListActionTarget(target);
+  if(!list)return toast('Não foi possível localizar esta lista.');
   openModal('Renomear lista', `<form id="renameListCardForm"><div class="field"><label>Nome da lista</label><input name="name" maxlength="80" required value="${esc(list.name)}"></div><div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button class="btn primary">Salvar nome</button></div></form>`);
   $('#renameListCardForm').addEventListener('submit',e=>{
     e.preventDefault();
@@ -355,10 +372,10 @@ function renameListById(id) {
   });
 }
 
-function deleteListById(id) {
-  const listId=String(id);
-  const list=db.lists.find(item=>String(item.id)===listId);
+function deleteListById(target) {
+  const list=resolveListActionTarget(target);
   if(!list)return toast('Não foi possível localizar esta lista.');
+  const listId=String(list.id);
   if(!confirm(`Excluir a lista "${list.name}"? Esta ação não pode ser desfeita.`))return;
   db.lists=db.lists.filter(item=>String(item.id)!==listId);
   db.prices=db.prices.filter(item=>String(item.listId)!==listId);
@@ -2864,12 +2881,6 @@ function init() {
   renderAll();
   $('#renameCurrentList')?.addEventListener('click',event=>{event.stopPropagation();renameCurrentList();});
   $('#deleteCurrentList')?.addEventListener('click',event=>{event.stopPropagation();deleteCurrentList();});
-  document.addEventListener('click',event=>{
-    const rename=event.target instanceof Element ? event.target.closest('[data-rename-list]') : null;
-    if(rename){event.preventDefault();event.stopPropagation();renameListById(rename.dataset.renameList);return;}
-    const remove=event.target instanceof Element ? event.target.closest('[data-delete-list]') : null;
-    if(remove){event.preventDefault();event.stopPropagation();deleteListById(remove.dataset.deleteList);}
-  },true);
   $('#adminRefresh')?.addEventListener('click',loadAdminDashboard);
   $('#saveAdminProviderOrder')?.addEventListener('click',saveAdminProviderOrder);
   $('#adminUserSearch')?.addEventListener('input',renderAdminUsers);
