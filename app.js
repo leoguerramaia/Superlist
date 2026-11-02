@@ -2828,7 +2828,6 @@ function init() {
   document.addEventListener('click',e=>{
     const adminTab=e.target.closest('[data-admin-tab]');if(adminTab){const tab=adminTab.dataset.adminTab;$$('.admin-tab').forEach(b=>b.classList.toggle('active',b===adminTab));$('#adminUsersPanel').hidden=tab!=='users';$('#adminFamiliesPanel').hidden=tab!=='families';$('#adminAuditPanel').hidden=tab!=='audit';$('#adminAIProvidersPanel').hidden=tab!=='ai';if(tab==='ai')loadAdminProviderOrder();return;}
     const providerMove=e.target.closest('[data-provider-move]');if(providerMove){const index=Number(providerMove.dataset.providerIndex);const next=providerMove.dataset.providerMove==='up'?index-1:index+1;if(next>=0&&next<adminProviderOrder.length){[adminProviderOrder[index],adminProviderOrder[next]]=[adminProviderOrder[next],adminProviderOrder[index]];renderAdminProviderOrder();}return;}
-    if(e.target.closest('#saveAdminProviderOrder')){saveAdminProviderOrder();return;}
     const adminAction=e.target.closest('[data-admin-action]');if(adminAction){adminUserAction(adminAction);return;}
     let nav=e.target.closest('[data-page]');
 
