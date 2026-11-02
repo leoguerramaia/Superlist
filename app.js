@@ -2786,16 +2786,33 @@ function normalizeBarcodeCode(value) {
 }
 
 // A câmera captura uma foto; a Edge Function envia a imagem à IA para ler o GTIN e pesquisar o produto na web.
-async function startLiveBarcodeScanner(video, onFound) {
+async function startLiveBarcodeScanner(video, onFound, onStatus) {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error('A câmera exige acesso HTTPS e permissão do navegador.');
   const ZXing = await loadZXingLibrary();
-  const reader = new ZXing.BrowserMultiFormatReader();
+  const formats = ZXing.BarcodeFormat;
+  const hints = new Map();
+  if (ZXing.DecodeHintType && formats) {
+    const allowed = ['EAN_13','EAN_8','UPC_A','UPC_E','ITF','CODE_128','CODE_39','CODABAR']
+      .map(name => formats[name]).filter(Boolean);
+    if (allowed.length) hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, allowed);
+    if (ZXing.DecodeHintType.TRY_HARDER) hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  }
+  const reader = new ZXing.BrowserMultiFormatReader(hints);
   let controls = null;
   let alreadyRead = false;
   video.setAttribute('autoplay', ''); video.setAttribute('muted', ''); video.setAttribute('playsinline', '');
   video.playsInline = true; video.muted = true;
 
-  controls = await reader.decodeFromVideoDevice(undefined, video, (result, error, activeControls) => {
+  if (typeof onStatus === 'function') onStatus('Aponte as barras para a câmera. Tentando leitura…');
+  const constraints = {
+    audio: false,
+    video: {
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 }
+    }
+  };
+  controls = await reader.decodeFromConstraints(constraints, video, (result, error, activeControls) => {
     if (!result || alreadyRead) return;
     const code = normalizeBarcodeCode(result.getText());
     if (![8,12,13,14].includes(code.length)) return;
