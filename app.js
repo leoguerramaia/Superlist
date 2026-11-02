@@ -572,16 +572,26 @@ function createListModal() {
   const showProgress = message => { clearInterval(progressTimer); progressFinished = false; progressText.textContent = message; progress.style.display = 'block'; let value = 6; setProgress(value); progressTimer = setInterval(() => { value = Math.min(92, value + 1); setProgress(value); }, 450); };
   const finishProgress = () => { clearInterval(progressTimer); progressText.textContent = 'Análise concluída'; setProgress(100); progressFinished = true; };
   const hideProgress = () => { clearInterval(progressTimer); if (progressFinished) { progressFinished = false; setTimeout(() => { progress.style.display = 'none'; }, 700); } else progress.style.display = 'none'; };
+  const normalizeListName = value => String(value || '').trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\s+/g, ' ');
+  const hasDuplicateListName = () => {
+    const normalized = normalizeListName(nameInput.value);
+    return !!normalized && db.lists.some(list => normalizeListName(list.name) === normalized);
+  };
   const requireListBasics = () => {
     if (!nameInput.value.trim()) { toast('Dê um nome à lista antes de adicionar produtos.'); nameInput.focus(); return false; }
+    if (hasDuplicateListName()) { setEntryAvailability(); toast('Já existe uma lista com esse nome. Altere o nome para continuar.'); nameInput.focus(); nameInput.select(); return false; }
     if (!storeInput.value) { toast('Selecione um supermercado antes de adicionar produtos.'); storeInput.focus(); return false; }
     return true;
   };
   const setEntryAvailability = () => {
-    const ready = !!nameInput.value.trim() && !!storeInput.value;
+    const duplicate = hasDuplicateListName();
+    nameInput.setCustomValidity(duplicate ? 'Já existe uma lista com esse nome. Altere o nome para continuar.' : '');
+    const ready = !!nameInput.value.trim() && !!storeInput.value && !duplicate;
     $('#toggleListImport').disabled = !ready;
     $('#manualListItems').disabled = !ready;
-    $('#listEntryHint').style.display = ready ? 'none' : 'block';
+    const hint = $('#listEntryHint');
+    hint.textContent = duplicate ? 'Já existe uma lista com esse nome. Altere o nome para continuar.' : 'Para incluir itens, preencha o nome da lista e selecione um supermercado.';
+    hint.style.display = ready ? 'none' : 'block';
     if (!ready) { importOptions.style.display = 'none'; $('#toggleListImport').setAttribute('aria-expanded','false'); [textPanel,photoPanel,audioPanel].forEach(panel => panel.style.display = 'none'); }
   };
   nameInput.addEventListener('input', setEntryAvailability);
