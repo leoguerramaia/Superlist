@@ -1676,7 +1676,7 @@ function addCatalogProductToList() {
 
     } else {
       area.innerHTML = '<div class="field"><label>Código de barras (EAN/GTIN)</label><input id="addProductBarcode" inputmode="numeric" placeholder="Digite ou escaneie o código"></div>' +
-        '<div class="form-actions"><button type="button" class="btn secondary" id="scanNewProductBarcode">▣ Abrir câmera</button><button type="button" class="btn primary" id="lookupNewProductBarcode">Consultar catálogo</button></div>' +
+        '<div class="form-actions"><button type="button" class="btn secondary" id="scanNewProductBarcode">▣ Abrir câmera</button><button type="button" class="btn secondary" id="takeNewBarcodePhoto">📷 Fotografar código</button><button type="button" class="btn primary" id="lookupNewProductBarcode">Consultar catálogo</button><input id="newBarcodePhotoInput" type="file" accept="image/*" capture="environment" hidden></div>' +
         '<div id="addBarcodeCamera" class="camera-box" style="display:none"></div>' + '<p id="addBarcodeScanStatus" class="helper" style="display:none"></p>' +
         '<div id="unknownBarcodeProduct" class="field" style="display:none"><p class="helper">O código foi lido, mas não encontramos o produto no catálogo. Você pode cadastrá-lo manualmente.</p><label for="unknownBarcodeName">Nome do produto</label><input id="unknownBarcodeName" placeholder="Ex.: Café torrado e moído"><button type="button" class="btn secondary" id="createProductFromBarcode">＋ Cadastrar e adicionar</button></div>';
 
@@ -1692,10 +1692,18 @@ function addCatalogProductToList() {
           const product=await findProductByBarcode(code);
           if(!product){$('#unknownBarcodeProduct').style.display='block';toast('Produto não localizado. Você pode cadastrá-lo manualmente.');return;}
           addProductToCurrentList(product,Number($('#addProductQty').value)||1,$('#addProductBrand')?.value||product.brand||'',selectedManualUnit(product));
-        }catch(error){console.error('Erro ao consultar catálogo:',error);toast(error.message||'Falha ao consultar catálogo.');}
+        }catch(error){console.error('Erro ao consultar catálogo:',error);$('#unknownBarcodeProduct').style.display='block';toast('O catálogo não respondeu. Você ainda pode cadastrar o produto manualmente.');}
         finally{if($('#lookupNewProductBarcode')){$('#lookupNewProductBarcode').disabled=false;$('#lookupNewProductBarcode').textContent='Consultar catálogo';}}
       };
       $('#lookupNewProductBarcode').onclick=lookupBarcodeProduct;
+      $('#takeNewBarcodePhoto').onclick=()=>$('#newBarcodePhotoInput').click();
+      $('#newBarcodePhotoInput').addEventListener('change',async event=>{
+        const file=event.target.files?.[0];if(!file)return;
+        const status=$('#addBarcodeScanStatus');if(status){status.style.display='block';status.textContent='Lendo a foto com ZXing…';}
+        try{const code=await readBarcodeFromImage(file);$('#addProductBarcode').value=code;if(status)status.textContent='Código lido: '+code+'; consultando catálogo…';toast('Código lido. Consultando catálogo…');await lookupBarcodeProduct();}
+        catch(error){console.error(error);if(status)status.textContent=error.message||'Não foi possível ler esta foto.';toast(error.message||'Não foi possível ler esta foto.');}
+        finally{event.target.value='';}
+      });
       $('#scanNewProductBarcode').onclick=async()=>{
         const box=$('#addBarcodeCamera'),button=$('#scanNewProductBarcode');
         try{
@@ -2826,18 +2834,73 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
   return { stop() { alreadyRead = true; controls?.stop(); } };
 }
 
+async function readBarcodeFromImage(file) {
+  if (!file || !file.type?.startsWith('image/')) throw new Error('Escolha uma foto válida do código de barras.');
+  const ZXing=await loadZXingLibrary();
+  const formats=ZXing.BarcodeFormat;
+  const hints=new Map();
+  if(ZXing.DecodeHintType&&formats){
+    const allowed=['EAN_13','EAN_8','UPC_A','UPC_E','ITF','CODE_128','CODE_39','CODABAR'].map(name=>formats[name]).filter(Boolean);
+    if(allowed.length)hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,allowed);
+    if(ZXing.DecodeHintType.TRY_HARDER)hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+  }
+  const reader=new ZXing.BrowserMultiFormatReader(hints);
+  const url=URL.createObjectURL(file);
+  try{
+    const image=await new Promise((resolve,reject)=>{
+      const element=new Image();
+      element.onload=()=>resolve(element);
+      element.onerror=()=>reject(new Error('Não foi possível abrir a foto.'));
+      element.src=url;
+    });
+    const width=image.naturalWidth,height=image.naturalHeight;
+    const regions=[
+      [0,0,width,height],
+      [width*.08,height*.2,width*.84,height*.6],
+      [0,height*.45,width,height*.5]
+    ];
+    for(const region of regions){
+      const [sx,sy,sw,sh]=region;
+      const scale=Math.min(2,2400/Math.max(sw,sh));
+      for(const filter of ['none','grayscale(1) contrast(1.45)']){
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.max(1,Math.round(sw*scale));
+        canvas.height=Math.max(1,Math.round(sh*scale));
+        const context=canvas.getContext('2d');
+        if(!context)continue;
+        context.filter=filter;
+        context.drawImage(image,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
+        context.filter='none';
+        try{
+          const decoded=reader.decodeFromCanvas
+            ? reader.decodeFromCanvas(canvas)
+            : await reader.decodeFromImageElement(await new Promise((resolve,reject)=>{
+                const copy=new Image();
+                copy.onload=()=>resolve(copy);
+                copy.onerror=reject;
+                copy.src=canvas.toDataURL('image/png');
+              }));
+          const code=normalizeBarcodeCode(decoded?.getText?.());
+          if([8,12,13,14].includes(code.length))return code;
+        }catch(_){}
+      }
+    }
+    throw new Error('Não consegui ler as barras nesta foto. Tente aproximar e manter o código bem iluminado.');
+  }finally{URL.revokeObjectURL(url);}
+}
+
 async function findProductByBarcode(value) {
   const code = normalizeBarcodeCode(value);
   if (!code) throw new Error('Informe um código de barras válido.');
   const local = (db.products || []).find(p => normalizeBarcodeCode(p.barcode) === code && normalizeBarcodeCode(p.barcode));
   if (local) return local;
 
-  const response = await fetch('https://world.openfoodfacts.org/api/v3/product/' + encodeURIComponent(code) + '.json?fields=product_name,product_name_en,brands,categories,categories_hierarchy,quantity,product_type');
+  const response = await fetch('https://world.openfoodfacts.org/api/v3/product/' + encodeURIComponent(code) + '?product_type=all&cc=br&lc=pt&tags_lc=pt&fields=product_name,product_name_en,generic_name,brands,categories,categories_hierarchy,quantity,product_type');
   if (!response.ok) throw new Error('Não foi possível consultar o catálogo de produtos. Tente novamente ou cadastre manualmente.');
   const result = await response.json();
   const data = result?.product;
-  const name = formatDisplayName(data?.product_name || data?.product_name_en || '');
-  if (result?.status !== 1 || !name) return null;
+  const name = formatDisplayName(data?.product_name || data?.product_name_en || data?.generic_name || '');
+  if (!name) return null;
 
   const categoryText = normalize([data.categories || '', ...(data.categories_hierarchy || [])].join(' '));
   const category = db.categories.find(value => categoryText.includes(normalize(value))) || 'Outros';
@@ -2861,7 +2924,7 @@ async function scanBarcode(itemId) {
     'Ler código de barras',
     '<div class="field"><label>Código de barras</label><input id="barcodeInput" inputmode="numeric" placeholder="Digite ou escaneie o código EAN"></div>' +
     '<div class="camera-box" id="cameraBox">Aponte a câmera para o código de barras</div>' +
-    '<div class="camera-controls"><button type="button" class="btn secondary" id="startCamera">▣ Abrir câmera</button><button type="button" class="btn secondary" id="stopCamera">Parar câmera</button><button type="button" class="btn primary" id="lookupBarcode">Vincular código ao produto</button></div>' +
+    '<div class="camera-controls"><button type="button" class="btn secondary" id="startCamera">▣ Abrir câmera</button><button type="button" class="btn secondary" id="takeBarcodePhoto">📷 Fotografar código</button><button type="button" class="btn secondary" id="stopCamera">Parar câmera</button><button type="button" class="btn primary" id="lookupBarcode">Vincular código ao produto</button><input id="barcodePhotoInput" type="file" accept="image/*" capture="environment" hidden></div>' +
     '<p id="barcodeScanStatus" class="helper">Aponte as barras para a câmera.</p>' + '<p class="helper">A leitura é feita no navegador pela biblioteca ZXing. Nenhuma IA é usada.</p>',
     'SUPERLIST'
   );
@@ -2911,6 +2974,14 @@ async function scanBarcode(itemId) {
   };
   $('#stopCamera').onclick=()=>{stop();$('#cameraBox').textContent='Câmera desligada.';$('#startCamera').textContent='Abrir câmera novamente';};
   $('#lookupBarcode').onclick=()=>associateCode($('#barcodeInput').value);
+  $('#takeBarcodePhoto').onclick=()=>$('#barcodePhotoInput').click();
+  $('#barcodePhotoInput').addEventListener('change',async event=>{
+    const file=event.target.files?.[0];if(!file)return;
+    const status=$('#barcodeScanStatus');if(status)status.textContent='Lendo a foto com ZXing…';
+    try{const code=await readBarcodeFromImage(file);$('#barcodeInput').value=code;if(status)status.textContent='Código lido: '+code;await associateCode(code);}
+    catch(error){console.error(error);if(status)status.textContent=error.message||'Não foi possível ler esta foto.';toast(error.message||'Não foi possível ler esta foto.');}
+    finally{event.target.value='';}
+  });
   $('#closeModal').addEventListener('click',stop);
   $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')stop();});
 }
