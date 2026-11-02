@@ -1685,6 +1685,7 @@ function addCatalogProductToList() {
         const code=normalizeBarcodeCode($('#addProductBarcode').value);
         if(!code){toast('Informe um código de barras válido.');return;}
         if(![8,12,13,14].includes(code.length)){toast('O código deve ter 8, 12, 13 ou 14 números.');return;}
+        if(!isValidBarcodeGTIN(code)){ $('#unknownBarcodeProduct').style.display='block';toast('O código não passou na verificação. Confira os números ou faça o cadastro manual.');return; }
         const button=$('#lookupNewProductBarcode');
         button.disabled=true;button.textContent='Consultando…';
         $('#unknownBarcodeProduct').style.display='none';
@@ -2796,6 +2797,14 @@ function normalizeBarcodeCode(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
+function isValidBarcodeGTIN(value) {
+  const code=normalizeBarcodeCode(value);
+  if(![8,12,13,14].includes(code.length))return false;
+  let sum=0,weight=3;
+  for(let i=code.length-2;i>=0;i--){sum+=Number(code[i])*weight;weight=weight===3?1:3;}
+  return (10-sum%10)%10===Number(code.at(-1));
+}
+
 // O scanner usa ZXing no navegador e não chama IA para decodificar códigos de barras.
 async function loadQuaggaLibrary() {
   if(window.Quagga?.init)return window.Quagga;
@@ -2814,7 +2823,7 @@ async function loadQuaggaLibrary() {
 function productBarcodeDecoderOptions() {
   return {
     locator:{patchSize:'medium',halfSample:false},
-    decoder:{readers:['ean_reader','ean_8_reader','upc_reader','upc_e_reader','i2of5_reader','code_128_reader','code_39_reader']},
+    decoder:{readers:['ean_reader','ean_8_reader','upc_reader','i2of5_reader']},
     locate:true
   };
 }
@@ -2847,6 +2856,9 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
   let stopped=false;
   let completed=false;
   let detectedHandler;
+  let previousCode='';
+  let repeatCount=0;
+  let lastDetectionAt=0;
   const stop=()=>{
     if(stopped)return;
     stopped=true;
@@ -2862,7 +2874,12 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
   detectedHandler=result=>{
     if(stopped||completed)return;
     const code=normalizeBarcodeCode(result?.codeResult?.code);
-    if(![8,12,13,14].includes(code.length))return;
+    if(!isValidBarcodeGTIN(code)){previousCode='';repeatCount=0;return;}
+    const now=Date.now();
+    if(code===previousCode&&now-lastDetectionAt<1200)repeatCount++;
+    else{previousCode=code;repeatCount=1;}
+    lastDetectionAt=now;
+    if(repeatCount<3){if(typeof onStatus==='function')onStatus('Código detectado. Mantenha as barras paradas…');return;}
     completed=true;
     stop();
     if(typeof onFound==='function')onFound(code);
@@ -2915,7 +2932,7 @@ async function readBarcodeFromImage(file) {
         },resolve);
       });
       const code=normalizeBarcodeCode(result?.codeResult?.code);
-      if([8,12,13,14].includes(code.length))return code;
+      if(isValidBarcodeGTIN(code))return code;
     }
     throw new Error('Não consegui ler as barras nesta foto. Tente aproximar e manter o código bem iluminado.');
   }finally{URL.revokeObjectURL(url);}
@@ -2969,6 +2986,7 @@ async function scanBarcode(itemId) {
     const code=normalizeBarcodeCode(value);
     if(!code){toast('Informe um código de barras válido.');return;}
     if(![8,12,13,14].includes(code.length)){toast('O código deve ter 8, 12, 13 ou 14 números.');return;}
+    if(!isValidBarcodeGTIN(code)){toast('O código não passou na verificação. Confira os números do código de barras.');return;}
     lookupStarted=true;
     const button=$('#lookupBarcode');
     button.disabled=true;button.textContent='Associando…';
