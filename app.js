@@ -1699,6 +1699,7 @@ function addCatalogProductToList() {
       $('#takeNewBarcodePhoto').onclick=()=>$('#newBarcodePhotoInput').click();
       $('#newBarcodePhotoInput').addEventListener('change',async event=>{
         const file=event.target.files?.[0];if(!file)return;
+        barcodeCameraControls?.stop();
         const status=$('#addBarcodeScanStatus');if(status){status.style.display='block';status.textContent='Lendo a foto com ZXing…';}
         try{const code=await readBarcodeFromImage(file);$('#addProductBarcode').value=code;if(status)status.textContent='Código lido: '+code+'; consultando catálogo…';toast('Código lido. Consultando catálogo…');await lookupBarcodeProduct();}
         catch(error){console.error(error);if(status)status.textContent=error.message||'Não foi possível ler esta foto.';toast(error.message||'Não foi possível ler esta foto.');}
@@ -2796,44 +2797,6 @@ function normalizeBarcodeCode(value) {
 }
 
 // O scanner usa ZXing no navegador e não chama IA para decodificar códigos de barras.
-async function startLiveBarcodeScanner(video, onFound, onStatus) {
-  if (!navigator.mediaDevices?.getUserMedia) throw new Error('A câmera exige acesso HTTPS e permissão do navegador.');
-  const ZXing = await loadZXingLibrary();
-  const formats = ZXing.BarcodeFormat;
-  const hints = new Map();
-  if (ZXing.DecodeHintType && formats) {
-    const allowed = ['EAN_13','EAN_8','UPC_A','UPC_E','ITF','CODE_128','CODE_39','CODABAR']
-      .map(name => formats[name]).filter(Boolean);
-    if (allowed.length) hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, allowed);
-    if (ZXing.DecodeHintType.TRY_HARDER) hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-  }
-  const reader = new ZXing.BrowserMultiFormatReader(hints);
-  let controls = null;
-  let alreadyRead = false;
-  video.setAttribute('autoplay', ''); video.setAttribute('muted', ''); video.setAttribute('playsinline', '');
-  video.playsInline = true; video.muted = true;
-
-  if (typeof onStatus === 'function') onStatus('Aponte as barras para a câmera. Tentando leitura…');
-  const constraints = {
-    audio: false,
-    video: {
-      facingMode: { ideal: 'environment' },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 }
-    }
-  };
-  controls = await reader.decodeFromConstraints(constraints, video, (result, error, activeControls) => {
-    if (!result || alreadyRead) return;
-    const code = normalizeBarcodeCode(result.getText());
-    if (![8,12,13,14].includes(code.length)) return;
-    alreadyRead = true;
-    (activeControls || controls)?.stop();
-    if (typeof onFound === 'function') onFound(code);
-  });
-
-  return { stop() { alreadyRead = true; controls?.stop(); } };
-}
-
 async function loadQuaggaLibrary() {
   if(window.Quagga?.init)return window.Quagga;
   if(window.__superlistQuaggaPromise)return window.__superlistQuaggaPromise;
@@ -2994,7 +2957,7 @@ async function scanBarcode(itemId) {
     '<div class="field"><label>Código de barras</label><input id="barcodeInput" inputmode="numeric" placeholder="Digite ou escaneie o código EAN"></div>' +
     '<div class="camera-box" id="cameraBox">Aponte a câmera para o código de barras</div>' +
     '<div class="camera-controls"><button type="button" class="btn secondary" id="startCamera">▣ Abrir câmera</button><button type="button" class="btn secondary" id="takeBarcodePhoto">📷 Fotografar código</button><button type="button" class="btn secondary" id="stopCamera">Parar câmera</button><button type="button" class="btn primary" id="lookupBarcode">Vincular código ao produto</button><input id="barcodePhotoInput" type="file" accept="image/*" capture="environment" hidden></div>' +
-    '<p id="barcodeScanStatus" class="helper">Aponte as barras para a câmera.</p>' + '<p class="helper">A leitura é feita no navegador pela biblioteca ZXing. Nenhuma IA é usada.</p>',
+    '<p id="barcodeScanStatus" class="helper">Aponte as barras para a câmera.</p>' + '<p class="helper">A leitura é feita no navegador pelo Quagga2. Nenhuma IA é usada.</p>',
     'SUPERLIST'
   );
 
@@ -3046,7 +3009,8 @@ async function scanBarcode(itemId) {
   $('#takeBarcodePhoto').onclick=()=>$('#barcodePhotoInput').click();
   $('#barcodePhotoInput').addEventListener('change',async event=>{
     const file=event.target.files?.[0];if(!file)return;
-    const status=$('#barcodeScanStatus');if(status)status.textContent='Lendo a foto com ZXing…';
+    stop();
+    const status=$('#barcodeScanStatus');if(status)status.textContent='Lendo a foto com Quagga2…';
     try{const code=await readBarcodeFromImage(file);$('#barcodeInput').value=code;if(status)status.textContent='Código lido: '+code;await associateCode(code);}
     catch(error){console.error(error);if(status)status.textContent=error.message||'Não foi possível ler esta foto.';toast(error.message||'Não foi possível ler esta foto.');}
     finally{event.target.value='';}
