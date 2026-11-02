@@ -1,5 +1,5 @@
 
-const CACHE = 'superlist-shell-v20';
+const CACHE = 'superlist-shell-v21';
 
 const ASSETS = [
   './',
