@@ -131,13 +131,13 @@
 .list-review-table th:nth-child(3),.list-review-table td:nth-child(3){width:30%}
 .list-review-table th:nth-child(4),.list-review-table td:nth-child(4){width:40%}
 .list-review-table th:last-child,.list-review-table td:last-child{width:8%;text-align:center}
-.new-list-review-table{min-width:520px}
-.new-list-review-table th:nth-child(1),.new-list-review-table td:nth-child(1){width:10%}
-.new-list-review-table th:nth-child(2),.new-list-review-table td:nth-child(2){width:8%}
-.new-list-review-table th:nth-child(3),.new-list-review-table td:nth-child(3){width:24%}
-.new-list-review-table th:nth-child(4),.new-list-review-table td:nth-child(4){width:30%}
-.new-list-review-table th:nth-child(5),.new-list-review-table td:nth-child(5){width:22%}
-.new-list-review-table th:last-child,.new-list-review-table td:last-child{width:6%}
+.new-list-review-table,.shopping-import-review-table{min-width:620px}
+.new-list-review-table th:nth-child(1),.new-list-review-table td:nth-child(1),.shopping-import-review-table th:nth-child(1),.shopping-import-review-table td:nth-child(1){width:10%}
+.new-list-review-table th:nth-child(2),.new-list-review-table td:nth-child(2),.shopping-import-review-table th:nth-child(2),.shopping-import-review-table td:nth-child(2){width:8%}
+.new-list-review-table th:nth-child(3),.new-list-review-table td:nth-child(3),.shopping-import-review-table th:nth-child(3),.shopping-import-review-table td:nth-child(3){width:24%}
+.new-list-review-table th:nth-child(4),.new-list-review-table td:nth-child(4),.shopping-import-review-table th:nth-child(4),.shopping-import-review-table td:nth-child(4){width:22%}
+.new-list-review-table th:nth-child(5),.new-list-review-table td:nth-child(5),.shopping-import-review-table th:nth-child(5),.shopping-import-review-table td:nth-child(5){width:30%}
+.new-list-review-table th:last-child,.new-list-review-table td:last-child,.shopping-import-review-table th:last-child,.shopping-import-review-table td:last-child{width:6%}
 
 
 .admin-provider-order{list-style:none;margin:20px 0;padding:0;max-width:620px;display:grid;gap:10px}
