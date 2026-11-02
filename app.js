@@ -728,7 +728,7 @@ function createListModal() {
   }
 
   function renderValidation() {
-    validationRows.innerHTML = '<table class="receipt-items-table list-review-table new-list-review-table"><thead><tr><th>Quantidade</th><th>Unidade</th><th>Produto</th><th>Associar ao catálogo</th><th>Marca (opcional)</th><th></th></tr></thead><tbody>' +
+    validationRows.innerHTML = '<table class="receipt-items-table list-review-table new-list-review-table"><thead><tr><th>Quantidade</th><th>Unidade</th><th>Produto</th><th>Marca (opcional)</th><th>Associar ao catálogo</th><th></th></tr></thead><tbody>' +
       reviewRows.map((row,i) => {
         const brands = brandsForProduct(row.productId);
         const selectedBrand = row.brand || '';
@@ -1607,15 +1607,37 @@ function importItemsIntoOpenList() {
 
   const parseText = value => parseShoppingText(value);
 
+  const importNorm = value => String(value || '').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+  function suggestedImportProduct(row) {
+    const query = importNorm(row.name);
+    if (!query) return null;
+    return db.products.find(product => importNorm(product.name) === query) ||
+      db.products.find(product => importNorm(product.name).includes(query) || query.includes(importNorm(product.name))) || null;
+  }
+  function importBrands(productId) {
+    const values = new Set();
+    const product = db.products.find(item => String(item.id) === String(productId));
+    (product?.brands || []).forEach(brand => { if (brand) values.add(formatDisplayName(brand)); });
+    (db.prices || []).filter(price => String(price.productId) === String(productId)).forEach(price => { if (price.brand) values.add(formatDisplayName(price.brand)); });
+    (db.lists || []).forEach(list => (list.items || []).filter(item => String(item.productId) === String(productId) && item.brand).forEach(item => values.add(formatDisplayName(item.brand))));
+    return [...values].sort((a,b) => a.localeCompare(b,'pt-BR'));
+  }
+
   function renderReview() {
-    rowsWrap.innerHTML = rows.length ? '<table class="receipt-items-table list-review-table shopping-import-review-table"><thead><tr><th>Qtd.</th><th>Un.</th><th>Produto</th><th>Marca</th><th></th></tr></thead><tbody>' +
-      rows.map((row,index) => '<tr data-import-row="' + index + '">' +
-        '<td><input data-import-field="quantity" aria-label="Quantidade" type="number" min="0.01" step="0.01" value="' + row.quantity + '"></td>' +
-        '<td><select data-import-field="unit" aria-label="Unidade">' + ['un','kg','g','l','ml','cx','pct'].map(unit => '<option value="' + unit + '"' + (row.unit === unit ? ' selected' : '') + '>' + unit + '</option>').join('') + '</select></td>' +
-        '<td><input data-import-field="name" aria-label="Produto" value="' + esc(row.name) + '">' +
-        (row.hasCorrection ? '<small class="new-list-suggestion">Sugestão da IA: <button type="button" data-import-suggestion="' + index + '">' + esc(row.suggestedName) + '</button></small>' : '') +
-        '</td><td><input data-import-field="brand" aria-label="Marca opcional" value="' + esc(row.brand || '') + '" placeholder="Opcional"></td>' +
-        '<td><button type="button" data-import-remove="' + index + '" aria-label="Remover item">×</button></td></tr>').join('') +
+    rowsWrap.innerHTML = rows.length ? '<table class="receipt-items-table list-review-table shopping-import-review-table"><thead><tr><th>Quantidade</th><th>Unidade</th><th>Produto</th><th>Marca (opcional)</th><th>Associar ao catálogo</th><th></th></tr></thead><tbody>' +
+      rows.map((row,index) => {
+        if (!row.catalogSelected && !row.productId) row.productId = suggestedImportProduct(row)?.id || '';
+        const brands = importBrands(row.productId);
+        const hasNew = row.brand && !brands.some(brand => importNorm(brand) === importNorm(row.brand));
+        return '<tr data-import-row="' + index + '">' +
+          '<td><input data-import-field="quantity" aria-label="Quantidade" type="number" min="0.01" step="0.01" value="' + row.quantity + '"></td>' +
+          '<td><select data-import-field="unit" aria-label="Unidade">' + ['un','kg','g','l','ml','cx','pct'].map(unit => '<option value="' + unit + '"' + (row.unit === unit ? ' selected' : '') + '>' + unit + '</option>').join('') + '</select></td>' +
+          '<td><input data-import-field="name" aria-label="Produto" value="' + esc(row.name) + '">' +
+          (row.hasCorrection ? '<small class="new-list-suggestion">Sugestão da IA: <button type="button" data-import-suggestion="' + index + '">' + esc(row.suggestedName) + '</button></small>' : '') +
+          '</td><td><select data-import-field="brandChoice" aria-label="Marca opcional"><option value="">Sem marca</option>' + brands.map(brand => '<option value="' + esc(brand) + '"' + (importNorm(brand) === importNorm(row.brand) ? ' selected' : '') + '>' + esc(brand) + '</option>').join('') + '<option value="__new__"' + (hasNew ? ' selected' : '') + '>＋ Nova marca</option></select><input data-import-field="brand" aria-label="Nova marca" value="' + (hasNew ? esc(row.brand) : '') + '" placeholder="Digite uma marca" style="display:' + (hasNew ? 'block' : 'none') + ';margin-top:6px;max-width:150px"></td>' +
+          '<td><select data-import-field="product" aria-label="Associar ao catálogo"><option value="">Sem associação</option>' + db.products.map(product => '<option value="' + esc(product.id) + '"' + (String(row.productId) === String(product.id) ? ' selected' : '') + '>' + esc(product.name) + '</option>').join('') + '</select></td>' +
+          '<td><button type="button" data-import-remove="' + index + '" aria-label="Remover item">×</button></td></tr>';
+      }).join('') +
       '</tbody></table>' : '<p class="helper">Nenhum produto reconhecido. Tente novamente.</p>';
     review.style.display = 'block';
     confirmButton.disabled = !rows.length;
@@ -1694,7 +1716,16 @@ function importItemsIntoOpenList() {
 
   rowsWrap.addEventListener('change',event=>{
     const tr=event.target.closest('[data-import-row]');if(!tr)return;const row=rows[Number(tr.dataset.importRow)];if(!row)return;
-    const key=event.target.dataset.importField;if(key)row[key]=key==='quantity'?Number(event.target.value):event.target.value;
+    const key=event.target.dataset.importField;
+    if(key==='product'){row.productId=event.target.value;row.catalogSelected=true;row.brand='';renderReview();return;}
+    if(key==='brandChoice'){row.brand=event.target.value==='__new__'?'':event.target.value;renderReview();return;}
+    if(key==='quantity')row.quantity=Number(event.target.value);
+    else if(key==='brand')row.brand=event.target.value;
+    else if(key)row[key]=event.target.value;
+  });
+  rowsWrap.addEventListener('input',event=>{
+    const tr=event.target.closest('[data-import-row]');if(!tr)return;const row=rows[Number(tr.dataset.importRow)];if(!row)return;
+    if(event.target.dataset.importField==='brand')row.brand=event.target.value;
   });
   rowsWrap.addEventListener('click',event=>{
     const accept=event.target.closest('[data-import-suggestion]');
@@ -1708,7 +1739,7 @@ function importItemsIntoOpenList() {
     if(rows.some(row=>!row.name.trim()||!Number.isFinite(row.quantity)||row.quantity<=0))return toast('Confira os nomes e as quantidades.');
     const target=db.lists.find(list=>list.id===listId);if(!target)return toast('Não foi possível localizar a lista.');
     const added=rows.map(row=>{
-      const itemName=formatDisplayName(row.name),product=findOrCreateProduct({name:itemName,category:'Outros',unit:row.unit||'un'});
+      const itemName=formatDisplayName(row.name),product=(row.productId?db.products.find(item=>String(item.id)===String(row.productId)):null)||findOrCreateProduct({name:itemName,category:'Outros',unit:row.unit||'un'});
       const brand=formatDisplayName(row.brand||'');
       if(brand){product.brands=Array.isArray(product.brands)?product.brands:[];if(!product.brands.some(value=>value.toLocaleLowerCase('pt-BR')===brand.toLocaleLowerCase('pt-BR')))product.brands.push(brand);}
       const item={id:uid(),productId:product.id,name:product.name,category:product.category||'Outros',unit:row.unit||product.unit||'un',qty:Number(row.quantity),brand,price:0,checked:false};
