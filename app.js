@@ -568,7 +568,7 @@ function renderProducts() {
 
   $('#productTable').innerHTML=products.length
     ? products.map(p=>`<div class="product-row">
-        <div class="product-thumb">${p.photo?'▧':'◈'}</div>
+        <div class="product-thumb">${p.photo && /^https?:\\/\\//i.test(String(p.photo).trim()) ? `<img src="${esc(String(p.photo).trim())}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span aria-hidden="true">◈</span></div>
         <div><strong>${esc(p.name)}</strong><small>${esc(p.category)} ${p.barcode?'· '+esc(p.barcode):''}</small></div>
         <span class="unit-tag">${unitLabel(p.unit)}</span>
         <span class="product-price muted">${p.barcode?'EAN cadastrado':'Sem código'}</span>
