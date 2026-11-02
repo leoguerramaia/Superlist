@@ -61,6 +61,36 @@ async function getAccessToken(username: string, password: string): Promise<strin
   return accessToken;
 }
 
+async function fetchCatalogImage(imageUrl: string, accessToken: string): Promise<{ imageBase64: string; imageContentType: string } | null> {
+  try {
+    const url = new URL(imageUrl);
+    if (url.protocol !== "https:" || url.hostname !== "gtin.rscsistemas.com.br" ||
+        !/^\\/api\\/v[34]\\/gtin\\/\\d+\\/image\\/?$/.test(url.pathname)) return null;
+
+    const response = await fetch(url, {
+      headers: {
+        "Authorization": "Bearer " + accessToken,
+        "Accept": "image/*",
+        "User-Agent": "SuperList/1.0 (consulta de imagens)",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    const contentType = response.headers.get("content-type")?.split(";")[0].trim() || "";
+    if (!response.ok || !contentType.startsWith("image/")) return null;
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (!bytes.length || bytes.length > 4 * 1024 * 1024) return null;
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    }
+    return { imageBase64: btoa(binary), imageContentType: contentType };
+  } catch (error) {
+    console.warn("Não foi possível obter a imagem do catálogo:", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
 function normalizeV4(data: Record<string, any>, gtin: string) {
   const item = data.produto || data.product || {};
   const images = Array.isArray(item.imagens) ? item.imagens : [];
@@ -164,7 +194,8 @@ Deno.serve(async (req: Request) => {
     if (!product.name) {
       return json({ found: false, gtin, source: "OSCBR", message: "A API não retornou uma descrição para esse código." });
     }
-    return json({ found: true, gtin, apiVersion, product });
+    const catalogImage = product.imageUrl ? await fetchCatalogImage(product.imageUrl, accessToken) : null;
+    return json({ found: true, gtin, apiVersion, product, ...(catalogImage || {}) });
   } catch (error) {
     console.error("lookup-product failure:", error instanceof Error ? error.message : error);
     return json({ error: error instanceof Error ? error.message : "Erro ao consultar o produto." }, 502);
