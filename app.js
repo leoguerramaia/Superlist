@@ -568,7 +568,7 @@ function renderProducts() {
 
   $('#productTable').innerHTML=products.length
     ? products.map(p=>`<div class="product-row">
-        <div class="product-thumb">${p.photo && /^https?:\/\//i.test(String(p.photo).trim()) ? `<img src="${esc(String(p.photo).trim())}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span aria-hidden="true">◈</span></div>
+        <div class="product-thumb">${usableProductPhoto(p.photo) ? `<img src="${esc(usableProductPhoto(p.photo))}" alt="" loading="lazy" onerror="this.remove()">` : ''}<span aria-hidden="true">◈</span></div>
         <div><strong>${esc(p.name)}</strong><small>${esc(p.category)} ${p.barcode?'· '+esc(p.barcode):''}</small></div>
         <span class="unit-tag">${unitLabel(p.unit)}</span>
         <span class="product-price muted">${p.barcode?'EAN cadastrado':'Sem código'}</span>
@@ -1143,10 +1143,49 @@ function addStoreModal(onSaved, store=null) {
 }
 
 
+function isOscbrImageUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    const path = url.pathname;
+    return url.protocol === 'https:' &&
+      url.hostname === 'gtin.rscsistemas.com.br' &&
+      (path.startsWith('/api/v3/gtin/') || path.startsWith('/api/v4/gtin/')) &&
+      path.endsWith('/image');
+  } catch (_) {
+    return false;
+  }
+}
+
+function usableProductPhoto(value) {
+  const source = String(value || '').trim();
+  return source.startsWith('https://') || source.startsWith('http://') ||
+    (source.startsWith('data:image/') && source.includes(';base64,')) ? source : '';
+}
+
+async function compactCatalogImage(base64, contentType) {
+  if (!base64) return '';
+  const binary = atob(base64);
+  const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+  const bitmap = await createImageBitmap(new Blob([bytes], { type: contentType || 'image/jpeg' }));
+  try {
+    const scale = Math.min(1, 420 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.72);
+  } finally {
+    bitmap.close();
+  }
+}
+
 function addProductModal(product = null) {
   const p = product || {};
   const photoPath = p.photoPath || '';
   const photoUrl = p.photo || '';
+  const embeddedPhoto = photoUrl.startsWith('data:image/') && photoUrl.includes(';base64,');
+  const protectedPhoto = isOscbrImageUrl(photoUrl);
+  let resolvedPhoto = embeddedPhoto ? photoUrl : '';
 
   openModal(product ? 'Editar produto' : 'Novo produto', `
     <form id="modalForm">
@@ -1183,7 +1222,7 @@ function addProductModal(product = null) {
         <label>Foto por URL</label>
         <input name="photo" type="url"
           placeholder="https://..."
-          value="${esc(photoUrl)}">
+          value="${esc(embeddedPhoto || protectedPhoto ? '' : photoUrl)}">
       </div>
 
       <div class="field">
@@ -1197,12 +1236,15 @@ function addProductModal(product = null) {
       </div>
 
       <div id="productPhotoPreview" class="field">
-        ${photoUrl
-          ? `<img src="${esc(photoUrl)}" alt="Foto do produto"
-              style="max-width:130px;max-height:130px;object-fit:contain">`
-          : photoPath
-            ? '<span class="helper">Foto armazenada no Supabase.</span>'
-            : '<span class="helper">Nenhuma foto selecionada.</span>'}
+        ${embeddedPhoto
+          ? `<img src="${esc(photoUrl)}" alt="Foto do produto" style="max-width:130px;max-height:130px;object-fit:contain">`
+          : protectedPhoto
+            ? '<span class="helper">Buscando imagem protegida do catálogo…</span>'
+            : photoUrl
+              ? `<img src="${esc(photoUrl)}" alt="Foto do produto" onerror="this.remove()" style="max-width:130px;max-height:130px;object-fit:contain">`
+              : photoPath
+                ? '<span class="helper">Foto armazenada no Supabase.</span>'
+                : '<span class="helper">Nenhuma foto selecionada.</span>'}
       </div>
 
       <div class="form-actions">
@@ -1216,6 +1258,24 @@ function addProductModal(product = null) {
 
   const form = $('#modalForm');
   const fileInput = $('#productPhotoFile');
+  if (product && protectedPhoto && p.barcode && window.SuperlistCloud?.lookupProductByBarcode) {
+    const preview = $('#productPhotoPreview');
+    window.SuperlistCloud.lookupProductByBarcode(p.barcode).then(async result => {
+      if (!result?.imageBase64) {
+        preview.innerHTML = '<span class="helper">A API não disponibilizou uma imagem para este produto.</span>';
+        return;
+      }
+      const compactPhoto = await compactCatalogImage(result.imageBase64, result.imageContentType);
+      if (!compactPhoto) return;
+      resolvedPhoto = compactPhoto;
+      preview.innerHTML = `<img src="${esc(compactPhoto)}" alt="Foto do produto" style="max-width:130px;max-height:130px;object-fit:contain">`;
+      p.photo = compactPhoto;
+      save();
+    }).catch(error => {
+      console.warn('Não foi possível carregar a imagem do catálogo:', error);
+      preview.innerHTML = '<span class="helper">Não foi possível carregar a imagem do catálogo.</span>';
+    });
+  }
 
   fileInput.addEventListener('change', () => {
     const file = fileInput.files[0];
@@ -1263,7 +1323,7 @@ function addProductModal(product = null) {
       }
 
       let newPhotoPath = photoPath;
-      let photo = d.photo.trim();
+      let photo = d.photo.trim() || resolvedPhoto;
 
       if (file) {
         if (!window.SuperlistCloud?.uploadProductPhoto) {
@@ -3011,12 +3071,19 @@ async function findProductByBarcode(value) {
           barcode: code,
           brand: formatDisplayName(record.brand || ''),
           brands: record.brand ? [formatDisplayName(record.brand)] : [],
-          photo: String(record.imageUrl || ''),
+          photo: '',
           photoPath: '',
           active: true,
           description: '',
           barcodeSources: ['OSCBR']
         };
+        if (result.imageBase64) {
+          try {
+            product.photo = await compactCatalogImage(result.imageBase64, result.imageContentType);
+          } catch (imageError) {
+            console.warn('Não foi possível preparar a imagem do catálogo:', imageError);
+          }
+        }
         db.products.push(product);
         save();
         return product;
