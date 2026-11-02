@@ -59,3 +59,25 @@
 .text-button svg{width:16px;height:16px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px}
 .stat-card,.recent-card,.list-card,.store-card,.quick-card,.analytics-card,.purchase-summary{box-shadow:none}
+
+
+/* Formulário de criação de lista: hierarquia mais leve e ações secundárias discretas */
+.modal-head #modalEyebrow:empty{display:none}
+.new-list-form .field{margin-bottom:16px}
+.new-list-store-row{grid-template-columns:minmax(0,1fr) auto;gap:10px}
+.new-list-store-row select{min-width:0}
+.new-list-store-row .btn{min-height:40px;padding:9px 12px;white-space:nowrap}
+.new-list-products{margin-top:4px}
+.new-list-import-options{gap:10px}
+.new-list-import-options .btn{min-height:40px;background:#fff;border-color:var(--line);color:#43554b;box-shadow:none}
+.new-list-import-options .btn:hover{background:#f8faf9;border-color:#cbd9d1}
+.new-list-manual,.new-list-cancel{border:0;background:transparent;color:#50645a;font-size:12px;font-weight:600;padding:8px 0}
+.new-list-manual{color:var(--green);margin-top:3px;align-self:flex-start}
+.new-list-manual:hover,.new-list-cancel:hover{color:#10563f;text-decoration:underline}
+.new-list-actions{align-items:center;margin-top:20px}
+.new-list-actions .new-list-cancel{margin-right:8px}
+.new-list-actions .btn.primary{box-shadow:none}
+@media(max-width:420px){
+  .new-list-store-row{grid-template-columns:1fr}
+  .new-list-import-options .btn{padding:9px 7px;font-size:11px}
+}
