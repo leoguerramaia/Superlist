@@ -537,10 +537,11 @@ function createListModal() {
     '<form id="modalForm" class="new-list-form">' +
       '<div class="field"><label>Nome</label><input name="name" required maxlength="80" placeholder="Ex.: Compra do mês"></div>' +
       '<div class="field"><label>Supermercado</label><div class="form-grid new-list-store-row"><select name="storeId" required><option value="">Selecionar supermercado</option>' + storeOptions() + '</select><button type="button" class="btn secondary" id="newListAddStore">＋ Cadastrar</button></div></div>' +
-      '<div class="field new-list-products"><label>Adicionar produtos</label><div class="form-grid new-list-import-options"><button type="button" class="btn secondary" id="openTextImport">Importar texto</button><button type="button" class="btn secondary" id="openPhotoImport">Fotografar lista</button></div><button type="button" class="new-list-manual" id="manualListItems">＋ Adicionar manualmente</button></div>' +
+      '<div class="field new-list-products"><label>Adicionar produtos</label><div class="form-grid new-list-import-options"><button type="button" class="btn secondary" id="openTextImport">Importar texto</button><button type="button" class="btn secondary" id="openPhotoImport">Fotografar lista</button><button type="button" class="btn secondary" id="openAudioImport">Criar por áudio</button></div><button type="button" class="new-list-manual" id="manualListItems">＋ Adicionar manualmente</button></div>' +
       '<section id="textImportPanel" class="invite-box" style="display:none"><div class="field"><label for="newListText">Cole ou digite os produtos, um por linha</label><textarea id="newListText" rows="6" placeholder="2 arroz 5kg&#10;1 kg de banana&#10;3 unidades de leite"></textarea></div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button type="button" class="btn primary" id="validateTextList">Validar produtos</button><span id="validateTextWarning" role="alert" style="display:none;color:#c62828;font-size:12px;font-weight:600"><span aria-hidden="true">*</span> Valide os produtos antes de Criar a Lista</span></div></section>' +
       '<section id="photoImportPanel" class="invite-box" style="display:none"><p class="muted">Escolha uma foto da galeria ou tire uma foto da lista escrita à mão. A IA vai transcrever os produtos para você revisar.</p><div class="form-grid"><button type="button" class="btn secondary" id="chooseListGallery">Escolher da galeria</button><button type="button" class="btn secondary" id="takeListPhoto">Usar câmera</button></div><input id="listGalleryInput" type="file" accept="image/*" style="display:none"><input id="listCameraInput" type="file" accept="image/*" capture="environment" style="display:none"><div id="listPhotoName" class="helper"></div><div id="listPhotoPreview" style="display:none;margin:10px 0"><img id="listPhotoPreviewImage" alt="Prévia da lista fotografada" style="display:block;width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:#fff"></div><button type="button" class="btn primary" id="readListPhoto" disabled>✨ Transcrever com IA</button></section>' +
-      '<div id="listImportProgress" class="receipt-progress" style="display:none" aria-live="polite"><div class="receipt-progress-top"><span class="receipt-spinner"></span><strong id="listImportProgressText">Organizando seus produtos...</strong></div><div class="receipt-progress-track"><span></span></div></div>' +
+      '<section id="audioImportPanel" class="invite-box" style="display:none"><p class="muted">Envie ou grave sua lista de compras. A IA vai sugerir os produtos para você revisar antes de criar a lista.</p><div class="field"><label for="listAudioInput">Áudio da lista</label><input id="listAudioInput" type="file" accept="audio/mpeg,audio/mp4,audio/mpga,audio/m4a,audio/wav,audio/webm,audio/ogg,audio/flac,.mp3,.mp4,.m4a,.wav,.webm,.ogg,.flac" capture="user"><small class="helper">Fale os produtos e, se quiser, as quantidades.</small></div><button type="button" class="btn primary" id="readListAudio" disabled>Transcrever áudio com IA</button></section>' +
+      '<div id="listImportProgress" class="receipt-progress list-ai-progress" style="display:none" aria-live="polite"><div class="receipt-progress-top"><span class="receipt-spinner"></span><strong id="listImportProgressText">Organizando seus produtos...</strong><b id="listImportProgressPercent">0%</b></div><div class="receipt-progress-track" role="progressbar" aria-label="Progresso da análise" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="listImportProgressBar"></span></div></div>' +
       '<section id="listValidationPanel" style="display:none;margin-top:14px"><h3>Revise os produtos</h3><p class="helper">Confirme o nome, a quantidade e a associação ao catálogo. Nenhum produto será incluído antes de você confirmar.</p><div id="listValidationRows" class="receipt-table-wrap"></div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn primary" id="confirmValidatedItems">Confirmar produtos</button><span id="confirmProductsWarning" role="alert" style="display:none;color:#c62828;font-size:12px;font-weight:600"><span aria-hidden="true">*</span> Confirme os produtos antes de Criar a Lista</span></div></section>' +
       '<div class="form-actions new-list-actions"><button type="button" class="new-list-cancel" data-cancel>Cancelar</button><button type="submit" class="btn primary" id="createNewListButton">Criar lista</button></div>' +
     '</form>', '');
@@ -548,6 +549,7 @@ function createListModal() {
   let reviewRows = [];
   let confirmedItems = [];
   let selectedPhoto = null;
+  let selectedAudio = null;
   let importNeedsConfirmation = false;
   let textNeedsValidation = false;
   let previewUrl = null;
@@ -557,16 +559,22 @@ function createListModal() {
   const validateTextWarning = $('#validateTextWarning');
   const textInput = $('#newListText');
   const setCreateEnabled = enabled => { createButton.disabled = false; createButton.title = ''; if (enabled) confirmWarning.style.display = 'none'; };
-  const textPanel = $('#textImportPanel'), photoPanel = $('#photoImportPanel');
+  const textPanel = $('#textImportPanel'), photoPanel = $('#photoImportPanel'), audioPanel = $('#audioImportPanel');
   const validation = $('#listValidationPanel'), validationRows = $('#listValidationRows');
   const progress = $('#listImportProgress'), progressText = $('#listImportProgressText');
-  const showProgress = message => { progressText.textContent = message; progress.style.display = 'block'; };
-  const hideProgress = () => { progress.style.display = 'none'; };
+  const progressPercent = $('#listImportProgressPercent'), progressBar = $('#listImportProgressBar'), progressTrack = progress.querySelector('[role="progressbar"]');
+  let progressTimer = null, progressValue = 0, progressFinished = false;
+  const setProgress = value => { progressValue = value; progressPercent.textContent = value + '%'; progressTrack.setAttribute('aria-valuenow', String(value)); progressBar.style.width = value + '%'; };
+  const showProgress = message => { clearInterval(progressTimer); progressFinished = false; progressText.textContent = message; progress.style.display = 'block'; let value = 6; setProgress(value); progressTimer = setInterval(() => { value = Math.min(92, value + 1); setProgress(value); }, 450); };
+  const finishProgress = () => { clearInterval(progressTimer); progressText.textContent = 'Análise concluída'; setProgress(100); progressFinished = true; };
+  const hideProgress = () => { clearInterval(progressTimer); if (progressFinished) { progressFinished = false; setTimeout(() => { progress.style.display = 'none'; }, 700); } else progress.style.display = 'none'; };
   const norm = value => String(value || '').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 
   $('#newListAddStore').addEventListener('click', () => { closeModal(); addStoreModal(createListModal); });
-  $('#openTextImport').addEventListener('click', () => { photoPanel.style.display = 'none'; textPanel.style.display = textPanel.style.display === 'none' ? 'block' : 'none'; validateTextWarning.style.display = 'none'; });
-  $('#openPhotoImport').addEventListener('click', () => { textPanel.style.display = 'none'; photoPanel.style.display = photoPanel.style.display === 'none' ? 'block' : 'none'; validateTextWarning.style.display = 'none'; });
+  $('#openTextImport').addEventListener('click', () => { photoPanel.style.display = 'none'; audioPanel.style.display = 'none'; textPanel.style.display = textPanel.style.display === 'none' ? 'block' : 'none'; validateTextWarning.style.display = 'none'; });
+  $('#openPhotoImport').addEventListener('click', () => { textPanel.style.display = 'none'; audioPanel.style.display = 'none'; photoPanel.style.display = photoPanel.style.display === 'none' ? 'block' : 'none'; validateTextWarning.style.display = 'none'; });
+  $('#openAudioImport').addEventListener('click', () => { textPanel.style.display = 'none'; photoPanel.style.display = 'none'; audioPanel.style.display = audioPanel.style.display === 'none' ? 'block' : 'none'; validateTextWarning.style.display = 'none'; });
+  $('#listAudioInput').addEventListener('change', e => { selectedAudio = e.target.files?.[0] || null; $('#readListAudio').disabled = !selectedAudio; importNeedsConfirmation = !!selectedAudio; confirmedItems = []; setCreateEnabled(!importNeedsConfirmation); confirmWarning.style.display = 'none'; validation.style.display = 'none'; });
   textInput.addEventListener('input', () => { textNeedsValidation = !!textInput.value.trim(); confirmedItems = []; if (textNeedsValidation) importNeedsConfirmation = true; validateTextWarning.style.display = 'none'; });
   $('#chooseListGallery').addEventListener('click', () => $('#listGalleryInput').click());
   $('#takeListPhoto').addEventListener('click', () => $('#listCameraInput').click());
@@ -647,6 +655,7 @@ function createListModal() {
       if (!window.SuperlistCloud?.validateListItems) throw new Error('A validação por IA não está disponível. Atualize a Edge Function no Supabase.');
       const checked = await window.SuperlistCloud.validateListItems(rows);
       prepareRows(checked.items || rows);
+      finishProgress();
       textNeedsValidation = false;
       validateTextWarning.style.display = 'none';
       toast(reviewRows.length + ' produto(s) revisados pela IA. Confira as sugestões.');
@@ -667,9 +676,30 @@ function createListModal() {
       showProgress('Transcrição concluída. A IA está revisando a grafia...');
       const checked = await window.SuperlistCloud.validateListItems(transcribed);
       prepareRows(checked.items || transcribed);
+      finishProgress();
       toast(reviewRows.length + ' produto(s) identificados e revisados. Confira as sugestões.');
     } catch (error) {
       console.error(error); toast('Não foi possível ler a foto. Tente outra imagem ou use a importação por texto.');
+    } finally { hideProgress(); button.disabled = false; }
+  });
+
+  $('#readListAudio').addEventListener('click', async () => {
+    if (!selectedAudio) return toast('Escolha ou grave um áudio primeiro.');
+    if (!window.SuperlistCloud?.analyzeListAudio) return toast('A leitura por IA não está disponível no momento.');
+    const button = $('#readListAudio'); button.disabled = true; showProgress('A IA está transcrevendo sua lista...');
+    importNeedsConfirmation = true; confirmedItems = []; setCreateEnabled(false);
+    try {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const result = await window.SuperlistCloud.analyzeListAudio(selectedAudio);
+      const items = (result.items || []).map(x => ({ name:x.name, brand:x.brand, quantity:x.quantity, unit:String(x.unit || 'un').toLowerCase() }));
+      if (!items.length) throw new Error('Não identifiquei produtos no áudio. Tente gravar novamente.');
+      showProgress('Transcrição concluída. A IA está revisando os produtos...');
+      const checked = await window.SuperlistCloud.validateListItems(items);
+      prepareRows(checked.items || items);
+      finishProgress();
+      toast(reviewRows.length + ' produto(s) identificados. Confira as sugestões.');
+    } catch (error) {
+      console.error(error); toast(error.message || 'Não foi possível ler o áudio. Tente outro arquivo ou cole a lista.');
     } finally { hideProgress(); button.disabled = false; }
   });
 
