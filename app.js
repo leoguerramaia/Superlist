@@ -1613,8 +1613,11 @@ function importItemsIntoOpenList() {
   function suggestedImportProduct(row) {
     const query = importNorm(row.name);
     if (!query) return null;
-    return db.products.find(product => importNorm(product.name) === query) ||
-      db.products.find(product => importNorm(product.name).includes(query) || query.includes(importNorm(product.name))) || null;
+    const exact = db.products.find(product => importNorm(product.name) === query);
+    if (exact) return exact;
+    const similar = findReceiptCatalogMatch(row.name);
+    if (similar?.product) return similar.product;
+    return db.products.find(product => importNorm(product.name).includes(query) || query.includes(importNorm(product.name))) || null;
   }
   function importBrands(productId) {
     const values = new Set();
