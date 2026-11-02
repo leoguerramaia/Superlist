@@ -460,11 +460,11 @@ function renderPrices() {
 
   $('#priceRows').innerHTML=rows.length
     ? rows.map(p=>`<tr>
-        <td><strong>${esc(p.productName)}</strong>${p.brand?`<small> · ${esc(p.brand)}</small>`:''}</td>
-        <td>${esc(storeName(p.storeId))}</td>
-        <td>${dateBR(p.date)}</td>
-        <td><strong>${money(p.price)}</strong></td>
-        <td>${unitLabel(p.unit)}</td>
+        <td data-label="Produto"><strong>${esc(p.productName)}</strong>${p.brand?`<small> · ${esc(p.brand)}</small>`:''}</td>
+        <td data-label="Supermercado">${esc(storeName(p.storeId))}</td>
+        <td data-label="Data">${dateBR(p.date)}</td>
+        <td data-label="Preço unitário"><strong>${money(p.price)}</strong></td>
+        <td data-label="Unidade">${unitLabel(p.unit)}</td>
       </tr>`).join('')
     : '<tr><td colspan="5" class="muted">Ainda não há preços registrados. Eles serão salvos ao informar preços durante as compras.</td></tr>';
 
@@ -547,10 +547,10 @@ function renderPriceAnalytics(rows) {
           let low=Math.min(...vals.map(v=>v.normalized));
           return vals.map(r=>({...r,lowest:r.normalized===low}));
         }).map(r=>`<tr>
-          <td>${esc(r.name)}</td>
-          <td>${esc(r.store)}</td>
-          <td>${money(r.price)}</td>
-          <td class="${r.lowest?'comparison-best':''}">${money(r.normalized)}/${esc(r.unit)} ${r.lowest?'★':''}</td>
+          <td data-label="Produto">${esc(r.name)}</td>
+          <td data-label="Supermercado">${esc(r.store)}</td>
+          <td data-label="Preço pago">${money(r.price)}</td>
+          <td data-label="Equivalente" class="${r.lowest?'comparison-best':''}">${money(r.normalized)}/${esc(r.unit)} ${r.lowest?'★':''}</td>
         </tr>`).join('')}</tbody>
       </table>`
     : '<div class="empty-state">Registre o mesmo produto em mais de uma loja para visualizar a comparação por kg, litro ou unidade de conteúdo.</div>';
@@ -1788,7 +1788,7 @@ let cats=[...new Set(visibleItems.map(i=>i.category||'Outros'))];
         return `<section class="shopping-category">
           <h3>${esc(cat)} <small>${money(subtotal)}</small></h3>
           ${its.map(i=>`<div class="shop-item">
-            <input type="checkbox" data-check="${i.id}" ${i.checked?'checked':''}>
+            <input type="checkbox" data-check="${i.id}" aria-label="Marcar ${esc(i.name)} como comprado" ${i.checked?'checked':''}>
             <div class="shop-name ${i.checked?'checked':''}">
               <strong>${esc(i.name)}${i.brand ? ` · ${esc(i.brand)}` : ''}</strong>
               <small>
@@ -1804,14 +1804,11 @@ let cats=[...new Set(visibleItems.map(i=>i.category||'Outros'))];
             <input type="number" min="0" step="${i.unit==='kg'||i.unit==='l'?'.01':'1'}" data-qty="${i.id}" value="${i.qty}" aria-label="Quantidade">
             <input type="number" min="0" step=".01" data-price="${i.id}" value="${i.price||''}" placeholder="Preço (R$)" aria-label="Preço">
             <span class="shop-total">${money((Number(i.qty)||0)*(Number(i.price)||0))}</span>
-            <button class="scan-btn" data-scan="${i.id}"
-  title="Associar código de barras">▥</button>
-
-<button class="scan-btn" data-edit-shopping-item="${i.id}"
-  title="Editar item">✎</button>
-
-<button class="scan-btn" data-remove-shopping-item="${i.id}"
-  title="Retirar da compra">×</button>
+            <div class="shop-actions">
+              <button type="button" class="scan-btn" data-scan="${i.id}" title="Associar código de barras" aria-label="Associar código de barras de ${esc(i.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5v14M7 5v14M11 5v14M15 5v14M18 5v14M21 5v14"/></svg></button>
+              <button type="button" class="scan-btn" data-edit-shopping-item="${i.id}" title="Editar item" aria-label="Editar ${esc(i.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>
+              <button type="button" class="scan-btn" data-remove-shopping-item="${i.id}" title="Retirar da compra" aria-label="Retirar ${esc(i.name)} da compra"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button>
+            </div>
           </div>`).join('')}
         </section>`;
       }).join('')
@@ -2832,8 +2829,8 @@ async function loadAdminDashboard(){
   renderAdminUsers();renderAdminFamilies();renderAdminAudit();adminNotice('Dados atualizados. A consulta e as ações administrativas são registradas para auditoria.');
  }catch(e){console.error(e);adminNotice(e.message||'Não foi possível carregar o painel administrativo.',true);}
 }
-function renderAdminUsers(){const q=($('#adminUserSearch')?.value||'').toLowerCase();const rows=adminCache.users.filter(u=>`${u.email} ${u.fullName}`.toLowerCase().includes(q));$('#adminUsersRows').innerHTML=rows.length?rows.map(u=>`<tr><td><strong>${adminEscape(u.fullName||'Sem nome')}</strong><small class="admin-sub">${adminEscape(u.email)}</small></td><td>${adminDate(u.createdAt)}</td><td><span class="admin-pill ${u.banned?'blocked':'active'}">${u.banned?'Bloqueado':'Ativo'}</span></td><td>${u.isAdmin?(u.adminRole==='super_admin'?'Administrador principal':'Administrador'):'Usuário'}</td><td class="admin-actions">${u.isPrincipal?'<span class="muted">Conta principal</span>':`<button class="text-button" data-admin-action="ban" data-user-id="${u.id}" data-banned="${u.banned}">${u.banned?'Reativar':'Bloquear'}</button>${window.__superlistAdminRole==='super_admin'?`<button class="text-button" data-admin-action="role" data-user-id="${u.id}" data-admin="${u.isAdmin}">${u.isAdmin?'Remover admin':'Tornar admin'}</button>`:''}`}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum usuário encontrado.</td></tr>';}
-function renderAdminFamilies(){const q=($('#adminFamilySearch')?.value||'').toLowerCase();const rows=adminCache.families.filter(f=>`${f.name} ${f.ownerEmail}`.toLowerCase().includes(q));$('#adminFamiliesRows').innerHTML=rows.length?rows.map(f=>`<tr><td><strong>Família ${adminEscape(f.name)}</strong><small class="admin-sub">Código: ${adminEscape(f.inviteCode)}</small></td><td>${adminEscape(f.ownerName||f.ownerEmail||'—')}<small class="admin-sub">${adminEscape(f.ownerEmail||'')}</small></td><td>${f.memberCount}</td><td>${f.listCount}</td><td>${f.productCount}</td><td>${adminDate(f.createdAt)}</td></tr>`).join(''):'<tr><td colspan="6">Nenhuma família encontrada.</td></tr>';}
+function renderAdminUsers(){const q=($('#adminUserSearch')?.value||'').toLowerCase();const rows=adminCache.users.filter(u=>`${u.email} ${u.fullName}`.toLowerCase().includes(q));$('#adminUsersRows').innerHTML=rows.length?rows.map(u=>`<tr><td data-label="Usuário"><strong>${adminEscape(u.fullName||'Sem nome')}</strong><small class="admin-sub">${adminEscape(u.email)}</small></td><td data-label="Cadastro">${adminDate(u.createdAt)}</td><td data-label="Status"><span class="admin-pill ${u.banned?'blocked':'active'}">${u.banned?'Bloqueado':'Ativo'}</span></td><td data-label="Perfil">${u.isAdmin?(u.adminRole==='super_admin'?'Administrador principal':'Administrador'):'Usuário'}</td><td data-label="Ações" class="admin-actions">${u.isPrincipal?'<span class="muted">Conta principal</span>':`<button class="text-button" data-admin-action="ban" data-user-id="${u.id}" data-banned="${u.banned}">${u.banned?'Reativar':'Bloquear'}</button>${window.__superlistAdminRole==='super_admin'?`<button class="text-button" data-admin-action="role" data-user-id="${u.id}" data-admin="${u.isAdmin}">${u.isAdmin?'Remover admin':'Tornar admin'}</button>`:''}`}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum usuário encontrado.</td></tr>';}
+function renderAdminFamilies(){const q=($('#adminFamilySearch')?.value||'').toLowerCase();const rows=adminCache.families.filter(f=>`${f.name} ${f.ownerEmail}`.toLowerCase().includes(q));$('#adminFamiliesRows').innerHTML=rows.length?rows.map(f=>`<tr><td data-label="Família"><strong>Família ${adminEscape(f.name)}</strong><small class="admin-sub">Código: ${adminEscape(f.inviteCode)}</small></td><td data-label="Responsável">${adminEscape(f.ownerName||f.ownerEmail||'—')}<small class="admin-sub">${adminEscape(f.ownerEmail||'')}</small></td><td data-label="Membros">${f.memberCount}</td><td data-label="Listas">${f.listCount}</td><td data-label="Produtos">${f.productCount}</td><td data-label="Criada em">${adminDate(f.createdAt)}</td></tr>`).join(''):'<tr><td colspan="6">Nenhuma família encontrada.</td></tr>';}
 const ADMIN_PROVIDER_LABELS={openai:'OpenAI',gemini:'Gemini',groq:'Groq'};
 let adminProviderOrder=['openai','gemini','groq'];
 function renderAdminProviderOrder(){
@@ -2854,7 +2851,7 @@ async function saveAdminProviderOrder(){
  catch(e){providerSettingsNotice(e.message||'Não foi possível salvar a prioridade.',true);}
  finally{button.disabled=false;}
 }
-function renderAdminAudit(){const rows=adminCache.audit;$('#adminAuditRows').innerHTML=rows.length?rows.map(a=>`<tr><td>${adminDate(a.createdAt)}</td><td>${adminEscape(a.adminEmail)}</td><td>${adminEscape(a.action)}</td><td>${adminEscape(a.target||'—')}</td><td>${adminEscape(a.details||'—')}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum registro de auditoria.</td></tr>';}
+function renderAdminAudit(){const rows=adminCache.audit;$('#adminAuditRows').innerHTML=rows.length?rows.map(a=>`<tr><td data-label="Data">${adminDate(a.createdAt)}</td><td data-label="Administrador">${adminEscape(a.adminEmail)}</td><td data-label="Ação">${adminEscape(a.action)}</td><td data-label="Alvo">${adminEscape(a.target||'—')}</td><td data-label="Detalhes">${adminEscape(a.details||'—')}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum registro de auditoria.</td></tr>';}
 async function adminUserAction(button){const id=button.dataset.userId;const action=button.dataset.adminAction;try{button.disabled=true;if(action==='ban'){const banned=button.dataset.banned!=='true';if(!confirm(banned?'Confirma bloquear este usuário? Ele não poderá entrar enquanto estiver bloqueado.':'Confirma reativar este usuário?'))return;await adminRequest('set_user_ban',{userId:id,banned});}else{const isAdmin=button.dataset.admin==='true';if(!confirm(isAdmin?'Remover privilégios administrativos deste usuário?':'Conceder privilégios de administrador a este usuário?'))return;await adminRequest('set_admin',{userId:id,isAdmin});}toast('Ação administrativa concluída.');await loadAdminDashboard();}catch(e){toast(e.message||'Não foi possível executar a ação.');}finally{button.disabled=false;}}
 
 function init() {
@@ -2999,9 +2996,23 @@ if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
     }
   });
 
-  $('#mobileMenu').onclick=()=>{
-    $('#sidebar').classList.toggle('open');
+  const mobileSidebar=$('#sidebar');
+  const mobileBackdrop=$('#sidebarBackdrop');
+  const mobileMenu=$('#mobileMenu');
+  const setMobileMenuOpen=open=>{
+    mobileSidebar.classList.toggle('open',open);
+    mobileBackdrop.classList.toggle('visible',open);
+    mobileMenu.setAttribute('aria-expanded',String(open));
+    mobileMenu.setAttribute('aria-label',open?'Fechar menu':'Abrir menu');
+    document.body.classList.toggle('sidebar-open',open);
   };
+  mobileMenu.onclick=()=>setMobileMenuOpen(!mobileSidebar.classList.contains('open'));
+  mobileBackdrop.addEventListener('click',()=>setMobileMenuOpen(false));
+  mobileSidebar.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('click',()=>setMobileMenuOpen(false)));
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&mobileSidebar.classList.contains('open')) setMobileMenuOpen(false);
+  });
+  window.addEventListener('resize',()=>{if(window.innerWidth>760) setMobileMenuOpen(false);});
 
   $('#profileAvatarButton').onclick=()=>window.__superlistSignedIn?profileModal():accountModal();
   $('#accountBtn').onclick=()=>window.__superlistSignedIn?profileModal():accountModal();
