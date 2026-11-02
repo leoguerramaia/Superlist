@@ -1636,7 +1636,7 @@ function importItemsIntoOpenList() {
       rows.map((row,index) => {
         if (!row.catalogSelected && !row.productId) row.productId = suggestedImportProduct(row)?.id || '';
         const brands = importBrands(row.productId);
-        const hasNew = row.brand && !brands.some(brand => importNorm(brand) === importNorm(row.brand));
+        const hasNew = row.isNewBrand || (row.brand && !brands.some(brand => importNorm(brand) === importNorm(row.brand)));
         return '<tr data-import-row="' + index + '">' +
           '<td><input data-import-field="quantity" aria-label="Quantidade" type="number" min="0.01" step="0.01" value="' + row.quantity + '"></td>' +
           '<td><select data-import-field="unit" aria-label="Unidade">' + ['un','kg','g','l','ml','cx','pct'].map(unit => '<option value="' + unit + '"' + (row.unit === unit ? ' selected' : '') + '>' + unit + '</option>').join('') + '</select></td>' +
@@ -1726,14 +1726,14 @@ function importItemsIntoOpenList() {
     const tr=event.target.closest('[data-import-row]');if(!tr)return;const row=rows[Number(tr.dataset.importRow)];if(!row)return;
     const key=event.target.dataset.importField;
     if(key==='product'){row.productId=event.target.value;row.catalogSelected=true;row.brand='';renderReview();return;}
-    if(key==='brandChoice'){row.brand=event.target.value==='__new__'?'':event.target.value;renderReview();return;}
+    if(key==='brandChoice'){if(event.target.value==='__new__'){row.isNewBrand=true;row.brand='';const input=tr.querySelector('[data-import-field="brand"]');if(input)input.style.display='block';return;}row.isNewBrand=false;row.brand=event.target.value;renderReview();return;}
     if(key==='quantity')row.quantity=Number(event.target.value);
     else if(key==='brand')row.brand=event.target.value;
     else if(key)row[key]=event.target.value;
   });
   rowsWrap.addEventListener('input',event=>{
     const tr=event.target.closest('[data-import-row]');if(!tr)return;const row=rows[Number(tr.dataset.importRow)];if(!row)return;
-    if(event.target.dataset.importField==='brand')row.brand=event.target.value;
+    if(event.target.dataset.importField==='brand'){row.brand=event.target.value;row.isNewBrand=true;}
   });
   rowsWrap.addEventListener('click',event=>{
     const accept=event.target.closest('[data-import-suggestion]');
