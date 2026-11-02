@@ -2834,17 +2834,93 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
   return { stop() { alreadyRead = true; controls?.stop(); } };
 }
 
+async function loadQuaggaLibrary() {
+  if(window.Quagga?.init)return window.Quagga;
+  if(window.__superlistQuaggaPromise)return window.__superlistQuaggaPromise;
+  window.__superlistQuaggaPromise=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    script.src='https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js';
+    script.async=true;
+    script.onload=()=>window.Quagga?.init?resolve(window.Quagga):reject(new Error('O leitor Quagga2 não carregou corretamente.'));
+    script.onerror=()=>reject(new Error('Não foi possível carregar o leitor de código de barras.'));
+    document.head.appendChild(script);
+  });
+  return window.__superlistQuaggaPromise;
+}
+
+function productBarcodeDecoderOptions() {
+  return {
+    locator:{patchSize:'medium',halfSample:false},
+    decoder:{readers:['ean_reader','ean_8_reader','upc_reader','upc_e_reader','i2of5_reader','code_128_reader','code_39_reader']},
+    locate:true
+  };
+}
+
+// A câmera decodifica códigos lineares com Quagga2, um leitor diferente do ZXing.
+async function startLiveBarcodeScanner(video, onFound, onStatus) {
+  if(!navigator.mediaDevices?.getUserMedia)throw new Error('A câmera exige acesso HTTPS e permissão do navegador.');
+  const Quagga=await loadQuaggaLibrary();
+  const target=video?.parentElement;
+  if(!target)throw new Error('Área da câmera não encontrada.');
+  target.innerHTML='';
+  if(typeof onStatus==='function')onStatus('Aponte as barras para a câmera. Iniciando Quagga2…');
+
+  const config={
+    ...productBarcodeDecoderOptions(),
+    inputStream:{
+      name:'SuperList barcode camera',
+      type:'LiveStream',
+      target,
+      constraints:{
+        facingMode:'environment',
+        width:{ideal:1280},
+        height:{ideal:720}
+      },
+      area:{top:'5%',right:'3%',left:'3%',bottom:'5%'}
+    },
+    frequency:12
+  };
+
+  let stopped=false;
+  let completed=false;
+  let detectedHandler;
+  const stop=()=>{
+    if(stopped)return;
+    stopped=true;
+    Quagga.offDetected(detectedHandler);
+    try{Quagga.stop();}catch(_){}
+    target.innerHTML='';
+  };
+
+  await new Promise((resolve,reject)=>{
+    Quagga.init(config,error=>error?reject(error):resolve());
+  });
+
+  detectedHandler=result=>{
+    if(stopped||completed)return;
+    const code=normalizeBarcodeCode(result?.codeResult?.code);
+    if(![8,12,13,14].includes(code.length))return;
+    completed=true;
+    stop();
+    if(typeof onFound==='function')onFound(code);
+  };
+  Quagga.onDetected(detectedHandler);
+  Quagga.start();
+
+  target.querySelectorAll('video').forEach(element=>{
+    element.setAttribute('playsinline','');
+    element.playsInline=true;
+    element.muted=true;
+    element.style.width='100%';
+    element.style.height='100%';
+    element.style.objectFit='contain';
+  });
+  return {stop};
+}
+
 async function readBarcodeFromImage(file) {
-  if (!file || !file.type?.startsWith('image/')) throw new Error('Escolha uma foto válida do código de barras.');
-  const ZXing=await loadZXingLibrary();
-  const formats=ZXing.BarcodeFormat;
-  const hints=new Map();
-  if(ZXing.DecodeHintType&&formats){
-    const allowed=['EAN_13','EAN_8','UPC_A','UPC_E','ITF','CODE_128','CODE_39','CODABAR'].map(name=>formats[name]).filter(Boolean);
-    if(allowed.length)hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,allowed);
-    if(ZXing.DecodeHintType.TRY_HARDER)hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
-  }
-  const reader=new ZXing.BrowserMultiFormatReader(hints);
+  if(!file||!file.type?.startsWith('image/'))throw new Error('Escolha uma foto válida do código de barras.');
+  const Quagga=await loadQuaggaLibrary();
   const url=URL.createObjectURL(file);
   try{
     const image=await new Promise((resolve,reject)=>{
@@ -2856,34 +2932,27 @@ async function readBarcodeFromImage(file) {
     const width=image.naturalWidth,height=image.naturalHeight;
     const regions=[
       [0,0,width,height],
-      [width*.08,height*.2,width*.84,height*.6],
+      [width*.06,height*.18,width*.88,height*.64],
       [0,height*.45,width,height*.5]
     ];
-    for(const region of regions){
-      const [sx,sy,sw,sh]=region;
-      const scale=Math.min(2,2400/Math.max(sw,sh));
-      for(const filter of ['none','grayscale(1) contrast(1.45)']){
-        const canvas=document.createElement('canvas');
-        canvas.width=Math.max(1,Math.round(sw*scale));
-        canvas.height=Math.max(1,Math.round(sh*scale));
-        const context=canvas.getContext('2d');
-        if(!context)continue;
-        context.filter=filter;
-        context.drawImage(image,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
-        context.filter='none';
-        try{
-          const decoded=reader.decodeFromCanvas
-            ? reader.decodeFromCanvas(canvas)
-            : await reader.decodeFromImageElement(await new Promise((resolve,reject)=>{
-                const copy=new Image();
-                copy.onload=()=>resolve(copy);
-                copy.onerror=reject;
-                copy.src=canvas.toDataURL('image/png');
-              }));
-          const code=normalizeBarcodeCode(decoded?.getText?.());
-          if([8,12,13,14].includes(code.length))return code;
-        }catch(_){}
-      }
+    for(const [sx,sy,sw,sh] of regions){
+      const scale=Math.min(1,1800/Math.max(sw,sh));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(sw*scale));
+      canvas.height=Math.max(1,Math.round(sh*scale));
+      const context=canvas.getContext('2d');
+      if(!context)continue;
+      context.drawImage(image,sx,sy,sw,sh,0,0,canvas.width,canvas.height);
+      const source=canvas.toDataURL('image/jpeg',.94);
+      const result=await new Promise(resolve=>{
+        Quagga.decodeSingle({
+          ...productBarcodeDecoderOptions(),
+          src:source,
+          inputStream:{size:1800}
+        },resolve);
+      });
+      const code=normalizeBarcodeCode(result?.codeResult?.code);
+      if([8,12,13,14].includes(code.length))return code;
     }
     throw new Error('Não consegui ler as barras nesta foto. Tente aproximar e manter o código bem iluminado.');
   }finally{URL.revokeObjectURL(url);}
