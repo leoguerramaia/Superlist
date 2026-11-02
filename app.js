@@ -1725,7 +1725,7 @@ function importItemsIntoOpenList() {
   rowsWrap.addEventListener('change',event=>{
     const tr=event.target.closest('[data-import-row]');if(!tr)return;const row=rows[Number(tr.dataset.importRow)];if(!row)return;
     const key=event.target.dataset.importField;
-    if(key==='product'){row.productId=event.target.value;row.catalogSelected=true;row.brand='';renderReview();return;}
+    if(key==='product'){row.productId=event.target.value;row.catalogSelected=true;row.brand='';row.isNewBrand=false;renderReview();return;}
     if(key==='brandChoice'){if(event.target.value==='__new__'){row.isNewBrand=true;row.brand='';const input=tr.querySelector('[data-import-field="brand"]');if(input)input.style.display='block';return;}row.isNewBrand=false;row.brand=event.target.value;renderReview();return;}
     if(key==='quantity')row.quantity=Number(event.target.value);
     else if(key==='brand')row.brand=event.target.value;
