@@ -46,3 +46,16 @@
   .shopping-title-actions{gap:5px}
   .shopping-title-actions .list-card-action{width:30px;height:30px}
 }
+
+/* Refinamento minimalista: controles e ícones com tratamento consistente */
+.nav-link span svg,.stat-icon svg,.button-icon svg,.search-icon svg,.mobile-menu svg,.text-button svg{width:18px;height:18px;display:block}
+.nav-link span{display:grid;place-items:center}
+.stat-icon svg{width:17px;height:17px}
+.button-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+.button-icon svg{width:15px;height:15px}
+.search-icon{display:inline-flex;align-items:center;color:#9ba79f}
+.search-icon svg{width:16px;height:16px}
+.mobile-menu svg{width:20px;height:20px}
+.text-button svg{width:16px;height:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.stat-card,.recent-card,.list-card,.store-card,.quick-card,.analytics-card,.purchase-summary{box-shadow:none}
