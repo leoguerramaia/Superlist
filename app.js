@@ -339,7 +339,7 @@ function renderLists() {
     .sort((a,b)=>b.created.localeCompare(a.created));
 
   $('#allLists').innerHTML=ls.length
-    ? ls.map(l=>`<article class="list-card" data-open-list="${l.id}">${listCardInner(l).replace('<h3>', '<div class="list-card-title-row"><h3>').replace('</h3>', '</h3><div class="list-card-actions"><button type="button" class="list-card-action" data-rename-list="${l.id}" aria-label="Renomear lista" onclick="event.preventDefault();event.stopPropagation();window.superlistListActions.rename(this.dataset.renameList)" title="Renomear lista"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button type="button" class="list-card-action danger" data-delete-list="${l.id}" aria-label="Excluir lista" onclick="event.preventDefault();event.stopPropagation();window.superlistListActions.delete(this.dataset.deleteList)" title="Excluir lista"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button></div></div>')}</article>`).join('')
+    ? ls.map(l=>`<article class="list-card" data-open-list="${l.id}">${listCardInner(l).replace('<h3>', '<div class="list-card-title-row"><h3>').replace('</h3>', '</h3><div class="list-card-actions"><button type="button" class="list-card-action" data-rename-list="${l.id}" aria-label="Renomear lista" title="Renomear lista"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button type="button" class="list-card-action danger" data-delete-list="${l.id}" aria-label="Excluir lista" title="Excluir lista"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button></div></div>')}</article>`).join('')
     : '<div class="empty-state">Nenhuma lista encontrada. Clique em “Nova lista” para começar.</div>';
 }
 
@@ -367,11 +367,6 @@ function deleteListById(id) {
   if(!currentList && $('#page-shopping')?.classList.contains('active'))page('lists');
   toast('Lista excluída.');
 }
-
-window.superlistListActions = {
-  rename: id => renameListById(id),
-  delete: id => deleteListById(id)
-};
 
 function listCardInner(l) {
   let done=l.items.filter(i=>i.checked).length;
@@ -2871,6 +2866,12 @@ function init() {
   renderAll();
   $('#renameCurrentList')?.addEventListener('click',event=>{event.stopPropagation();renameCurrentList();});
   $('#deleteCurrentList')?.addEventListener('click',event=>{event.stopPropagation();deleteCurrentList();});
+  $('#allLists')?.addEventListener('click',event=>{
+    const rename=event.target.closest('[data-rename-list]');
+    if(rename){event.preventDefault();event.stopPropagation();renameListById(rename.dataset.renameList);return;}
+    const remove=event.target.closest('[data-delete-list]');
+    if(remove){event.preventDefault();event.stopPropagation();deleteListById(remove.dataset.deleteList);}
+  });
   $('#adminRefresh')?.addEventListener('click',loadAdminDashboard);
   $('#saveAdminProviderOrder')?.addEventListener('click',saveAdminProviderOrder);
   $('#adminUserSearch')?.addEventListener('input',renderAdminUsers);
