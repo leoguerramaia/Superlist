@@ -65,7 +65,7 @@ async function fetchCatalogImage(imageUrl: string, accessToken: string): Promise
   try {
     const url = new URL(imageUrl);
     if (url.protocol !== "https:" || url.hostname !== "gtin.rscsistemas.com.br" ||
-        !/^\\/api\\/v[34]\\/gtin\\/\\d+\\/image\\/?$/.test(url.pathname)) return null;
+        !/^\/api\/v[34]\/gtin\/\d+\/image\/?$/.test(url.pathname)) return null;
 
     const response = await fetch(url, {
       headers: {
