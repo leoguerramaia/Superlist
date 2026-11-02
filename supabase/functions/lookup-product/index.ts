@@ -84,7 +84,8 @@ function normalizeV4(data: Record<string, any>, gtin: string) {
 function normalizeV3(data: Record<string, any>, gtin: string) {
   return {
     gtin: String(data.ean || gtin),
-    name: String(data.nome_acento || data.nome || ""),
+    eanTipo: String(data.ean_tipo || ""),
+    name: String(data.nome || data.nome_acento || ""),
     brand: String(data.marca || ""),
     category: String(data.categoria || ""),
     unit: String(data.unid_abr || data.unid_desc || ""),
