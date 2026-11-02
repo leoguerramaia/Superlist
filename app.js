@@ -1315,6 +1315,9 @@ function addCatalogProductToList() {
   const mode = $('#addProductMode');
   const area = $('#addProductSearchArea');
   const results = $('#addProductResults');
+  let manualUnitChanged = false;
+  $('#addProductUnit').addEventListener('change', () => { manualUnitChanged = true; });
+  const selectedManualUnit = product => { const input=$('#addProductUnit'); if(!manualUnitChanged && input) input.value=product.unit||'un'; return input?.value || product.unit || 'un'; };
 
   function availableProducts() {
     return db.products.filter(p => p.active !== false);
@@ -1403,7 +1406,7 @@ function addCatalogProductToList() {
         addProductToCurrentList(
           product,
           Number($('#addProductQty').value) || 1,
-          $('#addProductBrand')?.value || '', $('#addProductUnit')?.value || ''
+          $('#addProductBrand')?.value || '', selectedManualUnit(product)
         );
       };
 
@@ -1474,7 +1477,7 @@ function addCatalogProductToList() {
           addProductToCurrentList(
             product,
             Number($('#addProductQty').value) || 1,
-            $('#addProductBrand')?.value || product.brand || '', $('#addProductUnit')?.value || ''
+            $('#addProductBrand')?.value || product.brand || '', selectedManualUnit(product)
           );
         } catch (error) {
           console.error('Erro ao consultar código:', error);
@@ -1513,7 +1516,7 @@ function addCatalogProductToList() {
           let product = db.products.find(p => normalizeBarcodeCode(p.barcode) === code);
           if (!product) { const name = formatDisplayName(result.name); product = { id: uid(), name, category: seedCategories.includes(result.category) ? result.category : 'Outros', unit: 'un', ...packageInfo(name, 'un'), barcode: code, brand: formatDisplayName(result.brand || ''), photo: '', active: true, description: result.description || '', barcodeSources: result.sources || [] }; db.products.push(product); save(); }
           aiCameraControls.stop(); aiCameraControls = null; cameraBox.style.display = 'none';
-          addProductToCurrentList(product, Number($('#addProductQty').value) || 1, $('#addProductBrand')?.value || product.brand || '', $('#addProductUnit')?.value || '');
+          addProductToCurrentList(product, Number($('#addProductQty').value) || 1, $('#addProductBrand')?.value || product.brand || '', selectedManualUnit(product));
         } catch (error) { console.error(error); toast(error.message || 'Falha na análise da imagem.'); }
         finally { button.disabled = false; button.textContent = '✨ Ler com IA'; }
       };
@@ -1525,7 +1528,7 @@ function addCatalogProductToList() {
         try {
           const product = await findProductByBarcode(code);
           if (!product) { toast('A IA não encontrou uma correspondência confiável para esse código.'); return; }
-          addProductToCurrentList(product, Number($('#addProductQty').value) || 1, $('#addProductBrand')?.value || product.brand || '', $('#addProductUnit')?.value || '');
+          addProductToCurrentList(product, Number($('#addProductQty').value) || 1, $('#addProductBrand')?.value || product.brand || '', selectedManualUnit(product));
         } catch (error) { console.error(error); toast(error.message || 'Falha na pesquisa com IA.'); }
         finally { button.disabled = false; button.textContent = 'Pesquisar com IA'; }
       };
@@ -1546,7 +1549,7 @@ function addCatalogProductToList() {
       addProductToCurrentList(
         product,
         Number($('#addProductQty').value) || 1,
-        $('#addProductBrand')?.value || '', $('#addProductUnit')?.value || ''
+        $('#addProductBrand')?.value || '', selectedManualUnit(product)
       );
     }
   });
