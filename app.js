@@ -1701,7 +1701,7 @@ function addCatalogProductToList() {
       $('#newBarcodePhotoInput').addEventListener('change',async event=>{
         const file=event.target.files?.[0];if(!file)return;
         barcodeCameraControls?.stop();
-        const status=$('#addBarcodeScanStatus');if(status){status.style.display='block';status.textContent='Preparando e lendo a foto…';}
+        const status=$('#addBarcodeScanStatus');if(status){status.style.display='block';status.textContent='A IA está lendo a foto…';}
         try{const code=await readBarcodeFromImage(file);$('#addProductBarcode').value=code;if(status)status.textContent='Código lido: '+code+'; consultando catálogo…';toast('Código lido. Consultando catálogo…');await lookupBarcodeProduct();}
         catch(error){console.error(error);if(error?.candidate)$('#addProductBarcode').value=error.candidate;if(status)status.textContent=error.message||'Não foi possível ler esta foto.';toast(error.message||'Não foi possível ler esta foto.');}
         finally{event.target.value='';}
@@ -2871,20 +2871,17 @@ function barcodeCandidateError(candidate) {
 }
 
 async function startLiveBarcodeScanner(video, onFound, onStatus) {
-  if (!navigator.mediaDevices?.getUserMedia) throw new Error('A câmera exige acesso HTTPS e permissão do navegador.');
-  const detectors = await loadBarcodeDetectors();
+  if (!navigator.mediaDevices?.getUserMedia) throw new Error('A câmera exige HTTPS e permissão do navegador.');
+  if (!window.SuperlistCloud?.analyzeBarcode) throw new Error('A leitura por IA não está disponível.');
   if (!video?.parentElement) throw new Error('Área da câmera não encontrada.');
-
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
-    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
   });
-  let stopped = false, busy = false, timer = null, frameCount = 0;
-  const recentReadings = [];
+  let stopped = false, busy = false, timer = null;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) { stream.getTracks().forEach(track => track.stop()); throw new Error('Não foi possível iniciar o leitor da câmera.'); }
-
   const stop = () => {
     if (stopped) return;
     stopped = true;
@@ -2905,111 +2902,45 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
     if (!video.videoWidth) await new Promise(resolve => video.addEventListener('loadedmetadata', resolve, { once: true }));
   } catch (_) {
     stream.getTracks().forEach(track => track.stop());
-    throw new Error('Não foi possível iniciar a câmera. Confira a permissão do navegador e tente novamente.');
+    throw new Error('Não foi possível iniciar a câmera. Confira a permissão do navegador.');
   }
-
-  if (typeof onStatus === 'function') onStatus('Aponte o código para a câmera, aproxime-o e mantenha as barras nítidas.');
+  if (typeof onStatus === 'function') onStatus('A IA está lendo o código. Mantenha as barras centralizadas e nítidas.');
   const scanFrame = async () => {
     if (stopped || busy || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
     busy = true;
-    frameCount++;
-    let code = '', candidate = '';
     try {
       const width = video.videoWidth, height = video.videoHeight;
-      const regions = [
-        [0, 0, 1, 1],
-        [0.05, 0.18, 0.9, 0.64],
-        [0.12, 0.28, 0.76, 0.5]
-      ];
-      for (const [rx, ry, rw, rh] of regions) {
-        const sx = Math.round(width * rx), sy = Math.round(height * ry);
-        const sw = Math.max(1, Math.round(width * rw)), sh = Math.max(1, Math.round(height * rh));
-        const scale = Math.min(1, 2200 / Math.max(sw, sh));
-        canvas.width = Math.max(1, Math.round(sw * scale));
-        canvas.height = Math.max(1, Math.round(sh * scale));
-        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-        const result = await detectGTINFromSource(detectors, canvas);
-        if (result.error) throw result.error;
-        if (result.candidate && !candidate) candidate = result.candidate;
-        if (result.code) { code = result.code; break; }
+      canvas.width = Math.min(width, 1280);
+      canvas.height = Math.max(1, Math.round(height * canvas.width / width));
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+      if (!blob) throw new Error('Não foi possível capturar o quadro da câmera.');
+      const image = new File([blob], 'barcode-frame.jpg', { type: 'image/jpeg' });
+      const result = await window.SuperlistCloud.analyzeBarcode({ image });
+      const code = normalizeBarcodeCode(result?.ean);
+      if (isValidBarcodeGTIN(code)) {
+        stop();
+        if (typeof onFound === 'function') onFound(code);
+      } else if (typeof onStatus === 'function') {
+        onStatus('A IA ainda não conseguiu ler as barras. Aproxime o produto e evite reflexos.');
       }
-
-      recentReadings.push(code);
-      if (recentReadings.length > 5) recentReadings.shift();
-      if (!code) {
-        if (frameCount % 12 === 0 && typeof onStatus === 'function') {
-          onStatus(candidate
-            ? 'Leitura parcial (' + candidate + '). Aproxime o código e mantenha as barras nítidas.'
-            : 'Aproxime o código, centralize as barras e evite reflexos ou movimento.');
-        }
-        return;
-      }
-
-      const confirmations = recentReadings.filter(value => value === code).length;
-      if (confirmations < 3) {
-        if (typeof onStatus === 'function') onStatus('Código detectado. Mantenha a câmera estável para confirmar…');
-        return;
-      }
-      stop();
-      if (typeof onFound === 'function') onFound(code);
     } catch (error) {
-      console.warn('Erro ao ler um quadro da câmera:', error);
-      if (frameCount % 12 === 0 && typeof onStatus === 'function') onStatus('Falha ao processar a imagem. Feche e abra a câmera novamente.');
-    } finally {
-      busy = false;
-    }
+      console.warn('Falha ao analisar o quadro da câmera:', error);
+      if (typeof onStatus === 'function') onStatus(error.message || 'Falha ao analisar o código. Tente novamente.');
+    } finally { busy = false; }
   };
-  timer = setInterval(scanFrame, 350);
+  timer = setInterval(scanFrame, 2500);
   scanFrame();
   return { stop };
 }
 
 async function readBarcodeFromImage(file) {
   if (!file || (file.type && !file.type.startsWith('image/'))) throw new Error('Escolha uma foto válida do código de barras.');
-  const detectors = await loadBarcodeDetectors();
-  const url = URL.createObjectURL(file);
-  try {
-    const image = await new Promise((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = () => reject(new Error('Não foi possível abrir a foto.'));
-      element.src = url;
-    });
-    const width = image.naturalWidth, height = image.naturalHeight;
-    if (!width || !height) throw new Error('A foto não tem resolução suficiente para leitura.');
-    let candidate = '', lastError = null;
-    const directResult = await detectGTINFromSource(detectors, image);
-    if (directResult.code) return directResult.code;
-    candidate ||= directResult.candidate;
-    lastError = directResult.error;
-
-    for (const [rx, ry, rw, rh] of [
-      [0, 0, 1, 1],
-      [0.05, 0.2, 0.9, 0.6],
-      [0, 0.4, 1, 0.55],
-      [0.12, 0.1, 0.76, 0.8]
-    ]) {
-      const sx = Math.round(width * rx), sy = Math.round(height * ry);
-      const sw = Math.max(1, Math.round(width * rw)), sh = Math.max(1, Math.round(height * rh));
-      const scale = Math.min(1, 2400 / Math.max(sw, sh));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(sw * scale));
-      canvas.height = Math.max(1, Math.round(sh * scale));
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) continue;
-      ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-      const result = await detectGTINFromSource(detectors, canvas);
-      if (result.code) return result.code;
-      if (result.candidate && !candidate) candidate = result.candidate;
-      if (result.error) lastError = result.error;
-    }
-
-    if (candidate) throw barcodeCandidateError(candidate);
-    if (lastError) throw new Error('O leitor não conseguiu processar esta imagem. Tente fotografar as barras mais de perto.');
-    throw new Error('Não consegui ler as barras nesta foto. Aproxime o código, mantenha-o bem iluminado e tente novamente.');
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  if (!window.SuperlistCloud?.analyzeBarcode) throw new Error('A leitura por IA não está disponível.');
+  const result = await window.SuperlistCloud.analyzeBarcode({ image: file });
+  const code = normalizeBarcodeCode(result?.ean);
+  if (!isValidBarcodeGTIN(code)) throw new Error('A IA não conseguiu ler um EAN válido. Fotografe as barras de perto, sem reflexo.');
+  return code;
 }
 
 function productUnitFromBarcodeData(value) {
@@ -3161,7 +3092,7 @@ async function scanBarcode(itemId) {
   $('#barcodePhotoInput').addEventListener('change',async event=>{
     const file=event.target.files?.[0];if(!file)return;
     stop();
-    const status=$('#barcodeScanStatus');if(status)status.textContent='Preparando e lendo a foto…';
+    const status=$('#barcodeScanStatus');if(status)status.textContent='A IA está lendo a foto…';
     try{const code=await readBarcodeFromImage(file);$('#barcodeInput').value=code;if(status)status.textContent='Código lido: '+code;await associateCode(code);}
     catch(error){console.error(error);if(error?.candidate)$('#barcodeInput').value=error.candidate;if(status)status.textContent=error.message||'Não foi possível ler esta foto.';toast(error.message||'Não foi possível ler esta foto.');}
     finally{event.target.value='';}
