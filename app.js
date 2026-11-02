@@ -2790,6 +2790,26 @@ async function loadAdminDashboard(){
 }
 function renderAdminUsers(){const q=($('#adminUserSearch')?.value||'').toLowerCase();const rows=adminCache.users.filter(u=>`${u.email} ${u.fullName}`.toLowerCase().includes(q));$('#adminUsersRows').innerHTML=rows.length?rows.map(u=>`<tr><td><strong>${adminEscape(u.fullName||'Sem nome')}</strong><small class="admin-sub">${adminEscape(u.email)}</small></td><td>${adminDate(u.createdAt)}</td><td><span class="admin-pill ${u.banned?'blocked':'active'}">${u.banned?'Bloqueado':'Ativo'}</span></td><td>${u.isAdmin?(u.adminRole==='super_admin'?'Administrador principal':'Administrador'):'Usuário'}</td><td class="admin-actions">${u.isPrincipal?'<span class="muted">Conta principal</span>':`<button class="text-button" data-admin-action="ban" data-user-id="${u.id}" data-banned="${u.banned}">${u.banned?'Reativar':'Bloquear'}</button>${window.__superlistAdminRole==='super_admin'?`<button class="text-button" data-admin-action="role" data-user-id="${u.id}" data-admin="${u.isAdmin}">${u.isAdmin?'Remover admin':'Tornar admin'}</button>`:''}`}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum usuário encontrado.</td></tr>';}
 function renderAdminFamilies(){const q=($('#adminFamilySearch')?.value||'').toLowerCase();const rows=adminCache.families.filter(f=>`${f.name} ${f.ownerEmail}`.toLowerCase().includes(q));$('#adminFamiliesRows').innerHTML=rows.length?rows.map(f=>`<tr><td><strong>Família ${adminEscape(f.name)}</strong><small class="admin-sub">Código: ${adminEscape(f.inviteCode)}</small></td><td>${adminEscape(f.ownerName||f.ownerEmail||'—')}<small class="admin-sub">${adminEscape(f.ownerEmail||'')}</small></td><td>${f.memberCount}</td><td>${f.listCount}</td><td>${f.productCount}</td><td>${adminDate(f.createdAt)}</td></tr>`).join(''):'<tr><td colspan="6">Nenhuma família encontrada.</td></tr>';}
+const ADMIN_PROVIDER_LABELS={openai:'OpenAI',gemini:'Gemini',groq:'Groq'};
+let adminProviderOrder=['openai','gemini','groq'];
+function renderAdminProviderOrder(){
+ const list=$('#adminProviderOrderList');if(!list)return;
+ list.innerHTML=adminProviderOrder.map((provider,index)=>'<li class="admin-provider-row"><span class="admin-provider-position">'+(index+1)+'</span><strong>'+ADMIN_PROVIDER_LABELS[provider]+'</strong><span class="admin-provider-actions"><button type="button" class="btn small" data-provider-move="up" data-provider-index="'+index+'" aria-label="Mover '+ADMIN_PROVIDER_LABELS[provider]+' para cima" '+(index===0?'disabled':'')+'>↑</button><button type="button" class="btn small" data-provider-move="down" data-provider-index="'+index+'" aria-label="Mover '+ADMIN_PROVIDER_LABELS[provider]+' para baixo" '+(index===adminProviderOrder.length-1?'disabled':'')+'>↓</button></span></li>').join('');
+}
+function providerSettingsNotice(message,error=false){const el=$('#adminProviderSettingsNotice');if(el){el.textContent=message;el.classList.toggle('error',!!error);}}
+async function loadAdminProviderOrder(){
+ if(!window.__superlistIsAdmin)return;
+ providerSettingsNotice('Carregando prioridade…');
+ try{const data=await window.SuperlistCloud.providerSettings('get');adminProviderOrder=data.order;renderAdminProviderOrder();providerSettingsNotice('A ordem atual está salva.');}
+ catch(e){providerSettingsNotice(e.message||'Não foi possível carregar a prioridade.',true);}
+}
+async function saveAdminProviderOrder(){
+ const button=$('#saveAdminProviderOrder');if(!button)return;
+ button.disabled=true;providerSettingsNotice('Salvando ordem…');
+ try{await window.SuperlistCloud.providerSettings('set',adminProviderOrder);providerSettingsNotice('Ordem salva. As próximas leituras usarão essa prioridade.');}
+ catch(e){providerSettingsNotice(e.message||'Não foi possível salvar a prioridade.',true);}
+ finally{button.disabled=false;}
+}
 function renderAdminAudit(){const rows=adminCache.audit;$('#adminAuditRows').innerHTML=rows.length?rows.map(a=>`<tr><td>${adminDate(a.createdAt)}</td><td>${adminEscape(a.adminEmail)}</td><td>${adminEscape(a.action)}</td><td>${adminEscape(a.target||'—')}</td><td>${adminEscape(a.details||'—')}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum registro de auditoria.</td></tr>';}
 async function adminUserAction(button){const id=button.dataset.userId;const action=button.dataset.adminAction;try{button.disabled=true;if(action==='ban'){const banned=button.dataset.banned!=='true';if(!confirm(banned?'Confirma bloquear este usuário? Ele não poderá entrar enquanto estiver bloqueado.':'Confirma reativar este usuário?'))return;await adminRequest('set_user_ban',{userId:id,banned});}else{const isAdmin=button.dataset.admin==='true';if(!confirm(isAdmin?'Remover privilégios administrativos deste usuário?':'Conceder privilégios de administrador a este usuário?'))return;await adminRequest('set_admin',{userId:id,isAdmin});}toast('Ação administrativa concluída.');await loadAdminDashboard();}catch(e){toast(e.message||'Não foi possível executar a ação.');}finally{button.disabled=false;}}
 
@@ -2801,11 +2821,14 @@ function init() {
 
   renderAll();
   $('#adminRefresh')?.addEventListener('click',loadAdminDashboard);
+  $('#saveAdminProviderOrder')?.addEventListener('click',saveAdminProviderOrder);
   $('#adminUserSearch')?.addEventListener('input',renderAdminUsers);
   $('#adminFamilySearch')?.addEventListener('input',renderAdminFamilies);
 
   document.addEventListener('click',e=>{
-    const adminTab=e.target.closest('[data-admin-tab]');if(adminTab){const tab=adminTab.dataset.adminTab;$$('.admin-tab').forEach(b=>b.classList.toggle('active',b===adminTab));$('#adminUsersPanel').hidden=tab!=='users';$('#adminFamiliesPanel').hidden=tab!=='families';$('#adminAuditPanel').hidden=tab!=='audit';return;}
+    const adminTab=e.target.closest('[data-admin-tab]');if(adminTab){const tab=adminTab.dataset.adminTab;$$('.admin-tab').forEach(b=>b.classList.toggle('active',b===adminTab));$('#adminUsersPanel').hidden=tab!=='users';$('#adminFamiliesPanel').hidden=tab!=='families';$('#adminAuditPanel').hidden=tab!=='audit';$('#adminAIProvidersPanel').hidden=tab!=='ai';if(tab==='ai')loadAdminProviderOrder();return;}
+    const providerMove=e.target.closest('[data-provider-move]');if(providerMove){const index=Number(providerMove.dataset.providerIndex);const next=providerMove.dataset.providerMove==='up'?index-1:index+1;if(next>=0&&next<adminProviderOrder.length){[adminProviderOrder[index],adminProviderOrder[next]]=[adminProviderOrder[next],adminProviderOrder[index]];renderAdminProviderOrder();}return;}
+    if(e.target.closest('#saveAdminProviderOrder')){saveAdminProviderOrder();return;}
     const adminAction=e.target.closest('[data-admin-action]');if(adminAction){adminUserAction(adminAction);return;}
     let nav=e.target.closest('[data-page]');
 
