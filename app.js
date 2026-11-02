@@ -1701,9 +1701,9 @@ function addCatalogProductToList() {
       $('#newBarcodePhotoInput').addEventListener('change',async event=>{
         const file=event.target.files?.[0];if(!file)return;
         barcodeCameraControls?.stop();
-        const status=$('#addBarcodeScanStatus');if(status){status.style.display='block';status.textContent='Lendo a foto com ZBar…';}
+        const status=$('#addBarcodeScanStatus');if(status){status.style.display='block';status.textContent='Preparando e lendo a foto…';}
         try{const code=await readBarcodeFromImage(file);$('#addProductBarcode').value=code;if(status)status.textContent='Código lido: '+code+'; consultando catálogo…';toast('Código lido. Consultando catálogo…');await lookupBarcodeProduct();}
-        catch(error){console.error(error);if(status)status.textContent=error.message||'Não foi possível ler esta foto.';toast(error.message||'Não foi possível ler esta foto.');}
+        catch(error){console.error(error);if(error?.candidate)$('#addProductBarcode').value=error.candidate;if(status)status.textContent=error.message||'Não foi possível ler esta foto.';toast(error.message||'Não foi possível ler esta foto.');}
         finally{event.target.value='';}
       });
       $('#scanNewProductBarcode').onclick=async()=>{
@@ -2805,35 +2805,74 @@ function isValidBarcodeGTIN(value) {
   return (10-sum%10)%10===Number(code.at(-1));
 }
 
-// O scanner usa ZBar no navegador e não chama IA para decodificar códigos de barras.
-async function loadZBarLibrary() {
-  if (window.__superlistZBarPromise) return window.__superlistZBarPromise;
-  window.__superlistZBarPromise = import('https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/index.mjs')
-    .catch(error => {
-      window.__superlistZBarPromise = null;
-      console.error('Falha ao carregar ZBar:', error);
-      throw new Error('Não foi possível carregar o leitor ZBar. Verifique sua conexão e tente novamente.');
-    });
-  return window.__superlistZBarPromise;
+// Usa o leitor nativo do navegador quando disponível e o polyfill ZBar nos demais.
+const PRODUCT_BARCODE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf'];
+
+async function loadBarcodeDetectors() {
+  if (window.__superlistBarcodeDetectorsPromise) return window.__superlistBarcodeDetectorsPromise;
+  window.__superlistBarcodeDetectorsPromise = (async () => {
+    const detectors = [];
+    const NativeDetector = window.BarcodeDetector;
+
+    if (typeof NativeDetector === 'function' && typeof NativeDetector.getSupportedFormats === 'function') {
+      try {
+        const supported = await NativeDetector.getSupportedFormats();
+        const formats = PRODUCT_BARCODE_FORMATS.filter(format => supported.includes(format));
+        if (formats.length) detectors.push(new NativeDetector({ formats }));
+      } catch (error) {
+        console.warn('Leitor nativo indisponível; tentando o leitor compatível:', error);
+      }
+    }
+
+    try {
+      const module = await import('https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.23/dist/main.js');
+      if (typeof module.BarcodeDetectorPolyfill !== 'function') throw new Error('O leitor compatível não foi encontrado.');
+      detectors.push(new module.BarcodeDetectorPolyfill({ formats: PRODUCT_BARCODE_FORMATS }));
+    } catch (error) {
+      if (!detectors.length) throw error;
+      console.warn('Leitor compatível indisponível; usando o leitor nativo:', error);
+    }
+
+    if (!detectors.length) throw new Error('Nenhum leitor de código de barras está disponível.');
+    return detectors;
+  })().catch(error => {
+    window.__superlistBarcodeDetectorsPromise = null;
+    console.error('Falha ao preparar o leitor de código de barras:', error);
+    throw new Error('Não foi possível preparar o leitor de código de barras. Verifique a conexão e tente novamente.');
+  });
+  return window.__superlistBarcodeDetectorsPromise;
 }
 
-function decodeZBarSymbols(symbols) {
-  for (const symbol of symbols || []) {
+async function detectGTINFromSource(detectors, source) {
+  let candidate = '', lastError = null, completedDetections = 0;
+  for (const detector of detectors || []) {
     try {
-      const value = typeof symbol.decode === 'function' ? symbol.decode() : symbol.rawData;
-      const decoded = typeof value === 'string' ? value :
-        (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) ? new TextDecoder().decode(value) : String(value || '');
-      const code = normalizeBarcodeCode(decoded);
-      if (isValidBarcodeGTIN(code)) return code;
-    } catch (_) {}
+      const symbols = await detector.detect(source);
+      completedDetections++;
+      for (const symbol of symbols || []) {
+        const format = String(symbol?.format || '').toLowerCase();
+        if (format && !PRODUCT_BARCODE_FORMATS.includes(format)) continue;
+        const code = normalizeBarcodeCode(symbol?.rawValue || '');
+        if (![8, 12, 13, 14].includes(code.length)) continue;
+        if (isValidBarcodeGTIN(code)) return { code, candidate: '', error: null };
+        if (!candidate) candidate = code;
+      }
+    } catch (error) {
+      lastError = error;
+    }
   }
-  return '';
+  return { code: '', candidate, error: completedDetections ? null : lastError };
+}
+
+function barcodeCandidateError(candidate) {
+  const error = new Error('A câmera detectou ' + candidate + ', mas os números não passaram na conferência. Aproxime as barras e tente novamente.');
+  error.candidate = candidate;
+  return error;
 }
 
 async function startLiveBarcodeScanner(video, onFound, onStatus) {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error('A câmera exige acesso HTTPS e permissão do navegador.');
-  const zbar = await loadZBarLibrary();
-  if (!zbar?.scanImageData) throw new Error('O leitor ZBar não ficou disponível.');
+  const detectors = await loadBarcodeDetectors();
   if (!video?.parentElement) throw new Error('Área da câmera não encontrada.');
 
   const stream = await navigator.mediaDevices.getUserMedia({
@@ -2874,7 +2913,7 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
     if (stopped || busy || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return;
     busy = true;
     frameCount++;
-    let code = '';
+    let code = '', candidate = '';
     try {
       const width = video.videoWidth, height = video.videoHeight;
       const regions = [
@@ -2885,32 +2924,40 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
       for (const [rx, ry, rw, rh] of regions) {
         const sx = Math.round(width * rx), sy = Math.round(height * ry);
         const sw = Math.max(1, Math.round(width * rw)), sh = Math.max(1, Math.round(height * rh));
-        const scale = Math.min(1, 1800 / Math.max(sw, sh));
+        const scale = Math.min(1, 2200 / Math.max(sw, sh));
         canvas.width = Math.max(1, Math.round(sw * scale));
         canvas.height = Math.max(1, Math.round(sh * scale));
         ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-        code = decodeZBarSymbols(await zbar.scanImageData(ctx.getImageData(0, 0, canvas.width, canvas.height)));
-        if (code) break;
+        const result = await detectGTINFromSource(detectors, canvas);
+        if (result.error) throw result.error;
+        if (result.candidate && !candidate) candidate = result.candidate;
+        if (result.code) { code = result.code; break; }
       }
 
       recentReadings.push(code);
       if (recentReadings.length > 5) recentReadings.shift();
       if (!code) {
         if (frameCount % 12 === 0 && typeof onStatus === 'function') {
-          onStatus('Aproxime o código, centralize as barras e evite reflexos ou movimento.');
+          onStatus(candidate
+            ? 'Leitura parcial (' + candidate + '). Aproxime o código e mantenha as barras nítidas.'
+            : 'Aproxime o código, centralize as barras e evite reflexos ou movimento.');
         }
         return;
       }
 
       const confirmations = recentReadings.filter(value => value === code).length;
       if (confirmations < 3) {
-        if (typeof onStatus === 'function') onStatus('Código detectado. Mantendo a câmera estável para confirmar…');
+        if (typeof onStatus === 'function') onStatus('Código detectado. Mantenha a câmera estável para confirmar…');
         return;
       }
       stop();
       if (typeof onFound === 'function') onFound(code);
-    } catch (error) { console.warn('Erro ao ler um quadro da câmera:', error); }
-    finally { busy = false; }
+    } catch (error) {
+      console.warn('Erro ao ler um quadro da câmera:', error);
+      if (frameCount % 12 === 0 && typeof onStatus === 'function') onStatus('Falha ao processar a imagem. Feche e abra a câmera novamente.');
+    } finally {
+      busy = false;
+    }
   };
   timer = setInterval(scanFrame, 350);
   scanFrame();
@@ -2918,8 +2965,8 @@ async function startLiveBarcodeScanner(video, onFound, onStatus) {
 }
 
 async function readBarcodeFromImage(file) {
-  if (!file || !file.type?.startsWith('image/')) throw new Error('Escolha uma foto válida do código de barras.');
-  const zbar = await loadZBarLibrary();
+  if (!file || (file.type && !file.type.startsWith('image/'))) throw new Error('Escolha uma foto válida do código de barras.');
+  const detectors = await loadBarcodeDetectors();
   const url = URL.createObjectURL(file);
   try {
     const image = await new Promise((resolve, reject) => {
@@ -2929,23 +2976,40 @@ async function readBarcodeFromImage(file) {
       element.src = url;
     });
     const width = image.naturalWidth, height = image.naturalHeight;
-    for (const [sx, sy, sw, sh] of [
-      [0, 0, width, height],
-      [width * .05, height * .2, width * .9, height * .6],
-      [0, height * .4, width, height * .55]
+    if (!width || !height) throw new Error('A foto não tem resolução suficiente para leitura.');
+    let candidate = '', lastError = null;
+    const directResult = await detectGTINFromSource(detectors, image);
+    if (directResult.code) return directResult.code;
+    candidate ||= directResult.candidate;
+    lastError = directResult.error;
+
+    for (const [rx, ry, rw, rh] of [
+      [0, 0, 1, 1],
+      [0.05, 0.2, 0.9, 0.6],
+      [0, 0.4, 1, 0.55],
+      [0.12, 0.1, 0.76, 0.8]
     ]) {
-      const scale = Math.min(1, 1800 / Math.max(sw, sh));
+      const sx = Math.round(width * rx), sy = Math.round(height * ry);
+      const sw = Math.max(1, Math.round(width * rw)), sh = Math.max(1, Math.round(height * rh));
+      const scale = Math.min(1, 2400 / Math.max(sw, sh));
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(sw * scale));
       canvas.height = Math.max(1, Math.round(sh * scale));
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) continue;
       ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-      const code = decodeZBarSymbols(await zbar.scanImageData(ctx.getImageData(0, 0, canvas.width, canvas.height)));
-      if (code) return code;
+      const result = await detectGTINFromSource(detectors, canvas);
+      if (result.code) return result.code;
+      if (result.candidate && !candidate) candidate = result.candidate;
+      if (result.error) lastError = result.error;
     }
+
+    if (candidate) throw barcodeCandidateError(candidate);
+    if (lastError) throw new Error('O leitor não conseguiu processar esta imagem. Tente fotografar as barras mais de perto.');
     throw new Error('Não consegui ler as barras nesta foto. Aproxime o código, mantenha-o bem iluminado e tente novamente.');
-  } finally { URL.revokeObjectURL(url); }
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function productUnitFromBarcodeData(value) {
@@ -3042,7 +3106,7 @@ async function scanBarcode(itemId) {
     '<div class="field"><label>Código de barras</label><input id="barcodeInput" inputmode="numeric" placeholder="Digite ou escaneie o código EAN"></div>' +
     '<div class="camera-box" id="cameraBox">Aponte a câmera para o código de barras</div>' +
     '<div class="camera-controls"><button type="button" class="btn secondary" id="startCamera">▣ Abrir câmera</button><button type="button" class="btn secondary" id="takeBarcodePhoto">📷 Fotografar código</button><button type="button" class="btn secondary" id="stopCamera">Parar câmera</button><button type="button" class="btn primary" id="lookupBarcode">Vincular código ao produto</button><input id="barcodePhotoInput" type="file" accept="image/*" capture="environment" hidden></div>' +
-    '<p id="barcodeScanStatus" class="helper">Aponte as barras para a câmera.</p>' + '<p class="helper">A leitura é feita no navegador pelo ZBar. Nenhuma IA é usada.</p>',
+    '<p id="barcodeScanStatus" class="helper">Aponte as barras para a câmera.</p>' + '<p class="helper">A leitura é feita no navegador, sem IA.</p>',
     'SUPERLIST'
   );
 
@@ -3097,9 +3161,9 @@ async function scanBarcode(itemId) {
   $('#barcodePhotoInput').addEventListener('change',async event=>{
     const file=event.target.files?.[0];if(!file)return;
     stop();
-    const status=$('#barcodeScanStatus');if(status)status.textContent='Lendo a foto com ZBar…';
+    const status=$('#barcodeScanStatus');if(status)status.textContent='Preparando e lendo a foto…';
     try{const code=await readBarcodeFromImage(file);$('#barcodeInput').value=code;if(status)status.textContent='Código lido: '+code;await associateCode(code);}
-    catch(error){console.error(error);if(status)status.textContent=error.message||'Não foi possível ler esta foto.';toast(error.message||'Não foi possível ler esta foto.');}
+    catch(error){console.error(error);if(error?.candidate)$('#barcodeInput').value=error.candidate;if(status)status.textContent=error.message||'Não foi possível ler esta foto.';toast(error.message||'Não foi possível ler esta foto.');}
     finally{event.target.value='';}
   });
   $('#closeModal').addEventListener('click',stop);
