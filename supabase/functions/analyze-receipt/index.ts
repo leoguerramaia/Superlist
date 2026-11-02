@@ -286,7 +286,7 @@ Retorne todos os itens legíveis, sem inventar conteúdo.
 
     if (mode === "barcode") {
       if (!imageBase64) return json({ error: "Envie uma imagem do código de barras." }, 400);
-      const barcodePrompt = "Analise a imagem e leia somente o código EAN/GTIN impresso junto ao código de barras. Não pesquise nem tente identificar o produto. Não invente dígitos. Se não for possível ler com segurança, retorne ean vazio e confidence low. Retorne exclusivamente JSON: {\\"ean\\":\\"somente dígitos ou vazio\\",\\"confidence\\":\\"high|medium|low\\"}.";
+      const barcodePrompt = "Analise a imagem e leia somente o código EAN/GTIN impresso junto ao código de barras. Não pesquise nem tente identificar o produto. Não invente dígitos. Se não for possível ler com segurança, retorne ean vazio e confidence low. Retorne exclusivamente JSON: {\"ean\":\"somente dígitos ou vazio\",\"confidence\":\"high|medium|low\"}."
       const result = await analyzeWithProviders(barcodePrompt, imageBase64, mimeType, 300, openaiKey, geminiKey, groqKey);
       const parsed = JSON.parse(result.output);
       const ean = String(parsed.ean || "").replace(/\D/g, "");
