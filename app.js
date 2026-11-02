@@ -1241,11 +1241,14 @@ function findOrCreateProduct(item) {
 
 
 
-function addProductToCurrentList(product, qty = 1, brand = '') {
+function addProductToCurrentList(product, qty = 1, brand = '', unit = '') {
   if (!currentList || !product) return;
 
+  const normalizedBrand = formatDisplayName(brand);
+  if (normalizedBrand) { product.brands = Array.isArray(product.brands) ? product.brands : []; if (!product.brands.some(value => value.toLocaleLowerCase('pt-BR') === normalizedBrand.toLocaleLowerCase('pt-BR'))) product.brands.push(normalizedBrand); }
+
   const already = currentList.items.find(
-    i => i.productId === product.id && String(i.brand || '').toLocaleLowerCase('pt-BR') === String(brand || '').trim().toLocaleLowerCase('pt-BR')
+    i => i.productId === product.id && String(i.brand || '').toLocaleLowerCase('pt-BR') === normalizedBrand.toLocaleLowerCase('pt-BR')
   );
 
   if (already) {
@@ -1258,9 +1261,9 @@ function addProductToCurrentList(product, qty = 1, brand = '') {
       id: uid(),
       productId: product.id,
       name: product.name,
-      brand: formatDisplayName(brand),
+      brand: normalizedBrand,
       category: product.category || 'Outros',
-      unit: product.unit || 'un',
+      unit: unit || product.unit || 'un',
       qty,
       price: 0,
       estimate: previous?.price || 0,
@@ -1280,27 +1283,26 @@ function addCatalogProductToList() {
 
   openModal('Adicionar produto à compra', `
     <div class="field">
-      <label>Como deseja localizar?</label>
+      <label>Quantidade</label>
+      <input id="addProductQty" type="number" min="0.01" step="0.01" value="1">
+    </div>
+    <div class="field">
+      <label>Unidade</label>
+      <select id="addProductUnit"><option value="un">un</option><option value="kg">kg</option><option value="g">g</option><option value="l">l</option><option value="ml">ml</option><option value="cx">cx</option><option value="pct">pct</option></select>
+    </div>
+    <div class="field">
+      <label>Produto / associar ao catálogo</label>
       <select id="addProductMode">
         <option value="name">Buscar pelo nome</option>
         <option value="category">Buscar por categoria</option>
         <option value="barcode">Código de barras</option>
       </select>
     </div>
-
     <div id="addProductSearchArea"></div>
-
-    <div class="field">
-      <label>Quantidade</label>
-      <input id="addProductQty" type="number"
-        min="0.01" step="0.01" value="1">
-    </div>
-
     <div class="field">
       <label>Marca (opcional)</label>
-      <input id="addProductBrand" placeholder="Ex.: Marca A">
+      <input id="addProductBrand" placeholder="Digite ou selecione uma marca">
     </div>
-
     <div id="addProductResults"></div>
 
     <div class="form-actions">
@@ -1401,7 +1403,7 @@ function addCatalogProductToList() {
         addProductToCurrentList(
           product,
           Number($('#addProductQty').value) || 1,
-          $('#addProductBrand')?.value || ''
+          $('#addProductBrand')?.value || '', $('#addProductUnit')?.value || ''
         );
       };
 
@@ -1472,7 +1474,7 @@ function addCatalogProductToList() {
           addProductToCurrentList(
             product,
             Number($('#addProductQty').value) || 1,
-            $('#addProductBrand')?.value || product.brand || ''
+            $('#addProductBrand')?.value || product.brand || '', $('#addProductUnit')?.value || ''
           );
         } catch (error) {
           console.error('Erro ao consultar código:', error);
@@ -1511,7 +1513,7 @@ function addCatalogProductToList() {
           let product = db.products.find(p => normalizeBarcodeCode(p.barcode) === code);
           if (!product) { const name = formatDisplayName(result.name); product = { id: uid(), name, category: seedCategories.includes(result.category) ? result.category : 'Outros', unit: 'un', ...packageInfo(name, 'un'), barcode: code, brand: formatDisplayName(result.brand || ''), photo: '', active: true, description: result.description || '', barcodeSources: result.sources || [] }; db.products.push(product); save(); }
           aiCameraControls.stop(); aiCameraControls = null; cameraBox.style.display = 'none';
-          addProductToCurrentList(product, Number($('#addProductQty').value) || 1, $('#addProductBrand')?.value || product.brand || '');
+          addProductToCurrentList(product, Number($('#addProductQty').value) || 1, $('#addProductBrand')?.value || product.brand || '', $('#addProductUnit')?.value || '');
         } catch (error) { console.error(error); toast(error.message || 'Falha na análise da imagem.'); }
         finally { button.disabled = false; button.textContent = '✨ Ler com IA'; }
       };
@@ -1523,7 +1525,7 @@ function addCatalogProductToList() {
         try {
           const product = await findProductByBarcode(code);
           if (!product) { toast('A IA não encontrou uma correspondência confiável para esse código.'); return; }
-          addProductToCurrentList(product, Number($('#addProductQty').value) || 1, $('#addProductBrand')?.value || product.brand || '');
+          addProductToCurrentList(product, Number($('#addProductQty').value) || 1, $('#addProductBrand')?.value || product.brand || '', $('#addProductUnit')?.value || '');
         } catch (error) { console.error(error); toast(error.message || 'Falha na pesquisa com IA.'); }
         finally { button.disabled = false; button.textContent = 'Pesquisar com IA'; }
       };
@@ -1544,7 +1546,7 @@ function addCatalogProductToList() {
       addProductToCurrentList(
         product,
         Number($('#addProductQty').value) || 1,
-        $('#addProductBrand')?.value || ''
+        $('#addProductBrand')?.value || '', $('#addProductUnit')?.value || ''
       );
     }
   });
