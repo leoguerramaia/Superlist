@@ -38,107 +38,135 @@ async function requestOpenAI(prompt: string, imageBase64: string, mimeType: stri
   return output;
 }
 
+const DEFAULT_PROVIDER_ORDER = ["openai", "gemini", "groq"];
+let providerOrderCache = { order: DEFAULT_PROVIDER_ORDER, expiresAt: 0 };
+
+async function getProviderOrder() {
+  if (Date.now() < providerOrderCache.expiresAt) return providerOrderCache.order;
+  const projectUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!projectUrl || !serviceKey) return DEFAULT_PROVIDER_ORDER;
+  try {
+    const response = await fetch(projectUrl.replace(/\/+$/, "") + "/rest/v1/app_settings?setting_key=eq.ai_provider_order&select=setting_value", {
+      headers: { "apikey": serviceKey, "Authorization": "Bearer " + serviceKey }
+    });
+    const rows = await response.json();
+    const order = rows?.[0]?.setting_value;
+    if (response.ok && Array.isArray(order) && order.length === 3 &&
+        new Set(order).size === 3 && order.every((provider: string) => DEFAULT_PROVIDER_ORDER.includes(provider))) {
+      providerOrderCache = { order, expiresAt: Date.now() + 30000 };
+      return order;
+    }
+  } catch (error) {
+    console.warn("Não foi possível ler a ordem de provedores; usando a ordem padrão.", error);
+  }
+  providerOrderCache = { order: DEFAULT_PROVIDER_ORDER, expiresAt: Date.now() + 10000 };
+  return DEFAULT_PROVIDER_ORDER;
+}
+
 async function analyzeWithProviders(prompt: string, imageBase64: string, mimeType: string, maxTokens: number, openaiKey: string, geminiKey: string, groqKey: string) {
-  if (openaiKey) {
+  const order = await getProviderOrder();
+  for (const provider of order) {
     try {
-      const output = await requestOpenAI(prompt, imageBase64, mimeType, maxTokens, openaiKey);
-      return { output, provider: "openai" };
+      if (provider === "openai" && openaiKey) {
+        const output = await requestOpenAI(prompt, imageBase64, mimeType, maxTokens, openaiKey);
+        return { output, provider: "openai" };
+      }
+      if (provider === "gemini" && geminiKey) {
+        const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent", {
+          method: "POST",
+          headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }, ...(imageBase64 ? [{ inline_data: { mime_type: mimeType, data: imageBase64 } }] : [])] }],
+            generationConfig: { responseMimeType: "application/json", temperature: 0.1, maxOutputTokens: maxTokens }
+          })
+        });
+        const data = await response.json();
+        const output = data.candidates?.flatMap((candidate: any) => candidate.content?.parts || [])?.find((part: any) => typeof part.text === "string")?.text;
+        if (response.ok && output) { JSON.parse(output); return { output, provider: "gemini" }; }
+        console.warn("Gemini indisponível; tentando o próximo provedor:", data?.error?.message || response.status);
+      }
+      if (provider === "groq" && groqKey) {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + groqKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "qwen/qwen3.8-27b",
+            messages: [{ role: "user", content: [{ type: "text", text: prompt }, ...(imageBase64 ? [{ type: "image_url", image_url: { url: "data:" + mimeType + ";base64," + imageBase64 } }] : [])] }],
+            response_format: { type: "json_object" }, temperature: 0.1, max_completion_tokens: maxTokens
+          })
+        });
+        const data = await response.json();
+        const output = data.choices?.[0]?.message?.content;
+        if (response.ok && typeof output === "string" && output.trim()) { JSON.parse(output); return { output, provider: "groq" }; }
+        console.warn("Groq indisponível; tentando o próximo provedor:", data?.error?.message || response.status);
+      }
     } catch (error) {
-      console.warn("OpenAI indisponível; tentando Gemini e Groq:", error instanceof Error ? error.message : error);
+      console.warn("Falha no provedor de IA configurado; tentando o próximo.", error instanceof Error ? error.message : error);
     }
   }
-  if (geminiKey) {
-    try {
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent", {
-        method: "POST",
-        headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }, ...(imageBase64 ? [{ inline_data: { mime_type: mimeType, data: imageBase64 } }] : [])] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.1, maxOutputTokens: maxTokens }
-        })
-      });
-      const data = await response.json();
-      const output = data.candidates?.flatMap((c: any) => c.content?.parts || [])?.find((part: any) => typeof part.text === "string")?.text;
-      if (response.ok && output) { JSON.parse(output); return { output, provider: "gemini" }; }
-      console.warn("Gemini indisponível; tentando Groq:", response.status, data?.error?.message || "");
-    } catch (error) { console.warn("Gemini falhou; tentando Groq:", error instanceof Error ? error.message : error); }
-  }
-  if (groqKey) {
-    try {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "qwen/qwen3.8-27b",
-          messages: [{ role: "user", content: [{ type: "text", text: prompt }, ...(imageBase64 ? [{ type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } }] : [])] }],
-          response_format: { type: "json_object" }, temperature: 0.1, max_completion_tokens: maxTokens
-        })
-      });
-      const data = await response.json();
-      const output = data.choices?.[0]?.message?.content;
-      if (response.ok && typeof output === "string" && output.trim()) { JSON.parse(output); return { output, provider: "groq" }; }
-      console.error("Groq fallback error:", response.status, data?.error?.message || "");
-    } catch (error) { console.error("Groq fallback failed:", error); }
-  }
-  throw new Error("Não foi possível analisar a imagem agora. Tente novamente ou continue preenchendo os itens manualmente.");
+  throw new Error("Não foi possível analisar o conteúdo agora. Tente novamente ou continue adicionando os itens manualmente.");
 }
+
 
 async function validateNamesWithProviders(prompt: string, maxTokens: number, openaiKey: string, geminiKey: string, groqKey: string) {
   return analyzeWithProviders(prompt, "", "image/jpeg", maxTokens, openaiKey, geminiKey, groqKey);
 }
-// Transcreve áudio pela OpenAI primeiro, com Gemini e Groq como fallbacks silenciosos.
+// Transcreve os áudios seguindo a ordem configurada pelo administrador.
 async function transcribeListAudio(audioBase64: string, mimeType: string, openaiKey: string, geminiKey: string, groqKey: string) {
+  const order = await getProviderOrder();
   const bytes = Uint8Array.from(atob(audioBase64), (char) => char.charCodeAt(0));
   const extension = mimeType === "audio/mp4" || mimeType === "audio/x-m4a" ? "m4a" : mimeType === "audio/mpeg" ? "mp3" : mimeType === "audio/webm" ? "webm" : mimeType === "audio/wav" ? "wav" : mimeType === "audio/ogg" ? "ogg" : mimeType === "audio/flac" ? "flac" : "audio";
   const audioFile = new Blob([bytes], { type: mimeType });
-  if (openaiKey) {
-    try {
-      const form = new FormData();
-      form.append("file", audioFile, `lista.${extension}`);
-      form.append("model", "gpt-transcribe");
-      form.append("language", "pt");
-      form.append("prompt", "Lista de compras em português brasileiro. Preserve nomes de produtos, marcas, quantidades e unidades.");
-      const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-        method: "POST", headers: { "Authorization": `Bearer ${openaiKey}` }, body: form, signal: AbortSignal.timeout(25000)
-      });
-      const data = await response.json();
-      if (response.ok && typeof data.text === "string" && data.text.trim()) return data.text.trim();
-      console.warn("OpenAI transcription indisponível; tentando Gemini e Groq:", data?.error?.message || response.status);
-    } catch (error) { console.warn("OpenAI transcription falhou; tentando Gemini e Groq:", error instanceof Error ? error.message : error); }
-  }
   const transcriptionPrompt = "Transcreva fielmente este áudio em português brasileiro. A pessoa está ditando uma lista de compras. Não acrescente produtos. Retorne somente JSON válido neste formato: {\"text\":\"transcrição\"}.";
-  if (geminiKey) {
+  for (const provider of order) {
     try {
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent", {
-        method: "POST", headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" }, signal: AbortSignal.timeout(25000),
-        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: transcriptionPrompt }, { inline_data: { mime_type: mimeType, data: audioBase64 } }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.1, maxOutputTokens: 3000 } })
-      });
-      const data = await response.json();
-      const output = data.candidates?.flatMap((candidate: any) => candidate.content?.parts || [])?.find((part: any) => typeof part.text === "string")?.text;
-      if (response.ok && output) {
-        const parsed = JSON.parse(output);
-        if (typeof parsed.text === "string" && parsed.text.trim()) return parsed.text.trim();
+      if (provider === "openai" && openaiKey) {
+        const form = new FormData();
+        form.append("file", audioFile, "lista." + extension);
+        form.append("model", "gpt-transcribe");
+        form.append("language", "pt");
+        form.append("prompt", "Lista de compras em português brasileiro. Preserve nomes de produtos, marcas, quantidades e unidades.");
+        const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+          method: "POST", headers: { "Authorization": "Bearer " + openaiKey }, body: form, signal: AbortSignal.timeout(25000)
+        });
+        const data = await response.json();
+        if (response.ok && typeof data.text === "string" && data.text.trim()) return data.text.trim();
+        console.warn("OpenAI transcription indisponível; tentando o próximo provedor:", data?.error?.message || response.status);
       }
-      console.warn("Gemini transcription indisponível; tentando Groq:", response.status, data?.error?.message || "");
-    } catch (error) { console.warn("Gemini transcription falhou; tentando Groq:", error instanceof Error ? error.message : error); }
-  }
-  if (groqKey) {
-    try {
-      const form = new FormData();
-      form.append("file", audioFile, `lista.${extension}`);
-      form.append("model", "whisper-large-v3");
-      form.append("language", "pt");
-      form.append("response_format", "json");
-      const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
-        method: "POST", headers: { "Authorization": `Bearer ${groqKey}` }, body: form, signal: AbortSignal.timeout(25000)
-      });
-      const data = await response.json();
-      if (response.ok && typeof data.text === "string" && data.text.trim()) return data.text.trim();
-      console.error("Groq transcription error:", response.status, data?.error?.message || "");
-    } catch (error) { console.error("Groq transcription failed:", error); }
+      if (provider === "gemini" && geminiKey) {
+        const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent", {
+          method: "POST", headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" }, signal: AbortSignal.timeout(25000),
+          body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: transcriptionPrompt }, { inline_data: { mime_type: mimeType, data: audioBase64 } }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.1, maxOutputTokens: 3000 } })
+        });
+        const data = await response.json();
+        const output = data.candidates?.flatMap((candidate: any) => candidate.content?.parts || [])?.find((part: any) => typeof part.text === "string")?.text;
+        if (response.ok && output) {
+          const parsed = JSON.parse(output);
+          if (typeof parsed.text === "string" && parsed.text.trim()) return parsed.text.trim();
+        }
+        console.warn("Gemini transcription indisponível; tentando o próximo provedor:", data?.error?.message || response.status);
+      }
+      if (provider === "groq" && groqKey) {
+        const form = new FormData();
+        form.append("file", audioFile, "lista." + extension);
+        form.append("model", "whisper-large-v3");
+        form.append("language", "pt");
+        form.append("response_format", "json");
+        const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+          method: "POST", headers: { "Authorization": "Bearer " + groqKey }, body: form, signal: AbortSignal.timeout(25000)
+        });
+        const data = await response.json();
+        if (response.ok && typeof data.text === "string" && data.text.trim()) return data.text.trim();
+        console.warn("Groq transcription indisponível:", data?.error?.message || response.status);
+      }
+    } catch (error) {
+      console.warn("Falha na transcrição; tentando o próximo provedor.", error instanceof Error ? error.message : error);
+    }
   }
   throw new Error("Não foi possível transcrever o áudio agora. Tente novamente ou cole o texto da lista.");
 }
+
 function formatDisplayName(value: unknown): string {
   const minorWords = new Set(["de", "da", "do", "das", "dos", "e", "em", "no", "na", "nos", "nas", "por", "para", "com"]);
   return String(value || "").trim().replace(/\s+/g, " ").split(" ").map((word, index) =>
