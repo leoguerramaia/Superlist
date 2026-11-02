@@ -537,7 +537,7 @@ function createListModal() {
     '<form id="modalForm" class="new-list-form">' +
       '<div class="field"><label>Nome</label><input name="name" required maxlength="80" placeholder="Ex.: Compra do mês"></div>' +
       '<div class="field"><label>Supermercado</label><div class="form-grid new-list-store-row"><select name="storeId" required><option value="">Selecionar supermercado</option>' + storeOptions() + '</select><button type="button" class="btn secondary" id="newListAddStore">＋ Cadastrar</button></div></div>' +
-      '<div class="field new-list-products"><label>Adicionar produtos</label><div class="form-grid new-list-primary-actions"><button type="button" class="btn secondary" id="toggleListImport" aria-expanded="false" aria-controls="listImportOptions" disabled><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/><path d="m16 16 2 2 4-4"/></svg>Importar lista</button><button type="button" class="btn secondary" id="manualListItems" disabled><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Adicionar manualmente</button></div><small id="listEntryHint" class="helper">Para incluir itens, preencha o nome da lista e selecione um supermercado.</small></div>' +
+      '<div class="field new-list-products"><label>Adicionar produtos</label><div class="form-grid new-list-primary-actions"><button type="button" class="btn secondary" id="toggleListImport" aria-expanded="false" aria-controls="listImportOptions" disabled><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/><path d="m16 16 2 2 4-4"/></svg>Importar lista</button><button type="button" class="btn secondary" id="manualListItems" disabled><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Adicionar manualmente</button></div><small id="listEntryHint" class="helper list-entry-guidance">Para incluir itens, preencha o nome da lista e selecione um supermercado.</small></div>' +
       '<section id="listImportOptions" class="new-list-methods" style="display:none" aria-label="Opções de importação"><button type="button" class="btn secondary" id="openTextImport"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8l4 4v12H8z"/><path d="M16 4v5h5M11 13h6M11 17h6"/><path d="M5 7H4v14h12"/></svg>Colar texto</button><button type="button" class="btn secondary" id="openPhotoImport"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-2h6l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="3"/></svg>Fotografar lista</button><button type="button" class="btn secondary" id="openAudioImport"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>Lista por áudio</button></section>' +
       '<section id="textImportPanel" class="invite-box" style="display:none"><div class="field"><label for="newListText">Cole ou digite os produtos, um por linha</label><textarea id="newListText" rows="6" placeholder="2 arroz 5kg&#10;1 kg de banana&#10;3 unidades de leite"></textarea></div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button type="button" class="btn primary" id="validateTextList">Validar produtos</button><span id="validateTextWarning" role="alert" style="display:none;color:#c62828;font-size:12px;font-weight:600"><span aria-hidden="true">*</span> Valide os produtos antes de Criar a Lista</span></div></section>' +
       '<section id="photoImportPanel" class="invite-box" style="display:none"><p class="muted">Escolha uma foto da galeria ou tire uma foto da lista escrita à mão. A IA vai transcrever os produtos para você revisar.</p><div class="form-grid"><button type="button" class="btn secondary" id="chooseListGallery">Escolher da galeria</button><button type="button" class="btn secondary" id="takeListPhoto">Usar câmera</button></div><input id="listGalleryInput" type="file" accept="image/*" style="display:none"><input id="listCameraInput" type="file" accept="image/*" capture="environment" style="display:none"><div id="listPhotoName" class="helper"></div><div id="listPhotoPreview" style="display:none;margin:10px 0"><img id="listPhotoPreviewImage" alt="Prévia da lista fotografada" style="display:block;width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:#fff"></div><button type="button" class="btn primary" id="readListPhoto" disabled>✨ Transcrever com IA</button></section>' +
@@ -1526,6 +1526,179 @@ function removeShoppingItem(itemId) {
   toast('Item retirado da compra.');
 }
 
+function importItemsIntoOpenList() {
+  if (!currentList) return;
+  const listId = currentList.id;
+  openModal('Importar itens na lista', '<div class="shopping-import-modal"><p class="muted">Escolha como quer adicionar produtos à lista atual. Você poderá revisar os itens antes de incluí-los.</p>' +
+    '<div class="shopping-import-methods" role="tablist" aria-label="Forma de importar itens">' +
+      '<button type="button" class="btn secondary" id="shoppingImportTextTab" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8l4 4v12H8z"/><path d="M16 4v5h5M11 13h6M11 17h6"/><path d="M5 7H4v14h12"/></svg>Colar texto</button>' +
+      '<button type="button" class="btn secondary" id="shoppingImportPhotoTab" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-2h6l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="3"/></svg>Fotografar lista</button>' +
+      '<button type="button" class="btn secondary" id="shoppingImportAudioTab" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>Lista por áudio</button>' +
+    '</div>' +
+    '<section id="shoppingImportTextPanel" class="invite-box" style="display:none" role="tabpanel"><div class="field"><label for="shoppingImportText">Cole ou digite os produtos, um por linha</label><textarea id="shoppingImportText" rows="5" placeholder="2 arroz 5 kg&#10;1 kg de banana&#10;3 unidades de leite"></textarea></div><button type="button" class="btn primary" id="analyzeShoppingText">Analisar texto</button></section>' +
+    '<section id="shoppingImportPhotoPanel" class="invite-box" style="display:none" role="tabpanel"><p class="muted">Escolha uma foto ou use a câmera para fotografar sua lista.</p><div class="shopping-import-file-actions"><label for="shoppingImportGallery" class="btn secondary">Escolher foto</label><button type="button" class="btn secondary" id="shoppingImportTakePhoto">Usar câmera</button></div><input id="shoppingImportGallery" type="file" accept="image/*" style="display:none"><input id="shoppingImportCamera" type="file" accept="image/*" capture="environment" style="display:none"><small id="shoppingImportPhotoName" class="helper"></small><button type="button" class="btn primary" id="analyzeShoppingPhoto" disabled>Ler foto com IA</button></section>' +
+    '<section id="shoppingImportAudioPanel" class="invite-box" style="display:none" role="tabpanel"><p class="muted">Envie um arquivo ou grave sua lista pelo microfone.</p><div class="shopping-import-file-actions"><label for="shoppingImportAudio" class="btn secondary">Enviar áudio</label><input id="shoppingImportAudio" type="file" accept="audio/mpeg,audio/mp4,audio/mpga,audio/m4a,audio/wav,audio/webm,audio/ogg,audio/flac,.mp3,.mp4,.m4a,.wav,.webm,.ogg,.flac" style="display:none"><button type="button" class="btn secondary" id="shoppingImportStartRecording">Gravar voz</button><button type="button" class="btn secondary" id="shoppingImportStopRecording" style="display:none">Parar</button></div><small id="shoppingImportAudioName" class="helper" aria-live="polite">Nenhum áudio selecionado.</small><button type="button" class="btn primary" id="analyzeShoppingAudio" disabled>Ler áudio com IA</button></section>' +
+    '<div id="shoppingImportProgress" class="receipt-progress list-ai-progress" style="display:none" aria-live="polite"><div class="receipt-progress-top"><span class="receipt-spinner"></span><strong id="shoppingImportProgressText">Preparando a análise...</strong><b id="shoppingImportProgressPercent">0%</b></div><div class="receipt-progress-track" role="progressbar" aria-label="Progresso da análise" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="shoppingImportProgressBar"></span></div></div>' +
+    '<section id="shoppingImportReview" class="shopping-import-review" style="display:none"><h3>Revise os itens</h3><p class="helper">Os produtos só serão incluídos na lista quando você confirmar.</p><div id="shoppingImportRows" class="receipt-table-wrap"></div></section>' +
+    '<p id="shoppingImportStatus" class="helper" aria-live="polite"></p><div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button type="button" class="btn primary" id="confirmShoppingImport" disabled>Adicionar itens à lista</button></div></div>', '');
+
+  let rows = [], selectedPhoto = null, selectedAudio = null, recorder = null, stream = null, chunks = [];
+  const textPanel = $('#shoppingImportTextPanel'), photoPanel = $('#shoppingImportPhotoPanel'), audioPanel = $('#shoppingImportAudioPanel');
+  const review = $('#shoppingImportReview'), rowsWrap = $('#shoppingImportRows');
+  const status = $('#shoppingImportStatus'), confirmButton = $('#confirmShoppingImport');
+  const progress = $('#shoppingImportProgress'), progressText = $('#shoppingImportProgressText');
+  const progressPercent = $('#shoppingImportProgressPercent'), progressBar = $('#shoppingImportProgressBar');
+  const progressTrack = progress.querySelector('[role="progressbar"]');
+  let progressTimer = null;
+  const setProgress = value => { progressPercent.textContent = value + '%'; progressTrack.setAttribute('aria-valuenow', String(value)); progressBar.style.width = value + '%'; };
+  const startProgress = message => { clearInterval(progressTimer); status.textContent = ''; progress.style.display = 'block'; progressText.textContent = message; let value = 6; setProgress(value); progressTimer = setInterval(() => { value = Math.min(92, value + 1); setProgress(value); }, 450); };
+  const completeProgress = () => { clearInterval(progressTimer); progressText.textContent = 'Análise concluída'; setProgress(100); setTimeout(() => { progress.style.display = 'none'; }, 800); };
+  const stopProgress = () => { clearInterval(progressTimer); progress.style.display = 'none'; };
+  const panels = [textPanel,photoPanel,audioPanel];
+  const tabButtons = [$('#shoppingImportTextTab'),$('#shoppingImportPhotoTab'),$('#shoppingImportAudioTab')];
+  const showPanel = active => { panels.forEach(panel => panel.style.display = panel === active ? 'block' : 'none'); tabButtons.forEach((button,index) => { const selected = panels[index] === active; button.classList.toggle('active',selected); button.setAttribute('aria-selected',String(selected)); }); };
+  tabButtons[0].addEventListener('click', () => showPanel(textPanel));
+  tabButtons[1].addEventListener('click', () => showPanel(photoPanel));
+  tabButtons[2].addEventListener('click', () => showPanel(audioPanel));
+
+  const parseText = value => value.split(/\n|,/).map(line => line.trim()).filter(Boolean).map(line => {
+    let quantity = 1, unit = 'un', name = line;
+    const match = line.match(/^(\d+(?:[,.]\d+)?)\s*(kg|quilo[s]?|g|gramas?|l|litros?|ml|un(?:idades?)?|x)?\s+(?:de\s+)?(.+)$/i);
+    if (match) {
+      quantity = Number(match[1].replace(',','.'));
+      const u = (match[2] || '').toLowerCase(); name = match[3].trim();
+      if (/kg|quilo/.test(u)) unit = 'kg'; else if (u === 'g' || u.startsWith('gram')) unit = 'g';
+      else if (u === 'l' || u.startsWith('litro')) unit = 'l'; else if (u === 'ml') unit = 'ml';
+      else if (u.startsWith('un') || u === 'x') unit = 'un';
+    }
+    return { name, quantity, unit };
+  });
+
+  function renderReview() {
+    rowsWrap.innerHTML = rows.length ? '<table class="receipt-items-table"><thead><tr><th>Produto</th><th>Qtd.</th><th>Un.</th><th>Marca</th><th></th></tr></thead><tbody>' +
+      rows.map((row,index) => '<tr data-import-row="' + index + '"><td><input data-import-field="name" aria-label="Produto" value="' + esc(row.name) + '">' +
+        (row.hasCorrection ? '<small class="new-list-suggestion">Sugestão da IA: <button type="button" data-import-suggestion="' + index + '">' + esc(row.suggestedName) + '</button></small>' : '') +
+        '</td><td><input data-import-field="quantity" aria-label="Quantidade" type="number" min="0.01" step="0.01" value="' + row.quantity + '"></td>' +
+        '<td><select data-import-field="unit" aria-label="Unidade">' + ['un','kg','g','l','ml','cx','pct'].map(unit => '<option value="' + unit + '"' + (row.unit === unit ? ' selected' : '') + '>' + unit + '</option>').join('') + '</select></td>' +
+        '<td><input data-import-field="brand" aria-label="Marca opcional" value="' + esc(row.brand || '') + '" placeholder="Opcional"></td><td><button type="button" data-import-remove="' + index + '" aria-label="Remover item">×</button></td></tr>').join('') +
+      '</tbody></table>' : '<p class="helper">Nenhum produto reconhecido. Tente novamente.</p>';
+    review.style.display = 'block';
+    confirmButton.disabled = !rows.length;
+    confirmButton.textContent = rows.length ? 'Adicionar ' + rows.length + ' item(ns) à lista' : 'Adicionar itens à lista';
+  }
+
+  async function analyzeCandidates(candidates, message) {
+    if (!candidates.length) return toast('Inclua ao menos um produto para analisar.');
+    if (!window.SuperlistCloud?.validateListItems) return toast('A revisão dos produtos não está disponível no momento.');
+    startProgress(message);
+    try {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const checked = await window.SuperlistCloud.validateListItems(candidates.map(row => ({ name:row.name, quantity:row.quantity, unit:row.unit })));
+      const checkedItems = Array.isArray(checked.items) ? checked.items : candidates;
+      rows = checkedItems.map((item,index) => {
+        const source = candidates[index] || {};
+        const name = String(item.original_name || item.name || source.name || '').trim();
+        const suggestedName = String(item.suggested_name || name).trim();
+        return { name, suggestedName, hasCorrection:!!item.has_correction && suggestedName.toLocaleLowerCase('pt-BR') !== name.toLocaleLowerCase('pt-BR'), brand:String(source.brand || '').trim(), quantity:Number(item.quantity || source.quantity) || 1, unit:String(item.unit || source.unit || 'un').toLowerCase() };
+      }).filter(row => row.name);
+      renderReview();
+      status.textContent = 'Confira os itens. Eles serão acrescentados à lista atual após a confirmação.';
+      completeProgress();
+    } catch (error) {
+      console.error(error); stopProgress(); status.textContent = error.message || 'Não foi possível analisar os produtos. Tente novamente.'; toast(status.textContent);
+    }
+  }
+
+  $('#analyzeShoppingText').addEventListener('click', () => analyzeCandidates(parseText($('#shoppingImportText').value), 'A IA está revisando o texto...'));
+  const photoName = $('#shoppingImportPhotoName');
+  const photoAnalyzeButton = $('#analyzeShoppingPhoto');
+  ['shoppingImportGallery','shoppingImportCamera'].forEach(id => $('#' + id).addEventListener('change', event => {
+    selectedPhoto = event.target.files?.[0] || null;
+    photoName.textContent = selectedPhoto ? selectedPhoto.name : '';
+    photoAnalyzeButton.disabled = !selectedPhoto;
+  }));
+  $('#shoppingImportTakePhoto').addEventListener('click', () => $('#shoppingImportCamera').click());
+  photoAnalyzeButton.addEventListener('click', async () => {
+    if (!selectedPhoto) return toast('Escolha uma foto primeiro.');
+    if (!window.SuperlistCloud?.analyzeListPhoto) return toast('A leitura de foto não está disponível no momento.');
+    startProgress('A IA está lendo a foto...');
+    try {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const result = await window.SuperlistCloud.analyzeListPhoto(selectedPhoto);
+      const candidates = (result.items || []).map(item => ({ name:String(item.name || '').trim(), brand:String(item.brand || '').trim(), quantity:Number(item.quantity) || 1, unit:String(item.unit || 'un').toLowerCase() })).filter(item => item.name);
+      if (!candidates.length) throw new Error('Não identifiquei produtos na foto. Tente outra imagem.');
+      progressText.textContent = 'A IA está conferindo os produtos...';
+      const checked = await window.SuperlistCloud.validateListItems(candidates.map(row => ({name:row.name,quantity:row.quantity,unit:row.unit})));
+      const items = Array.isArray(checked.items) ? checked.items : candidates;
+      rows = items.map((item,index) => { const source=candidates[index]||{}; const name=String(item.original_name||item.name||source.name||'').trim(); const suggestedName=String(item.suggested_name||name).trim(); return {name,suggestedName,hasCorrection:!!item.has_correction&&suggestedName.toLocaleLowerCase('pt-BR')!==name.toLocaleLowerCase('pt-BR'),brand:String(source.brand||'').trim(),quantity:Number(item.quantity||source.quantity)||1,unit:String(item.unit||source.unit||'un').toLowerCase()}; }).filter(row=>row.name);
+      renderReview(); status.textContent = 'Confira os itens. Eles serão acrescentados à lista atual após a confirmação.'; completeProgress();
+    } catch(error) { console.error(error); stopProgress(); status.textContent=error.message||'Não foi possível ler a foto.'; toast(status.textContent); }
+  });
+
+  const setAudio = file => { selectedAudio=file||null; $('#shoppingImportAudioName').textContent=selectedAudio?selectedAudio.name:'Nenhum áudio selecionado.'; $('#analyzeShoppingAudio').disabled=!selectedAudio; };
+  ['shoppingImportAudio'].forEach(id=>$('#'+id).addEventListener('change',event=>setAudio(event.target.files?.[0])));
+  $('#shoppingImportStartRecording').addEventListener('click',async()=>{
+    if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)return toast('A gravação não está disponível neste navegador. Envie um arquivo de áudio.');
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      const mime=['audio/webm;codecs=opus','audio/mp4','audio/webm'].find(type=>MediaRecorder.isTypeSupported?.(type));
+      chunks=[];recorder=new MediaRecorder(stream,mime?{mimeType:mime}:undefined);
+      recorder.ondataavailable=event=>{if(event.data?.size)chunks.push(event.data);};
+      recorder.onstop=()=>{
+        const raw=recorder?.mimeType||chunks[0]?.type||'audio/webm',type=raw.split(';')[0],extension=type==='audio/mp4'?'m4a':'webm';
+        setAudio(new File(chunks,'lista-de-compras.'+extension,{type}));
+        stream?.getTracks().forEach(track=>track.stop());stream=null;recorder=null;
+        $('#shoppingImportStartRecording').style.display='inline-flex';$('#shoppingImportStopRecording').style.display='none';
+        $('#shoppingImportAudioName').textContent='Gravação pronta: '+selectedAudio.name;
+      };
+      recorder.start();$('#shoppingImportStartRecording').style.display='none';$('#shoppingImportStopRecording').style.display='inline-flex';$('#shoppingImportAudioName').textContent='Gravando… toque em Parar ao terminar.';
+    }catch(error){console.error(error);stream?.getTracks().forEach(track=>track.stop());stream=null;toast('Não foi possível acessar o microfone. Verifique a permissão do navegador.');}
+  });
+  $('#shoppingImportStopRecording').addEventListener('click',()=>{if(recorder?.state==='recording')recorder.stop();});
+  $('#analyzeShoppingAudio').addEventListener('click',async()=>{
+    if(!selectedAudio)return toast('Escolha ou grave um áudio primeiro.');
+    if(!window.SuperlistCloud?.analyzeListAudio)return toast('A leitura de áudio não está disponível no momento.');
+    startProgress('A IA está transcrevendo o áudio...');
+    try{
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const result=await window.SuperlistCloud.analyzeListAudio(selectedAudio);
+      const candidates=(result.items||[]).map(item=>({name:String(item.name||'').trim(),brand:String(item.brand||'').trim(),quantity:Number(item.quantity)||1,unit:String(item.unit||'un').toLowerCase()})).filter(item=>item.name);
+      if(!candidates.length)throw new Error('Não identifiquei produtos no áudio. Tente gravar novamente.');
+      progressText.textContent='Transcrição pronta. A IA está conferindo os produtos...';
+      const checked=await window.SuperlistCloud.validateListItems(candidates.map(row=>({name:row.name,quantity:row.quantity,unit:row.unit})));
+      const items=Array.isArray(checked.items)?checked.items:candidates;
+      rows=items.map((item,index)=>{const source=candidates[index]||{};const name=String(item.original_name||item.name||source.name||'').trim();const suggestedName=String(item.suggested_name||name).trim();return{name,suggestedName,hasCorrection:!!item.has_correction&&suggestedName.toLocaleLowerCase('pt-BR')!==name.toLocaleLowerCase('pt-BR'),brand:String(source.brand||'').trim(),quantity:Number(item.quantity||source.quantity)||1,unit:String(item.unit||source.unit||'un').toLowerCase()};}).filter(row=>row.name);
+      renderReview();status.textContent='Confira os itens. Eles serão acrescentados à lista atual após a confirmação.';completeProgress();
+    }catch(error){console.error(error);stopProgress();status.textContent=error.message||'Não foi possível ler o áudio. Tente outro arquivo.';toast(status.textContent);}
+  });
+
+  rowsWrap.addEventListener('change',event=>{
+    const tr=event.target.closest('[data-import-row]');if(!tr)return;const row=rows[Number(tr.dataset.importRow)];if(!row)return;
+    const key=event.target.dataset.importField;if(key)row[key]=key==='quantity'?Number(event.target.value):event.target.value;
+  });
+  rowsWrap.addEventListener('click',event=>{
+    const accept=event.target.closest('[data-import-suggestion]');
+    if(accept){const row=rows[Number(accept.dataset.importSuggestion)];if(row){row.name=row.suggestedName;row.hasCorrection=false;renderReview();}return;}
+    const remove=event.target.closest('[data-import-remove]');
+    if(remove){rows.splice(Number(remove.dataset.importRemove),1);renderReview();}
+  });
+  confirmButton.addEventListener('click',()=>{
+    if(!currentList||currentList.id!==listId)return toast('A lista aberta não está disponível.');
+    if(!rows.length)return toast('Não há itens para adicionar.');
+    if(rows.some(row=>!row.name.trim()||!Number.isFinite(row.quantity)||row.quantity<=0))return toast('Confira os nomes e as quantidades.');
+    const target=db.lists.find(list=>list.id===listId);if(!target)return toast('Não foi possível localizar a lista.');
+    const added=rows.map(row=>{
+      const itemName=formatDisplayName(row.name),product=findOrCreateProduct({name:itemName,category:'Outros',unit:row.unit||'un'});
+      const brand=formatDisplayName(row.brand||'');
+      if(brand){product.brands=Array.isArray(product.brands)?product.brands:[];if(!product.brands.some(value=>value.toLocaleLowerCase('pt-BR')===brand.toLocaleLowerCase('pt-BR')))product.brands.push(brand);}
+      const item={id:uid(),productId:product.id,name:product.name,category:product.category||'Outros',unit:row.unit||product.unit||'un',qty:Number(row.quantity),brand,price:0,checked:false};
+      const history=latestPrice(item.productId,target.storeId);if(history)item.estimate=history.price;
+      return item;
+    });
+    target.items.push(...added);save();closeModal();currentList=db.lists.find(list=>list.id===listId);renderShopping();toast(added.length+' produto(s) adicionados à lista.');
+  });
+}
+
 function renderShopping() {
   let l=currentList;
 
@@ -1582,8 +1755,9 @@ let cats=[...new Set(visibleItems.map(i=>i.category||'Outros'))];
 
   const actionBar = document.createElement('div');
   actionBar.className = 'shopping-list-actions';
-  actionBar.innerHTML = '<button type="button" class="btn primary" id="addShoppingProduct"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="4"/></svg> Novo Produto</button><button type="button" class="btn secondary" id="addShoppingBarcode"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5v14M6 5v14M9 5v14M13 5v14M16 5v14M19 5v14M22 5v14"/></svg> Ler Código de Barras</button>';
+  actionBar.innerHTML = '<button type="button" class="btn secondary" id="importShoppingItems"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg> Importar itens</button><button type="button" class="btn primary" id="addShoppingProduct"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="4"/></svg> Novo Produto</button><button type="button" class="btn secondary" id="addShoppingBarcode"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5v14M6 5v14M9 5v14M13 5v14M16 5v14M19 5v14M22 5v14"/></svg> Ler Código de Barras</button>';
   $('#shoppingItems').prepend(actionBar);
+  $('#importShoppingItems').addEventListener('click', importItemsIntoOpenList);
   updateSummary();
 }
 
