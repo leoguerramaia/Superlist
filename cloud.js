@@ -109,6 +109,14 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     return data;
   }
 
+  async function providerSettings(action, order){
+    if(!client)throw new Error('Supabase não está conectado.');
+    const {data,error}=await client.functions.invoke('manage-provider-settings',{body:{action,...(order?{order}:{})}});
+    if(error){let message=error.message||'Falha ao salvar a prioridade das APIs.';try{const body=await error.context?.json?.();if(body?.error)message=body.error;}catch(_){}throw new Error(message);}
+    if(!data?.ok)throw new Error(data?.error||'Não foi possível atualizar a prioridade das APIs.');
+    return data;
+  }
+
   async function analyzeImage(file, mode='receipt', products=[]) {
     if (!client) throw new Error('Supabase não está configurado.');
     const { data: { session } } = await client.auth.getSession();
@@ -210,5 +218,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
     return true;
   }
-  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,adminRequest,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
 })();
