@@ -106,3 +106,17 @@
 
 
 .new-list-primary-actions .btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
+
+
+/* Orientação e importação de itens na lista aberta */
+.list-entry-guidance{color:#c62828;font-weight:700}
+.shopping-import-methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 14px}
+.shopping-import-methods .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:9px 8px;font-size:11px}
+.shopping-import-methods svg,.shopping-import-file-actions svg{width:16px;height:16px;flex:none}
+.shopping-import-methods .btn.active{border-color:#a9cbbb;background:#edf6f1;color:var(--green)}
+.shopping-import-file-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.shopping-import-file-actions label{cursor:pointer}
+.shopping-import-review{margin-top:12px}
+.shopping-import-review h3{font:700 14px Manrope;margin:0 0 6px}
+.shopping-import-modal .form-actions{margin-top:14px}
+@media(max-width:420px){.shopping-import-methods{grid-template-columns:1fr 1fr}.shopping-import-methods .btn:last-child{grid-column:1/-1}}
