@@ -539,7 +539,7 @@ function createListModal() {
       '<div class="field"><label>Supermercado</label><div class="form-grid new-list-store-row"><select name="storeId" required><option value="">Selecionar supermercado</option>' + storeOptions() + '</select><button type="button" class="btn secondary" id="newListAddStore">＋ Cadastrar</button></div></div>' +
       '<div class="field new-list-products"><label>Adicionar produtos</label><div class="form-grid new-list-primary-actions"><button type="button" class="btn secondary" id="toggleListImport" aria-expanded="false" aria-controls="listImportOptions" disabled><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/><path d="m16 16 2 2 4-4"/></svg>Importar lista</button><button type="button" class="btn secondary" id="manualListItems" disabled><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Adicionar manualmente</button></div><small id="listEntryHint" class="helper list-entry-guidance">Para incluir itens, preencha o nome da lista e selecione um supermercado.</small></div>' +
       '<section id="listImportOptions" class="new-list-methods" style="display:none" aria-label="Opções de importação"><button type="button" class="btn secondary" id="openTextImport"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8l4 4v12H8z"/><path d="M16 4v5h5M11 13h6M11 17h6"/><path d="M5 7H4v14h12"/></svg>Colar texto</button><button type="button" class="btn secondary" id="openPhotoImport"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-2h6l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><circle cx="12" cy="13" r="3"/></svg>Fotografar lista</button><button type="button" class="btn secondary" id="openAudioImport"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>Lista por áudio</button></section>' +
-      '<section id="textImportPanel" class="invite-box" style="display:none"><div class="field"><label for="newListText">Cole ou digite os produtos, um por linha</label><textarea id="newListText" rows="6" placeholder="2 arroz 5kg&#10;1 kg de banana&#10;3 unidades de leite"></textarea></div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button type="button" class="btn primary" id="validateTextList">Validar produtos</button><span id="validateTextWarning" role="alert" style="display:none;color:#c62828;font-size:12px;font-weight:600"><span aria-hidden="true">*</span> Valide os produtos antes de Criar a Lista</span></div></section>' +
+      '<section id="textImportPanel" class="invite-box" style="display:none"><div class="field"><label for="newListText">Cole ou digite os produtos, um por linha</label><textarea id="newListText" rows="6" placeholder="2 arroz 5kg&#10;1 kg de banana&#10;3 unidades de leite"></textarea></div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button type="button" class="btn primary" id="validateTextList">Revisar itens</button><span id="validateTextWarning" role="alert" style="display:none;color:#c62828;font-size:12px;font-weight:600"><span aria-hidden="true">*</span> Valide os produtos antes de Criar a Lista</span></div></section>' +
       '<section id="photoImportPanel" class="invite-box" style="display:none"><p class="muted">Escolha uma foto da galeria ou tire uma foto da lista escrita à mão. A IA vai transcrever os produtos para você revisar.</p><div class="form-grid"><button type="button" class="btn secondary" id="chooseListGallery">Escolher da galeria</button><button type="button" class="btn secondary" id="takeListPhoto">Usar câmera</button></div><input id="listGalleryInput" type="file" accept="image/*" style="display:none"><input id="listCameraInput" type="file" accept="image/*" capture="environment" style="display:none"><div id="listPhotoName" class="helper"></div><div id="listPhotoPreview" style="display:none;margin:10px 0"><img id="listPhotoPreviewImage" alt="Prévia da lista fotografada" style="display:block;width:100%;max-height:260px;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:#fff"></div><button type="button" class="btn primary" id="readListPhoto" disabled>✨ Transcrever com IA</button></section>' +
       '<section id="audioImportPanel" class="invite-box new-list-audio-panel" style="display:none"><p class="muted">Envie um arquivo de áudio ou grave sua lista pelo microfone.</p><div class="new-list-audio-actions"><label class="btn secondary new-list-audio-file" for="listAudioInput"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>Enviar arquivo</label><input id="listAudioInput" type="file" accept="audio/mpeg,audio/mp4,audio/mpga,audio/m4a,audio/wav,audio/webm,audio/ogg,audio/flac,.mp3,.mp4,.m4a,.wav,.webm,.ogg,.flac" style="display:none"><button type="button" class="btn secondary" id="startListRecording"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg>Gravar voz</button><button type="button" class="btn secondary" id="stopListRecording" style="display:none"><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Parar</button></div><small id="listAudioStatus" class="helper" aria-live="polite">Nenhum áudio selecionado.</small><button type="button" class="btn primary" id="readListAudio" disabled><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3m0 12v3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M3 12h3m12 0h3M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/></svg>Ler áudio com IA</button></section>' +
       '<div id="listImportProgress" class="receipt-progress list-ai-progress" style="display:none" aria-live="polite"><div class="receipt-progress-top"><span class="receipt-spinner"></span><strong id="listImportProgressText">Organizando seus produtos...</strong><b id="listImportProgressPercent">0%</b></div><div class="receipt-progress-track" role="progressbar" aria-label="Progresso da análise" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="listImportProgressBar"></span></div></div>' +
@@ -680,41 +680,28 @@ function createListModal() {
     validation.style.display = 'block';
   }
 
-  $('#validateTextList').addEventListener('click', async () => {
+  $('#validateTextList').addEventListener('click', () => {
     if (!requireListBasics()) return;
     const raw = textInput.value.trim();
     if (!raw) return toast('Cole ou digite os produtos primeiro.');
-    importNeedsConfirmation = true;
-    confirmedItems = [];
-    setCreateEnabled(false);
-    const button = $('#validateTextList'); button.disabled = true;
-    showProgress('A IA está conferindo a grafia dos produtos...');
-    try {
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const rows = raw.split(/\n|,/).map(line => line.trim()).filter(Boolean).map(line => {
-        let quantity = 1, unit = 'un', name = line;
-        const match = line.match(/^(\d+(?:[,.]\d+)?)\s*(kg|quilo[s]?|g|gramas?|l|litros?|ml|un(?:idades?)?|x)?\s+(?:de\s+)?(.+)$/i);
-        if (match) {
-          quantity = Number(match[1].replace(',', '.'));
-          const u = (match[2] || '').toLowerCase();
-          name = match[3].trim();
-          if (/kg|quilo/.test(u)) unit = 'kg'; else if (u === 'g' || u.startsWith('gram')) unit = 'g';
-          else if (u === 'l' || u.startsWith('litro')) unit = 'l'; else if (u === 'ml') unit = 'ml';
-          else if (u.startsWith('un') || u === 'x') unit = 'un';
-        }
-        return { name, quantity, unit };
-      });
-      if (!window.SuperlistCloud?.validateListItems) throw new Error('A validação por IA não está disponível. Atualize a Edge Function no Supabase.');
-      const checked = await window.SuperlistCloud.validateListItems(rows);
-      prepareRows(checked.items || rows);
-      finishProgress();
-      textNeedsValidation = false;
-      validateTextWarning.style.display = 'none';
-      toast(reviewRows.length + ' produto(s) revisados pela IA. Confira as sugestões.');
-    } catch (error) {
-      console.error(error);
-      toast(error.message || 'Não foi possível validar a grafia com IA. Tente novamente.');
-    } finally { hideProgress(); button.disabled = false; }
+    const rows = raw.split(/\n|,/).map(line => line.trim()).filter(Boolean).map(line => {
+      let quantity = 1, unit = 'un', name = line;
+      const match = line.match(/^(\d+(?:[,.]\d+)?)\s*(kg|quilo[s]?|g|gramas?|l|litros?|ml|un(?:idades?)?|x)?\s+(?:de\s+)?(.+)$/i);
+      if (match) {
+        quantity = Number(match[1].replace(',', '.'));
+        const u = (match[2] || '').toLowerCase(); name = match[3].trim();
+        if (/kg|quilo/.test(u)) unit = 'kg'; else if (u === 'g' || u.startsWith('gram')) unit = 'g';
+        else if (u === 'l' || u.startsWith('litro')) unit = 'l'; else if (u === 'ml') unit = 'ml';
+        else if (u.startsWith('un') || u === 'x') unit = 'un';
+      }
+      return { name, quantity, unit };
+    });
+    if (!rows.length) return toast('Cole ou digite ao menos um produto.');
+    textNeedsValidation = false;
+    validateTextWarning.style.display = 'none';
+    prepareRows(rows);
+    $('#listValidationHelp').textContent = 'Revise os itens. Depois, confirme os produtos e clique em Criar lista para concluir.';
+    toast(rows.length + ' produto(s) preparados. Confira os itens antes de criar a lista.');
   });
 
   $('#readListPhoto').addEventListener('click', async () => {
