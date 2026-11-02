@@ -292,3 +292,14 @@ body.sidebar-open{overflow:hidden}
 .store-detail-history{margin:7px 0 0 8px}
 .store-detail-history>summary{cursor:pointer;color:#23835d;font-size:10px;padding:5px 0}
 .store-detail-history .store-detail-price{padding:7px 0}
+
+
+.shopping-filters{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,240px);gap:10px;margin:0 0 14px}
+.shopping-search-field{display:flex;align-items:center;gap:9px;min-width:0;height:40px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:#7b8981}
+.shopping-search-field svg{width:16px;height:16px;flex:none}
+.shopping-search-field input{width:100%;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:12px;color:var(--ink)}
+.shopping-filters select{min-width:0;height:40px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit;font-size:12px}
+.store-change-button{display:inline-flex;align-items:center;gap:5px;padding:7px 9px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--green);font:600 11px "DM Sans",sans-serif;cursor:pointer}
+.store-change-button svg{width:14px;height:14px}
+.store-change-button:hover{background:var(--surface-soft)}
+@media(max-width:600px){.shopping-filters{grid-template-columns:1fr}.shopping-head-actions{justify-content:flex-start}.store-change-button{min-height:34px}}
