@@ -152,7 +152,12 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
       try { const context = error.context; if (context && typeof context.json === 'function') { const body = await context.json(); if (body?.error) detail = body.error; } } catch (_) {}
       throw new Error(detail);
     }
-    if (!data || !Array.isArray(data.items)) throw new Error('A IA retornou uma resposta inesperada.');
+    if (!data || typeof data !== 'object') throw new Error('A IA retornou uma resposta inesperada.');
+    if (mode === 'barcode') {
+      if (typeof data.ean !== 'string') throw new Error('A IA não retornou um EAN.');
+      return data;
+    }
+    if (!Array.isArray(data.items)) throw new Error('A IA retornou uma resposta inesperada.');
     return data;
   }
   async function analyzeBarcode({ image = null, code = '' } = {}) {
