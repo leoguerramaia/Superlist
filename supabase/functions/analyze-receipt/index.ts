@@ -284,6 +284,16 @@ Retorne todos os itens legíveis, sem inventar conteúdo.
       return json({ mode: "list", raw_text: String(listParsed.raw_text || ""), items: listItems });
     }
 
+    if (mode === "barcode") {
+      if (!imageBase64) return json({ error: "Envie uma imagem do código de barras." }, 400);
+      const barcodePrompt = \`Analise a imagem e leia somente o código EAN/GTIN impresso junto ao código de barras. Não pesquise nem tente identificar o produto. Não invente dígitos. Se não for possível ler com segurança, retorne ean vazio e confidence low. Retorne exclusivamente JSON: {"ean":"somente dígitos ou vazio","confidence":"high|medium|low"}.\`;
+      const result = await analyzeWithProviders(barcodePrompt, imageBase64, mimeType, 300, openaiKey, geminiKey, groqKey);
+      const parsed = JSON.parse(result.output);
+      const ean = String(parsed.ean || "").replace(/\D/g, "");
+      const validLength = [8, 12, 13, 14].includes(ean.length);
+      return json({ ean: validLength ? ean : "", confidence: String(parsed.confidence || "low") });
+    }
+
     if (mode !== "receipt") return json({ error: "Tipo de análise inválido." }, 400);
 
     const safeCatalog = products.map((p: any) => ({
