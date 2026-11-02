@@ -2787,7 +2787,7 @@ function normalizeBarcodeCode(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
-// A câmera captura uma foto; a Edge Function envia a imagem à IA para ler o GTIN e pesquisar o produto na web.
+// O scanner usa ZXing no navegador e não chama IA para decodificar códigos de barras.
 async function startLiveBarcodeScanner(video, onFound, onStatus) {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error('A câmera exige acesso HTTPS e permissão do navegador.');
   const ZXing = await loadZXingLibrary();
