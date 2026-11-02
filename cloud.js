@@ -101,6 +101,21 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     return avatarUrl;
   }
 
+  async function uploadStorePhoto(file, storeId){
+    if(!client) throw new Error('Supabase não está conectado.');
+    if(!file||!['image/jpeg','image/png','image/webp','image/gif'].includes(file.type)) throw new Error('Selecione uma foto JPG, PNG, WebP ou GIF.');
+    if(file.size>5*1024*1024) throw new Error('A foto deve ter no máximo 5 MB.');
+    const {data:{user},error:userError}=await client.auth.getUser();
+    if(userError) throw userError;
+    if(!user) throw new Error('Faça login novamente.');
+    const ext=({ 'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif' })[file.type];
+    const path=`${user.id}/stores/${storeId}-${Date.now()}.${ext}`;
+    const {error}=await client.storage.from('profile-photos').upload(path,file,{upsert:false,contentType:file.type,cacheControl:'3600'});
+    if(error) throw error;
+    const {data}=client.storage.from('profile-photos').getPublicUrl(path);
+    return {path,url:data.publicUrl+`?v=${Date.now()}`};
+  }
+
   async function adminRequest(action, payload={}){
     if(!client)throw new Error('Supabase não está conectado.');
     const {data,error}=await client.functions.invoke('admin-panel',{body:{action,...payload}});
@@ -218,5 +233,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
     return true;
   }
-  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,uploadStorePhoto,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
 })();

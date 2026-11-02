@@ -419,19 +419,73 @@ function renderStores() {
     ? db.stores.map(s=>{
         const location=[s.city,s.state].filter(Boolean).join(' — ');
         const details=[s.unitName,location].filter(Boolean);
-        // Endereço remains a read fallback for supermarkets saved before the fields changed.
         if (!details.length && s.address) details.push(s.address);
         const summary=details.length ? details.map(esc).join(' · ') : 'Localização não informada';
-        return `<article class="store-card">
-          <div class="store-icon">⌖</div>
-          <div>
+        return `<article class="store-card store-card-clickable" data-open-store="${esc(s.id)}" tabindex="0" role="button" aria-label="Abrir cadastro de ${esc(s.name)}">
+          ${s.photo
+            ? `<img class="store-card-photo" src="${esc(s.photo)}" alt="Foto de ${esc(s.name)}">`
+            : '<div class="store-icon">⌖</div>'}
+          <div class="store-card-content">
             <h3>${esc(s.name)}</h3>
             <p>${summary}<br>${db.prices.filter(p=>p.storeId===s.id).length} registros de preço</p>
           </div>
-          <button data-delete-store="${s.id}" title="Excluir">•••</button>
+          <div class="store-card-actions">
+            <button type="button" class="list-card-action" data-edit-store="${esc(s.id)}" aria-label="Editar supermercado ${esc(s.name)}" title="Editar"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>
+            <button type="button" class="list-card-action danger" data-delete-store="${esc(s.id)}" aria-label="Excluir supermercado ${esc(s.name)}" title="Excluir"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button>
+          </div>
         </article>`;
       }).join('')
     : '<div class="empty-state">Cadastre os supermercados onde você costuma comprar.</div>';
+
+  $('#storeGrid').querySelectorAll('[data-open-store]').forEach(card=>{
+    card.addEventListener('click',()=>openStoreDetails(card.dataset.openStore));
+    card.addEventListener('keydown',event=>{
+      if(event.key==='Enter'||event.key===' '){event.preventDefault();openStoreDetails(card.dataset.openStore);}
+    });
+    card.querySelector('[data-edit-store]')?.addEventListener('click',event=>{
+      event.preventDefault();event.stopPropagation();
+      const store=db.stores.find(item=>String(item.id)===String(card.dataset.openStore));
+      if(store)addStoreModal(null,store);
+    });
+    card.querySelector('[data-delete-store]')?.addEventListener('click',event=>{
+      event.preventDefault();event.stopPropagation();
+      const store=db.stores.find(item=>String(item.id)===String(card.dataset.openStore));
+      if(!store)return;
+      if(confirm(`Excluir o supermercado "${store.name}"? As listas e os preços registrados serão mantidos.`)){
+        db.stores=db.stores.filter(item=>String(item.id)!==String(store.id));
+        save();
+        toast('Supermercado excluído.');
+      }
+    });
+  });
+}
+
+function openStoreDetails(storeId) {
+  const store=db.stores.find(item=>String(item.id)===String(storeId));
+  if(!store)return;
+  const lists=db.lists.filter(list=>String(list.storeId)===String(store.id)).sort((a,b)=>(b.created||'').localeCompare(a.created||''));
+  const prices=db.prices.filter(item=>String(item.storeId)===String(store.id)).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const location=[store.city,store.state].filter(Boolean).join(' — ');
+  const legacyAddress=!location&&!store.unitName?store.address||'Não informado':'';
+  const listContent=lists.length?lists.map(list=>`<article class="store-detail-list"><div><strong>${esc(list.name)}</strong><small>${dateBR(list.created)} · ${(list.items||[]).length} produtos · ${list.done?'Concluída':'Em andamento'}</small></div><strong>${money(listTotal(list))}</strong></article>`).join(''):'<p class="muted">Nenhuma lista vinculada a este supermercado.</p>';
+  const priceContent=prices.length?`<div class="store-detail-prices">${prices.map(item=>`<article class="store-detail-price"><div><strong>${esc(item.productName||'Produto')}</strong>${item.brand?`<small>${esc(item.brand)}</small>`:''}</div><span>${dateBR(item.date)}</span><strong>${money(item.price)} <small>/ ${esc(unitLabel(item.unit))}</small></strong></article>`).join('')}</div>`:'<p class="muted">Nenhum preço registrado neste supermercado.</p>';
+  openModal(store.name,`<div class="store-detail">
+    <div class="store-detail-profile">
+      ${store.photo?`<img class="store-detail-photo" src="${esc(store.photo)}" alt="Foto de ${esc(store.name)}">`:'<div class="store-detail-photo-placeholder">⌖</div>'}
+      <div><span class="eyebrow">CADASTRO DO SUPERMERCADO</span><h3>${esc(store.name)}</h3><p>${esc(store.unitName||'Unidade não informada')}</p></div>
+    </div>
+    <dl class="store-detail-fields">
+      <div><dt>Nome do supermercado</dt><dd>${esc(store.name)}</dd></div>
+      <div><dt>Estado</dt><dd>${esc(store.state||'Não informado')}</dd></div>
+      <div><dt>Cidade</dt><dd>${esc(store.city||'Não informada')}</dd></div>
+      <div><dt>Nome da unidade</dt><dd>${esc(store.unitName||'Não informado')}</dd></div>
+      ${legacyAddress?`<div><dt>Endereço salvo anteriormente</dt><dd>${esc(legacyAddress)}</dd></div>`:''}
+    </dl>
+    <div class="store-detail-section"><div class="store-detail-heading"><h3>Listas vinculadas</h3><span>${lists.length}</span></div>${listContent}</div>
+    <div class="store-detail-section"><div class="store-detail-heading"><h3>Preços registrados</h3><span>${prices.length}</span></div>${priceContent}</div>
+    <div class="form-actions"><button type="button" class="btn secondary" data-cancel>Fechar</button><button type="button" class="btn primary" id="editStoreFromDetails">Editar cadastro</button></div>
+  </div>`);
+  $('#editStoreFromDetails').addEventListener('click',()=>addStoreModal(()=>openStoreDetails(store.id),store));
 }
 
 function renderProducts() {
@@ -899,7 +953,7 @@ function parseImported(text) {
   });
 }
 
-function addStoreModal(onSaved) {
+function addStoreModal(onSaved, store=null) {
   const states = [
     ['AC','Acre'],['AL','Alagoas'],['AP','Amapá'],['AM','Amazonas'],['BA','Bahia'],
     ['CE','Ceará'],['DF','Distrito Federal'],['ES','Espírito Santo'],['GO','Goiás'],
@@ -909,88 +963,125 @@ function addStoreModal(onSaved) {
     ['RO','Rondônia'],['RR','Roraima'],['SC','Santa Catarina'],['SP','São Paulo'],
     ['SE','Sergipe'],['TO','Tocantins']
   ];
-  openModal('Adicionar supermercado',`<form id="modalForm">
+  const editing=Boolean(store);
+  openModal(editing?'Editar supermercado':'Adicionar supermercado',`<form id="modalForm">
     <div class="field">
       <label for="storeName">Nome do supermercado</label>
-      <input id="storeName" name="name" required maxlength="120" placeholder="Ex.: Supermercado Central">
+      <input id="storeName" name="name" required maxlength="120" placeholder="Ex.: Supermercado Central" value="${esc(store?.name||'')}">
     </div>
     <div class="form-grid">
       <div class="field">
         <label for="storeState">Estado (opcional)</label>
         <select id="storeState" name="state">
           <option value="">Selecionar estado</option>
-          ${states.map(([uf,name])=>`<option value="${uf}">${name}</option>`).join('')}
+          ${states.map(([uf,name])=>`<option value="${uf}" ${store?.state===uf?'selected':''}>${name}</option>`).join('')}
         </select>
       </div>
       <div class="field">
         <label for="storeCity">Cidade (opcional)</label>
-        <select id="storeCity" name="city" disabled>
-          <option value="">Selecione primeiro o estado</option>
-        </select>
+        <select id="storeCity" name="city" disabled><option value="">Selecione primeiro o estado</option></select>
         <small id="storeCityStatus" class="helper" aria-live="polite"></small>
       </div>
     </div>
     <div class="field">
       <label for="storeUnitName">Nome da unidade (opcional)</label>
-      <input id="storeUnitName" name="unitName" maxlength="120" placeholder="Ex.: Unidade Centro">
+      <input id="storeUnitName" name="unitName" maxlength="120" placeholder="Ex.: Unidade Centro" value="${esc(store?.unitName||'')}">
+    </div>
+    <div class="field">
+      <label for="storePhoto">Foto do supermercado (opcional)</label>
+      <input id="storePhoto" name="photoFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" capture="environment">
+      <small class="helper">Tire uma foto ou escolha uma imagem da galeria. Máximo de 5 MB.</small>
+      <div id="storePhotoPreview" class="store-photo-preview">
+        ${store?.photo?`<img src="${esc(store.photo)}" alt="Foto atual do supermercado">`:'<span class="muted">Nenhuma foto adicionada.</span>'}
+      </div>
     </div>
     <div class="form-actions">
       <button type="button" class="btn secondary" data-cancel>Cancelar</button>
-      <button class="btn primary">Salvar supermercado</button>
+      <button class="btn primary">${editing?'Salvar alterações':'Salvar supermercado'}</button>
     </div>
   </form>`);
 
-  const stateSelect = $('#storeState');
-  const citySelect = $('#storeCity');
-  const cityStatus = $('#storeCityStatus');
-  let cityRequest = 0;
-  stateSelect.addEventListener('change', async () => {
-    const selectedState = stateSelect.value;
-    const request = ++cityRequest;
-    citySelect.innerHTML = selectedState
-      ? '<option value="">Carregando cidades…</option>'
-      : '<option value="">Selecione primeiro o estado</option>';
-    citySelect.disabled = true;
-    cityStatus.textContent = '';
-    if (!selectedState) return;
+  const form=$('#modalForm');
+  const stateSelect=$('#storeState');
+  const citySelect=$('#storeCity');
+  const cityStatus=$('#storeCityStatus');
+  const fileInput=$('#storePhoto');
+  let cityRequest=0;
 
+  async function loadCities(selectedState,selectedCity='') {
+    const request=++cityRequest;
+    citySelect.innerHTML=selectedState?'<option value="">Carregando cidades…</option>':'<option value="">Selecione primeiro o estado</option>';
+    citySelect.disabled=true;
+    cityStatus.textContent='';
+    if(!selectedState)return;
     try {
-      const response = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${encodeURIComponent(selectedState)}/municipios?orderBy=nome`);
-      if (!response.ok) throw new Error('Não foi possível carregar as cidades.');
-      const cities = await response.json();
-      if (request !== cityRequest || selectedState !== stateSelect.value) return;
-      citySelect.innerHTML = '<option value="">Selecionar cidade</option>' +
-        cities.map(city => `<option value="${esc(city.nome)}">${esc(city.nome)}</option>`).join('');
-      citySelect.disabled = false;
-    } catch (error) {
-      if (request !== cityRequest) return;
-      citySelect.innerHTML = '<option value="">Cidades indisponíveis</option>';
-      cityStatus.textContent = 'Verifique a conexão e selecione o estado novamente.';
-      console.warn('Falha ao carregar cidades do IBGE:', error);
+      const response=await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${encodeURIComponent(selectedState)}/municipios?orderBy=nome`);
+      if(!response.ok)throw new Error('Não foi possível carregar as cidades.');
+      const cities=await response.json();
+      if(request!==cityRequest||selectedState!==stateSelect.value)return;
+      citySelect.innerHTML='<option value="">Selecionar cidade</option>'+
+        cities.map(city=>`<option value="${esc(city.nome)}" ${city.nome===selectedCity?'selected':''}>${esc(city.nome)}</option>`).join('');
+      citySelect.disabled=false;
+    }catch(error){
+      if(request!==cityRequest)return;
+      citySelect.innerHTML='<option value="">Cidades indisponíveis</option>';
+      cityStatus.textContent='Verifique a conexão e selecione o estado novamente.';
+      console.warn('Falha ao carregar cidades do IBGE:',error);
     }
+  }
+
+  stateSelect.addEventListener('change',()=>loadCities(stateSelect.value));
+  if(store?.state)loadCities(store.state,store.city||'');
+  fileInput.addEventListener('change',()=>{
+    const file=fileInput.files[0];
+    if(!file)return;
+    if(!['image/jpeg','image/png','image/webp','image/gif'].includes(file.type)){
+      fileInput.value='';toast('Use uma foto JPG, PNG, WebP ou GIF.');return;
+    }
+    if(file.size>5*1024*1024){
+      fileInput.value='';toast('A imagem deve ter no máximo 5 MB.');return;
+    }
+    const preview=$('#storePhotoPreview');
+    preview.innerHTML=`<img src="${URL.createObjectURL(file)}" alt="Prévia da foto do supermercado">`;
   });
 
-  $('#modalForm').addEventListener('submit',e=>{
-    e.preventDefault();
-    const d=formData();
-    d.name=d.name.trim();
-    d.state=(d.state||'').trim();
-    d.city=(d.city||'').trim();
-    d.unitName=(d.unitName||'').trim();
-    if (!d.name) {
-      $('#storeName').focus();
-      return;
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const button=form.querySelector('button.primary');
+    button.disabled=true;
+    button.textContent='Salvando…';
+    try{
+      const data=formData(form);
+      const file=fileInput.files[0];
+      data.name=(data.name||'').trim();
+      data.state=(data.state||'').trim();
+      data.city=(data.city||'').trim();
+      data.unitName=(data.unitName||'').trim();
+      if(!data.name)throw new Error('Informe o nome do supermercado.');
+      if(data.city&&!data.state)throw new Error('Selecione o estado antes da cidade.');
+
+      const storeId=store?.id||uid();
+      let photo=store?.photo||'';
+      let photoPath=store?.photoPath||'';
+      if(file){
+        if(!window.SuperlistCloud?.uploadStorePhoto)throw new Error('O envio de fotos não está disponível.');
+        const uploaded=await window.SuperlistCloud.uploadStorePhoto(file,storeId);
+        photo=uploaded.url;
+        photoPath=uploaded.path;
+      }
+      const storeData={name:data.name,state:data.state,city:data.city,unitName:data.unitName,photo,photoPath};
+      if(store)Object.assign(store,storeData);
+      else db.stores.push({id:storeId,...storeData});
+      save();
+      closeModal();
+      toast(editing?'Cadastro atualizado.':'Supermercado cadastrado!');
+      if(typeof onSaved==='function')onSaved();
+    }catch(error){
+      console.error(error);
+      toast(error.message||'Não foi possível salvar o supermercado.');
+      button.disabled=false;
+      button.textContent=editing?'Salvar alterações':'Salvar supermercado';
     }
-    if (d.city && !d.state) {
-      toast('Selecione o estado antes da cidade.');
-      stateSelect.focus();
-      return;
-    }
-    db.stores.push({id:uid(),...d});
-    save();
-    closeModal();
-    toast('Supermercado cadastrado!');
-    if (typeof onSaved === 'function') onSaved();
   });
 }
 

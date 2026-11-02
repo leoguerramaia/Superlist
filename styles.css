@@ -241,3 +241,33 @@ body.sidebar-open{overflow:hidden}
 .purchase-summary{position:static;order:-1}
 .shop-item{grid-template-columns:20px minmax(90px,1fr) 66px 82px 65px 100px;gap:6px}
 }
+
+
+/* Supermercados: cartões e ficha de detalhes */
+.store-card-clickable{cursor:pointer;align-items:center;min-height:104px;transition:border-color .18s,transform .18s}
+.store-card-clickable:hover,.store-card-clickable:focus-visible{border-color:#b6d5c5;transform:translateY(-2px);outline:none}
+.store-card-content{min-width:0;flex:1}
+.store-card-photo{width:52px;height:52px;object-fit:cover;border-radius:12px;background:#edf6f1;flex:none}
+.store-card-actions{display:flex;gap:6px;margin-left:auto;align-self:flex-start}
+.store-card-actions .list-card-action{margin:0;flex:none}
+.store-photo-preview{margin-top:8px;min-height:36px}
+.store-photo-preview img{display:block;width:100%;max-height:190px;object-fit:contain;border-radius:10px;background:#f4f7f5}
+.store-detail-profile{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+.store-detail-profile h3{margin:5px 0;font:700 16px Manrope;color:var(--ink)}
+.store-detail-profile p{margin:0;color:#87948c;font-size:11px}
+.store-detail-photo,.store-detail-photo-placeholder{width:76px;height:76px;border-radius:14px;object-fit:cover;background:#edf6f1;flex:none}
+.store-detail-photo-placeholder{display:grid;place-items:center;color:var(--green);font-size:28px}
+.store-detail-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 20px}
+.store-detail-fields div{padding:10px;background:#f7f9f8;border-radius:9px;min-width:0}
+.store-detail-fields dt{font-size:9px;color:#87948c;margin-bottom:4px}
+.store-detail-fields dd{margin:0;font-size:11px;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.store-detail-section{margin:18px 0}
+.store-detail-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.store-detail-heading h3{margin:0;font:700 13px Manrope;color:var(--ink)}
+.store-detail-heading span{font-size:10px;color:#87948c}
+.store-detail-list,.store-detail-price{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:11px}
+.store-detail-list div,.store-detail-price div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.store-detail-list small,.store-detail-price small{font-size:9px;color:#87948c;font-weight:400}
+.store-detail-price span{color:#87948c;font-size:10px;white-space:nowrap}
+.store-detail-price>strong{white-space:nowrap}
+@media(max-width:520px){.store-detail-fields{grid-template-columns:1fr}.store-card-clickable{gap:9px;padding:13px}.store-card-photo{width:44px;height:44px}.store-card-actions{gap:4px}.store-card-actions .list-card-action{width:28px;height:28px}}
