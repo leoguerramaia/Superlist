@@ -303,3 +303,10 @@ body.sidebar-open{overflow:hidden}
 .store-change-button svg{width:14px;height:14px}
 .store-change-button:hover{background:var(--surface-soft)}
 @media(max-width:600px){.shopping-filters{grid-template-columns:1fr}.shopping-head-actions{justify-content:flex-start}.store-change-button{min-height:34px}}
+
+
+/* Setas visíveis para indicar seções e históricos expansíveis */
+.store-detail-section>summary,.store-detail-history>summary{display:flex;align-items:center;list-style:none}
+.store-detail-section>summary::-webkit-details-marker,.store-detail-history>summary::-webkit-details-marker{display:none}
+.store-detail-section>summary::after,.store-detail-history>summary::after{content:'▸';display:inline-block;margin-left:auto;padding-left:8px;color:#23835d;font-size:16px;line-height:1;transition:transform .16s ease}
+.store-detail-section[open]>summary::after,.store-detail-history[open]>summary::after{transform:rotate(90deg)}
