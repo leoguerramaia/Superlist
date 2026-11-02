@@ -36,12 +36,12 @@
     <a class="brand" href="#" data-page="home"><span class="brand-mark">S</span><span>superlist<span class="brand-dot">.</span></span></a>
     <div class="side-label">MENU PRINCIPAL</div>
     <nav>
-      <button class="nav-link active" data-page="home"><span>⌂</span> Visão geral</button>
-      <button class="nav-link" data-page="lists"><span>☷</span> Minhas listas</button>
-      <button class="nav-link" data-page="stores"><span>⌖</span> Supermercados</button>
-      <button class="nav-link" data-page="products"><span>▦</span> Produtos e categorias</button>
-      <button class="nav-link" data-page="prices"><span>↗</span> Histórico de preços</button>
-      <button class="nav-link admin-only" data-page="admin" style="display:none"><span>⚙</span> Administração</button>
+      <button class="nav-link active" data-page="home"><span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></svg></span> Visão geral</button>
+      <button class="nav-link" data-page="lists"><span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span> Minhas listas</button>
+      <button class="nav-link" data-page="stores"><span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h18l-1.5-6h-15L3 10Z"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></span> Supermercados</button>
+      <button class="nav-link" data-page="products"><span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 8 9 5 9-5"/><path d="M3 8v9l9 5 9-5V8"/><path d="M12 13v9"/></svg></span> Produtos e categorias</button>
+      <button class="nav-link" data-page="prices"><span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h17"/><path d="m7 15 4-4 3 2 6-7"/></svg></span> Histórico de preços</button>
+      <button class="nav-link admin-only" data-page="admin" style="display:none"><span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.6a8 8 0 0 1-1.5.9l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.5-.9l-1.7.6-1.4-2.4 1.4-1.1a7 7 0 0 1 0-1.8l-1.4-1.1 1.4-2.4 1.7.6a8 8 0 0 1 1.5-.9l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.5.9l1.7-.6 1.4 2.4-1.4 1.1a7 7 0 0 1 0 1.8Z"/></svg></span> Administração</button>
     </nav>
     <div class="sidebar-bottom">
       <div class="tip-card"><div class="tip-icon">✦</div><strong>Compre melhor.</strong><p>Compare preços e acompanhe seus gastos em um só lugar.</p></div>
@@ -51,49 +51,43 @@
 
   <main class="main">
     <header class="topbar">
-      <button class="mobile-menu" id="mobileMenu" aria-label="Abrir menu">☰</button>
+      <button class="mobile-menu" id="mobileMenu" aria-label="Abrir menu"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
       <div class="breadcrumb">Superlist <span>/</span> <b id="pageTitle">Visão geral</b></div>
       <div class="top-actions"><span class="sync-status" id="syncStatus">● Somente neste dispositivo</span><span class="today" id="todayLabel"></span><div id="userIdentity" style="display:none;flex-direction:column;align-items:flex-end;gap:2px;max-width:260px;line-height:1.2"><strong id="identityName" style="font-size:13px;color:#18352d"></strong><span id="identityFamily" style="font-size:11px;color:#60756c"></span><span id="identityEmail" style="font-size:11px;color:#81918a"></span></div><button class="avatar small" id="profileAvatarButton" type="button" aria-label="Abrir meu perfil" title="Abrir meu perfil" style="border:0;cursor:pointer;overflow:hidden;display:grid;place-items:center">SL</button><button class="account-btn" id="accountBtn" style="display:none">Entrar / Conta</button></div>
     </header>
     <div class="content">
       <section class="page active" id="page-home">
-        <div class="welcome-row"><div><div class="eyebrow">SEU CONTROLE DE COMPRAS</div><h1>Bom dia! 👋</h1><p class="muted">Organize suas compras e acompanhe seus gastos com facilidade.</p></div><button class="btn primary" id="homeNewList">＋ Nova lista</button></div>
+        <div class="welcome-row"><div><div class="eyebrow">SEU CONTROLE DE COMPRAS</div><h1>Bom dia! 👋</h1><p class="muted">Organize suas compras e acompanhe seus gastos com facilidade.</p></div><button class="btn primary" id="homeNewList"><span class="button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>Nova lista</button></div>
         <div class="stats-grid">
-          <article class="stat-card"><div class="stat-top"><span>Listas criadas</span><span class="stat-icon mint">☷</span></div><strong id="statLists">0</strong><small>No total</small></article>
-          <article class="stat-card"><div class="stat-top"><span>Compras concluídas</span><span class="stat-icon lilac">✓</span></div><strong id="statDone">0</strong><small>Listas finalizadas</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Listas criadas</span><span class="stat-icon mint" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span></div><strong id="statLists">0</strong><small>No total</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Compras concluídas</span><span class="stat-icon lilac" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg></span></div><strong id="statDone">0</strong><small>Listas finalizadas</small></article>
           <article class="stat-card"><div class="stat-top"><span>Gasto registrado</span><span class="stat-icon peach">R$</span></div><strong id="statSpent">R$ 0,00</strong><small>Compras concluídas</small></article>
-          <article class="stat-card"><div class="stat-top"><span>Produtos cadastrados</span><span class="stat-icon blue">▦</span></div><strong id="statProducts">0</strong><small>No catálogo</small></article>
+          <article class="stat-card"><div class="stat-top"><span>Produtos cadastrados</span><span class="stat-icon blue" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 8 9 5 9-5"/><path d="M3 8v9l9 5 9-5V8"/><path d="M12 13v9"/></svg></span></div><strong id="statProducts">0</strong><small>No catálogo</small></article>
         </div>
-        <div class="section-heading"><div><h2>Continue de onde parou</h2><p class="muted">Suas listas recentes</p></div><button class="text-button" data-goto="lists">Ver todas →</button></div>
+        <div class="section-heading"><div><h2>Continue de onde parou</h2><p class="muted">Suas listas recentes</p></div><button class="text-button" data-goto="lists" aria-label="Ver todas as listas" title="Ver todas as listas"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
         <div class="recent-grid" id="recentLists"></div>
-        <div class="section-heading lower"><div><h2>Acesso rápido</h2><p class="muted">O que você deseja fazer agora?</p></div></div>
-        <div class="quick-grid">
-          <button class="quick-card" data-action="new-list"><span class="quick-icon mint">＋</span><strong>Criar nova lista</strong><small>Comece uma compra do zero</small><span class="quick-arrow">↗</span></button>
-          <button class="quick-card" data-goto="products"><span class="quick-icon lilac">▦</span><strong>Gerenciar produtos</strong><small>Organize seu catálogo</small><span class="quick-arrow">↗</span></button>
-          <button class="quick-card" data-goto="prices"><span class="quick-icon peach">↗</span><strong>Consultar preços</strong><small>Veja o histórico por loja</small><span class="quick-arrow">↗</span></button>
-        </div>
       </section>
 
       <section class="page" id="page-lists">
-        <div class="page-heading"><div><div class="eyebrow">ORGANIZAÇÃO</div><h1>Minhas listas</h1><p class="muted">Planeje sua próxima compra sem esquecer nada.</p></div><button class="btn primary" id="newListBtn">＋ Nova lista</button></div>
-        <div class="toolbar"><div class="searchbox">⌕ <input id="listSearch" placeholder="Buscar lista..."></div><select id="listFilter"><option value="all">Todas as listas</option><option value="open">Em andamento</option><option value="done">Concluídas</option></select></div>
+        <div class="page-heading"><div><div class="eyebrow">ORGANIZAÇÃO</div><h1>Minhas listas</h1><p class="muted">Planeje sua próxima compra sem esquecer nada.</p></div><button class="btn primary" id="newListBtn"><span class="button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>Nova lista</button></div>
+        <div class="toolbar"><div class="searchbox"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span><input id="listSearch" placeholder="Buscar lista..."></div><select id="listFilter"><option value="all">Todas as listas</option><option value="open">Em andamento</option><option value="done">Concluídas</option></select></div>
         <div class="list-grid" id="allLists"></div>
       </section>
 
       <section class="page" id="page-stores">
-        <div class="page-heading"><div><div class="eyebrow">ONDE VOCÊ COMPRA</div><h1>Supermercados</h1><p class="muted">Cadastre suas lojas para comparar preços e acompanhar o histórico.</p></div><button class="btn primary" id="addStoreBtn">＋ Adicionar supermercado</button></div>
+        <div class="page-heading"><div><div class="eyebrow">ONDE VOCÊ COMPRA</div><h1>Supermercados</h1><p class="muted">Cadastre suas lojas para comparar preços e acompanhar o histórico.</p></div><button class="btn primary" id="addStoreBtn"><span class="button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>Adicionar supermercado</button></div>
         <div class="store-grid" id="storeGrid"></div>
       </section>
 
       <section class="page" id="page-products">
-        <div class="page-heading"><div><div class="eyebrow">SEU CATÁLOGO</div><h1>Produtos e categorias</h1><p class="muted">Mantenha seus produtos organizados e prontos para usar.</p></div><button class="btn primary" id="addProductBtn">＋ Novo produto</button></div>
-        <div class="toolbar"><div class="searchbox">⌕ <input id="productSearch" placeholder="Buscar produto..."></div><select id="categoryFilter"><option value="all">Todas as categorias</option></select></div>
-        <div class="catalog-layout"><aside class="category-panel"><h3>Categorias</h3><div id="categoryList"></div><button class="text-button add-category" id="addCategoryBtn">＋ Nova categoria</button></aside><div class="product-panel"><div class="panel-head"><strong id="productCount">Produtos</strong><span class="muted">Unidade de compra</span></div><div id="productTable"></div></div></div>
+        <div class="page-heading"><div><div class="eyebrow">SEU CATÁLOGO</div><h1>Produtos e categorias</h1><p class="muted">Mantenha seus produtos organizados e prontos para usar.</p></div><button class="btn primary" id="addProductBtn"><span class="button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>Novo produto</button></div>
+        <div class="toolbar"><div class="searchbox"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span><input id="productSearch" placeholder="Buscar produto..."></div><select id="categoryFilter"><option value="all">Todas as categorias</option></select></div>
+        <div class="catalog-layout"><aside class="category-panel"><h3>Categorias</h3><div id="categoryList"></div><button class="text-button add-category" id="addCategoryBtn"><span class="button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>Nova categoria</button></aside><div class="product-panel"><div class="panel-head"><strong id="productCount">Produtos</strong><span class="muted">Unidade de compra</span></div><div id="productTable"></div></div></div>
       </section>
 
       <section class="page" id="page-prices">
-        <div class="page-heading"><div><div class="eyebrow">ACOMPANHAMENTO</div><h1>Histórico de preços</h1><p class="muted">Consulte os valores registrados em cada supermercado.</p></div><button class="btn secondary" id="exportPrices">↓ Exportar Excel</button></div>
-        <div class="toolbar"><select id="priceStoreFilter"><option value="all">Todos os supermercados</option></select><div class="searchbox">⌕ <input id="priceSearch" placeholder="Buscar produto..."></div></div>
+        <div class="page-heading"><div><div class="eyebrow">ACOMPANHAMENTO</div><h1>Histórico de preços</h1><p class="muted">Consulte os valores registrados em cada supermercado.</p></div><button class="btn secondary" id="exportPrices"><span class="button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></span>Exportar Excel</button></div>
+        <div class="toolbar"><select id="priceStoreFilter"><option value="all">Todos os supermercados</option></select><div class="searchbox"><span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span><input id="priceSearch" placeholder="Buscar produto..."></div></div>
         <div class="price-summary" id="priceSummary"></div>
         <div class="analytics-grid">
           <div class="analytics-card"><div class="analytics-title"><strong>Evolução dos preços</strong><span class="muted">Registros recentes</span></div><canvas id="priceChart" height="120"></canvas></div>
@@ -103,7 +97,7 @@
       </section>
 
       <section class="page" id="page-admin">
-        <div class="page-heading"><div><span class="eyebrow">ÁREA RESTRITA</span><h1>Administração</h1><p class="muted">Gestão e acompanhamento da plataforma SuperList.</p></div><button class="btn secondary" id="adminRefresh">↻ Atualizar dados</button></div>
+        <div class="page-heading"><div><span class="eyebrow">ÁREA RESTRITA</span><h1>Administração</h1><p class="muted">Gestão e acompanhamento da plataforma SuperList.</p></div><button class="btn secondary" id="adminRefresh"><span class="button-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M5.6 9a7 7 0 0 1 11.8-2L20 12M4 12l2.6 5a7 7 0 0 0 11.8-2"/></svg></span>Atualizar dados</button></div>
         <div class="admin-warning" id="adminNotice">Carregando dados administrativos…</div>
         <div class="admin-stats" id="adminStats"><article class="stat-card"><span>Usuários</span><strong>—</strong></article><article class="stat-card"><span>Famílias</span><strong>—</strong></article><article class="stat-card"><span>Usuários bloqueados</span><strong>—</strong></article><article class="stat-card"><span>Administradores</span><strong>—</strong></article></div>
         <div class="admin-tabs"><button class="admin-tab active" data-admin-tab="users">Usuários</button><button class="admin-tab" data-admin-tab="families">Famílias</button><button class="admin-tab" data-admin-tab="audit">Auditoria</button></div>
