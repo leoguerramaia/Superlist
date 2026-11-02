@@ -416,14 +416,21 @@ function storeName(id) {
 
 function renderStores() {
   $('#storeGrid').innerHTML=db.stores.length
-    ? db.stores.map(s=>`<article class="store-card">
-        <div class="store-icon">⌖</div>
-        <div>
-          <h3>${esc(s.name)}</h3>
-          <p>${esc(s.address||'Endereço não informado')}<br>${db.prices.filter(p=>p.storeId===s.id).length} registros de preço</p>
-        </div>
-        <button data-delete-store="${s.id}" title="Excluir">•••</button>
-      </article>`).join('')
+    ? db.stores.map(s=>{
+        const location=[s.city,s.state].filter(Boolean).join(' — ');
+        const details=[s.unitName,location].filter(Boolean);
+        // Endereço remains a read fallback for supermarkets saved before the fields changed.
+        if (!details.length && s.address) details.push(s.address);
+        const summary=details.length ? details.map(esc).join(' · ') : 'Localização não informada';
+        return `<article class="store-card">
+          <div class="store-icon">⌖</div>
+          <div>
+            <h3>${esc(s.name)}</h3>
+            <p>${summary}<br>${db.prices.filter(p=>p.storeId===s.id).length} registros de preço</p>
+          </div>
+          <button data-delete-store="${s.id}" title="Excluir">•••</button>
+        </article>`;
+      }).join('')
     : '<div class="empty-state">Cadastre os supermercados onde você costuma comprar.</div>';
 }
 
@@ -893,14 +900,39 @@ function parseImported(text) {
 }
 
 function addStoreModal(onSaved) {
+  const states = [
+    ['AC','Acre'],['AL','Alagoas'],['AP','Amapá'],['AM','Amazonas'],['BA','Bahia'],
+    ['CE','Ceará'],['DF','Distrito Federal'],['ES','Espírito Santo'],['GO','Goiás'],
+    ['MA','Maranhão'],['MT','Mato Grosso'],['MS','Mato Grosso do Sul'],['MG','Minas Gerais'],
+    ['PA','Pará'],['PB','Paraíba'],['PR','Paraná'],['PE','Pernambuco'],['PI','Piauí'],
+    ['RJ','Rio de Janeiro'],['RN','Rio Grande do Norte'],['RS','Rio Grande do Sul'],
+    ['RO','Rondônia'],['RR','Roraima'],['SC','Santa Catarina'],['SP','São Paulo'],
+    ['SE','Sergipe'],['TO','Tocantins']
+  ];
   openModal('Adicionar supermercado',`<form id="modalForm">
     <div class="field">
-      <label>Nome do supermercado</label>
-      <input name="name" required placeholder="Ex.: Supermercado Central">
+      <label for="storeName">Nome do supermercado</label>
+      <input id="storeName" name="name" required maxlength="120" placeholder="Ex.: Supermercado Central">
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="storeState">Estado (opcional)</label>
+        <select id="storeState" name="state">
+          <option value="">Selecionar estado</option>
+          ${states.map(([uf,name])=>`<option value="${uf}">${name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label for="storeCity">Cidade (opcional)</label>
+        <select id="storeCity" name="city" disabled>
+          <option value="">Selecione primeiro o estado</option>
+        </select>
+        <small id="storeCityStatus" class="helper" aria-live="polite"></small>
+      </div>
     </div>
     <div class="field">
-      <label>Endereço ou unidade (opcional)</label>
-      <input name="address" placeholder="Ex.: Aldeota — Fortaleza">
+      <label for="storeUnitName">Nome da unidade (opcional)</label>
+      <input id="storeUnitName" name="unitName" maxlength="120" placeholder="Ex.: Unidade Centro">
     </div>
     <div class="form-actions">
       <button type="button" class="btn secondary" data-cancel>Cancelar</button>
@@ -908,9 +940,52 @@ function addStoreModal(onSaved) {
     </div>
   </form>`);
 
+  const stateSelect = $('#storeState');
+  const citySelect = $('#storeCity');
+  const cityStatus = $('#storeCityStatus');
+  let cityRequest = 0;
+  stateSelect.addEventListener('change', async () => {
+    const selectedState = stateSelect.value;
+    const request = ++cityRequest;
+    citySelect.innerHTML = selectedState
+      ? '<option value="">Carregando cidades…</option>'
+      : '<option value="">Selecione primeiro o estado</option>';
+    citySelect.disabled = true;
+    cityStatus.textContent = '';
+    if (!selectedState) return;
+
+    try {
+      const response = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${encodeURIComponent(selectedState)}/municipios?orderBy=nome`);
+      if (!response.ok) throw new Error('Não foi possível carregar as cidades.');
+      const cities = await response.json();
+      if (request !== cityRequest || selectedState !== stateSelect.value) return;
+      citySelect.innerHTML = '<option value="">Selecionar cidade</option>' +
+        cities.map(city => `<option value="${esc(city.nome)}">${esc(city.nome)}</option>`).join('');
+      citySelect.disabled = false;
+    } catch (error) {
+      if (request !== cityRequest) return;
+      citySelect.innerHTML = '<option value="">Cidades indisponíveis</option>';
+      cityStatus.textContent = 'Verifique a conexão e selecione o estado novamente.';
+      console.warn('Falha ao carregar cidades do IBGE:', error);
+    }
+  });
+
   $('#modalForm').addEventListener('submit',e=>{
     e.preventDefault();
-    let d=formData();
+    const d=formData();
+    d.name=d.name.trim();
+    d.state=(d.state||'').trim();
+    d.city=(d.city||'').trim();
+    d.unitName=(d.unitName||'').trim();
+    if (!d.name) {
+      $('#storeName').focus();
+      return;
+    }
+    if (d.city && !d.state) {
+      toast('Selecione o estado antes da cidade.');
+      stateSelect.focus();
+      return;
+    }
     db.stores.push({id:uid(),...d});
     save();
     closeModal();
