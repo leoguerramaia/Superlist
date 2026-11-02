@@ -120,3 +120,21 @@
 .shopping-import-review h3{font:700 14px Manrope;margin:0 0 6px}
 .shopping-import-modal .form-actions{margin-top:14px}
 @media(max-width:420px){.shopping-import-methods{grid-template-columns:1fr 1fr}.shopping-import-methods .btn:last-child{grid-column:1/-1}}
+
+
+/* Tabelas de revisão: quantidade e unidade primeiro, campo de produto mais compacto */
+.list-review-table{width:100%;min-width:0;table-layout:fixed}
+.list-review-table th,.list-review-table td{padding:8px 5px;vertical-align:top}
+.list-review-table input,.list-review-table select{display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box;padding:6px 5px;font-size:10px}
+.list-review-table th:nth-child(1),.list-review-table td:nth-child(1){width:12%}
+.list-review-table th:nth-child(2),.list-review-table td:nth-child(2){width:10%}
+.list-review-table th:nth-child(3),.list-review-table td:nth-child(3){width:30%}
+.list-review-table th:nth-child(4),.list-review-table td:nth-child(4){width:40%}
+.list-review-table th:last-child,.list-review-table td:last-child{width:8%;text-align:center}
+.new-list-review-table{min-width:520px}
+.new-list-review-table th:nth-child(1),.new-list-review-table td:nth-child(1){width:10%}
+.new-list-review-table th:nth-child(2),.new-list-review-table td:nth-child(2){width:8%}
+.new-list-review-table th:nth-child(3),.new-list-review-table td:nth-child(3){width:24%}
+.new-list-review-table th:nth-child(4),.new-list-review-table td:nth-child(4){width:30%}
+.new-list-review-table th:nth-child(5),.new-list-review-table td:nth-child(5){width:22%}
+.new-list-review-table th:last-child,.new-list-review-table td:last-child{width:6%}
