@@ -728,12 +728,21 @@ function createListModal() {
   }
 
   function renderValidation() {
-    validationRows.innerHTML = '<table class="receipt-items-table"><thead><tr><th>Produto</th><th>Quantidade</th><th>Unidade</th><th>Associar ao catálogo</th><th>Marca (opcional)</th><th></th></tr></thead><tbody>' +
+    validationRows.innerHTML = '<table class="receipt-items-table list-review-table new-list-review-table"><thead><tr><th>Quantidade</th><th>Unidade</th><th>Produto</th><th>Associar ao catálogo</th><th>Marca (opcional)</th><th></th></tr></thead><tbody>' +
       reviewRows.map((row,i) => {
         const brands = brandsForProduct(row.productId);
         const selectedBrand = row.brand || '';
         const hasNew = selectedBrand && !brands.some(b => norm(b) === norm(selectedBrand));
-        return '<tr data-review-row="' + i + '"><td><input data-review="name" value="' + esc(row.name) + '">' + (row.hasCorrection ? '<div style="font-size:11px;color:#a15c00;margin-top:5px">Sugestão da IA: <button type="button" data-accept-suggestion="' + i + '" style="color:#176b52;text-decoration:underline;background:none;border:0;padding:0;font-weight:700">' + esc(row.suggestedName) + '</button></div>' : row.needsReview ? '<small style="display:block;color:#a15c00;margin-top:5px">Confira a grafia deste produto.</small>' : '') + '</td><td><input data-review="quantity" type="number" min="0.01" step="0.01" value="' + row.quantity + '"></td><td><select data-review="unit">' + ['un','kg','g','l','ml','cx','pct'].map(u => '<option value="' + u + '"' + (row.unit === u ? ' selected' : '') + '>' + u + '</option>').join('') + '</select></td><td><select data-review="product"><option value="">Criar novo produto</option>' + db.products.map(p => '<option value="' + esc(p.id) + '"' + (row.productId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></td><td><select data-review="brand"><option value="">Sem marca</option>' + brands.map(b => '<option value="' + esc(b) + '"' + (norm(b) === norm(selectedBrand) ? ' selected' : '') + '>' + esc(b) + '</option>').join('') + '<option value="__new__"' + (hasNew ? ' selected' : '') + '>＋ Nova marca</option></select><input data-review="newBrand" value="' + (hasNew ? esc(selectedBrand) : '') + '" placeholder="Digite a nova marca" style="display:' + (hasNew ? 'block' : 'none') + ';margin-top:6px;max-width:150px"></td><td><button type="button" data-remove-review="' + i + '">×</button></td></tr>';
+        const suggestion = row.hasCorrection
+          ? '<small class="new-list-suggestion">Sugestão da IA: <button type="button" data-accept-suggestion="' + i + '">' + esc(row.suggestedName) + '</button></small>'
+          : row.needsReview ? '<small class="new-list-suggestion">Confira a grafia deste produto.</small>' : '';
+        return '<tr data-review-row="' + i + '">' +
+          '<td><input data-review="quantity" type="number" min="0.01" step="0.01" value="' + row.quantity + '" aria-label="Quantidade"></td>' +
+          '<td><select data-review="unit" aria-label="Unidade">' + ['un','kg','g','l','ml','cx','pct'].map(u => '<option value="' + u + '"' + (row.unit === u ? ' selected' : '') + '>' + u + '</option>').join('') + '</select></td>' +
+          '<td><input data-review="name" value="' + esc(row.name) + '" aria-label="Produto">' + suggestion + '</td>' +
+          '<td><select data-review="product" aria-label="Associar ao catálogo"><option value="">Criar novo produto</option>' + db.products.map(p => '<option value="' + esc(p.id) + '"' + (row.productId === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select></td>' +
+          '<td><select data-review="brand" aria-label="Marca opcional"><option value="">Sem marca</option>' + brands.map(b => '<option value="' + esc(b) + '"' + (norm(b) === norm(selectedBrand) ? ' selected' : '') + '>' + esc(b) + '</option>').join('') + '<option value="__new__"' + (hasNew ? ' selected' : '') + '>＋ Nova marca</option></select><input data-review="newBrand" value="' + (hasNew ? esc(selectedBrand) : '') + '" placeholder="Digite a nova marca" aria-label="Nova marca" style="display:' + (hasNew ? 'block' : 'none') + ';margin-top:6px;max-width:150px"></td>' +
+          '<td><button type="button" data-remove-review="' + i + '" aria-label="Remover produto">×</button></td></tr>';
       }).join('') +
       '</tbody></table>';
     validation.style.display = 'block';
@@ -1599,12 +1608,14 @@ function importItemsIntoOpenList() {
   const parseText = value => parseShoppingText(value);
 
   function renderReview() {
-    rowsWrap.innerHTML = rows.length ? '<table class="receipt-items-table"><thead><tr><th>Produto</th><th>Qtd.</th><th>Un.</th><th>Marca</th><th></th></tr></thead><tbody>' +
-      rows.map((row,index) => '<tr data-import-row="' + index + '"><td><input data-import-field="name" aria-label="Produto" value="' + esc(row.name) + '">' +
-        (row.hasCorrection ? '<small class="new-list-suggestion">Sugestão da IA: <button type="button" data-import-suggestion="' + index + '">' + esc(row.suggestedName) + '</button></small>' : '') +
-        '</td><td><input data-import-field="quantity" aria-label="Quantidade" type="number" min="0.01" step="0.01" value="' + row.quantity + '"></td>' +
+    rowsWrap.innerHTML = rows.length ? '<table class="receipt-items-table list-review-table shopping-import-review-table"><thead><tr><th>Qtd.</th><th>Un.</th><th>Produto</th><th>Marca</th><th></th></tr></thead><tbody>' +
+      rows.map((row,index) => '<tr data-import-row="' + index + '">' +
+        '<td><input data-import-field="quantity" aria-label="Quantidade" type="number" min="0.01" step="0.01" value="' + row.quantity + '"></td>' +
         '<td><select data-import-field="unit" aria-label="Unidade">' + ['un','kg','g','l','ml','cx','pct'].map(unit => '<option value="' + unit + '"' + (row.unit === unit ? ' selected' : '') + '>' + unit + '</option>').join('') + '</select></td>' +
-        '<td><input data-import-field="brand" aria-label="Marca opcional" value="' + esc(row.brand || '') + '" placeholder="Opcional"></td><td><button type="button" data-import-remove="' + index + '" aria-label="Remover item">×</button></td></tr>').join('') +
+        '<td><input data-import-field="name" aria-label="Produto" value="' + esc(row.name) + '">' +
+        (row.hasCorrection ? '<small class="new-list-suggestion">Sugestão da IA: <button type="button" data-import-suggestion="' + index + '">' + esc(row.suggestedName) + '</button></small>' : '') +
+        '</td><td><input data-import-field="brand" aria-label="Marca opcional" value="' + esc(row.brand || '') + '" placeholder="Opcional"></td>' +
+        '<td><button type="button" data-import-remove="' + index + '" aria-label="Remover item">×</button></td></tr>').join('') +
       '</tbody></table>' : '<p class="helper">Nenhum produto reconhecido. Tente novamente.</p>';
     review.style.display = 'block';
     confirmButton.disabled = !rows.length;
