@@ -45,7 +45,6 @@ async function getAccessToken(username: string, password: string): Promise<strin
       "Authorization": "Basic " + base64Utf8(username + ":" + password),
       "Accept": "application/json",
       "User-Agent": "SuperList/1.0 (consulta de produtos)",
-      "Content-Type": "application/x-www-form-urlencoded",
     },
     body: "",
     signal: AbortSignal.timeout(12000),
