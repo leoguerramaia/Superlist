@@ -229,6 +229,20 @@ function money(n) {
   return (Number(n)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 }
 
+function formatPriceValue(value) {
+  return (Number(value)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function formatPriceEntry(value) {
+  const digits=String(value??'').replace(/\D/g,'');
+  return digits ? (Number(digits)/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) : '';
+}
+
+function parsePriceEntry(value) {
+  const digits=String(value??'').replace(/\D/g,'');
+  return digits ? Number(digits)/100 : 0;
+}
+
 function dateBR(d) {
   return new Date(d+'T12:00:00').toLocaleDateString('pt-BR');
 }
@@ -1376,7 +1390,7 @@ function editShoppingItem(itemId) {
       <div class="field">
         <label>Preço (R$)</label>
         <input name="price" inputmode="decimal"
-          value="${String(item.price || '').replace('.', ',')}">
+          value="${item.price?formatPriceValue(item.price):''}">
       </div>
 
       <div class="form-actions">
@@ -1387,13 +1401,12 @@ function editShoppingItem(itemId) {
     </form>
   `);
 
+  $('#editShoppingItemForm').querySelector('[name="price"]')?.addEventListener('input',e=>{e.target.value=formatPriceEntry(e.target.value);});
   $('#editShoppingItemForm').addEventListener('submit', e => {
     e.preventDefault();
 
     const d = formData(e.currentTarget);
-    const price = Number(
-      String(d.price).replace(',', '.')
-    );
+    const price = parsePriceEntry(d.price);
 
     if (!Number.isFinite(price) || price < 0) {
       toast('Informe um preço válido.');
@@ -1662,102 +1675,52 @@ function addCatalogProductToList() {
       searchCategory();
 
     } else {
-      area.innerHTML = `
-        <div class="field">
-          <label>Código de barras (EAN/GTIN)</label>
-          <input id="addProductBarcode"
-            inputmode="numeric"
-            placeholder="Digite ou escaneie o código">
-        </div>
-        <div class="form-actions">
-          <button type="button" class="btn secondary"
-            id="scanNewProductBarcode">
-            ▣ Abrir câmera
-          </button>
-          <button type="button" class="btn secondary" id="readNewProductBarcodeAI">✨ Ler com IA</button>
-          <button type="button" class="btn primary"
-            id="lookupNewProductBarcode">
-            Pesquisar com IA
-          </button>
-        </div>
-        <div id="addBarcodeCamera" class="camera-box"
-          style="display:none"></div>
-      `;
+      area.innerHTML = '<div class="field"><label>Código de barras (EAN/GTIN)</label><input id="addProductBarcode" inputmode="numeric" placeholder="Digite ou escaneie o código"></div>' +
+        '<div class="form-actions"><button type="button" class="btn secondary" id="scanNewProductBarcode">▣ Abrir câmera</button><button type="button" class="btn primary" id="lookupNewProductBarcode">Consultar catálogo</button></div>' +
+        '<div id="addBarcodeCamera" class="camera-box" style="display:none"></div>' +
+        '<div id="unknownBarcodeProduct" class="field" style="display:none"><p class="helper">O código foi lido, mas não encontramos o produto no catálogo. Você pode cadastrá-lo manualmente.</p><label for="unknownBarcodeName">Nome do produto</label><input id="unknownBarcodeName" placeholder="Ex.: Café torrado e moído"><button type="button" class="btn secondary" id="createProductFromBarcode">＋ Cadastrar e adicionar</button></div>';
 
-      $('#lookupNewProductBarcode').onclick = async () => {
-        const code = normalizeBarcodeCode($('#addProductBarcode').value);
-        if (!code) { toast('Informe um código de barras válido.'); return; }
-        if (![8, 12, 13, 14].includes(code.length)) {
-          toast('O código deve ter 8, 12, 13 ou 14 números (EAN/UPC/GTIN).');
-          return;
-        }
-
-        const button = $('#lookupNewProductBarcode');
-        button.disabled = true;
-        button.textContent = 'IA pesquisando…';
-        try {
-          const product = await findProductByBarcode(code);
-          if (!product) {
-            toast('A IA não encontrou uma correspondência confiável para esse código.');
-            return;
-          }
-          addProductToCurrentList(
-            product,
-            Number($('#addProductQty').value) || 1,
-            $('#addProductBrand')?.value || product.brand || '', selectedManualUnit(product)
-          );
-        } catch (error) {
-          console.error('Erro ao consultar código:', error);
-          toast(error.message || 'Falha na pesquisa com IA.');
-        } finally {
-          if ($('#lookupNewProductBarcode')) {
-            $('#lookupNewProductBarcode').disabled = false;
-            $('#lookupNewProductBarcode').textContent = 'Consultar código';
-          }
-        }
+      let barcodeCameraControls=null;
+      const lookupBarcodeProduct=async()=>{
+        const code=normalizeBarcodeCode($('#addProductBarcode').value);
+        if(!code){toast('Informe um código de barras válido.');return;}
+        if(![8,12,13,14].includes(code.length)){toast('O código deve ter 8, 12, 13 ou 14 números.');return;}
+        const button=$('#lookupNewProductBarcode');
+        button.disabled=true;button.textContent='Consultando…';
+        $('#unknownBarcodeProduct').style.display='none';
+        try{
+          const product=await findProductByBarcode(code);
+          if(!product){$('#unknownBarcodeProduct').style.display='block';toast('Produto não localizado. Você pode cadastrá-lo manualmente.');return;}
+          addProductToCurrentList(product,Number($('#addProductQty').value)||1,$('#addProductBrand')?.value||product.brand||'',selectedManualUnit(product));
+        }catch(error){console.error('Erro ao consultar catálogo:',error);toast(error.message||'Falha ao consultar catálogo.');}
+        finally{if($('#lookupNewProductBarcode')){$('#lookupNewProductBarcode').disabled=false;$('#lookupNewProductBarcode').textContent='Consultar catálogo';}}
       };
-
-      let aiCameraControls = null;
-      $('#scanNewProductBarcode').onclick = async () => {
-        const cameraBox = $('#addBarcodeCamera'), button = $('#scanNewProductBarcode');
-        try {
-          cameraBox.style.display = 'block'; cameraBox.innerHTML = '<video autoplay muted playsinline style="width:100%;height:100%;object-fit:contain"></video>';
-          button.disabled = true; button.textContent = 'Abrindo câmera…';
-          aiCameraControls = await startLiveBarcodeScanner(cameraBox.querySelector('video'));
-          button.textContent = 'Câmera aberta'; toast('Centralize o código e toque em Ler com IA.');
-        } catch (error) { console.error(error); cameraBox.style.display = 'none'; toast(error.message || 'Não foi possível iniciar a câmera.'); button.textContent = 'Abrir câmera'; }
-        finally { button.disabled = false; }
+      $('#lookupNewProductBarcode').onclick=lookupBarcodeProduct;
+      $('#scanNewProductBarcode').onclick=async()=>{
+        const box=$('#addBarcodeCamera'),button=$('#scanNewProductBarcode');
+        try{
+          box.style.display='block';box.innerHTML='';
+          const video=document.createElement('video');video.style.width='100%';video.style.height='100%';video.style.objectFit='contain';box.appendChild(video);
+          button.disabled=true;button.textContent='Abrindo câmera…';
+          barcodeCameraControls=await startLiveBarcodeScanner(video,code=>{
+            $('#addProductBarcode').value=code;box.textContent='Código lido: '+code;
+            toast('Código lido. Consultando catálogo…');lookupBarcodeProduct();
+          });
+          button.textContent='Câmera aberta';
+        }catch(error){console.error(error);box.style.display='none';toast(error.message||'Não foi possível iniciar a câmera.');button.textContent='Abrir câmera';}
+        finally{button.disabled=false;}
       };
-      $('#readNewProductBarcodeAI').onclick = async () => {
-        const button = $('#readNewProductBarcodeAI');
-        if (!aiCameraControls) { toast('Abra a câmera primeiro.'); return; }
-        button.disabled = true; button.textContent = 'IA analisando…';
-        try {
-          const image = await aiCameraControls.capture();
-          const cameraBox = $('#addBarcodeCamera');
-          const result = await window.SuperlistCloud.analyzeBarcode({ image });
-          const code = normalizeBarcodeCode(result.barcode);
-          if (!code || result.needs_confirmation || result.barcode_confidence === 'low') { toast('A IA não conseguiu ler o código com segurança. Aproxime e tente novamente.'); return; }
-          $('#addProductBarcode').value = code;
-          if (!result.product_found || !result.name) { toast('Código ' + code + ' identificado, mas sem produto confirmado na pesquisa.'); return; }
-          let product = db.products.find(p => normalizeBarcodeCode(p.barcode) === code);
-          if (!product) { const name = formatDisplayName(result.name); product = { id: uid(), name, category: seedCategories.includes(result.category) ? result.category : 'Outros', unit: 'un', ...packageInfo(name, 'un'), barcode: code, brand: formatDisplayName(result.brand || ''), photo: '', active: true, description: result.description || '', barcodeSources: result.sources || [] }; db.products.push(product); save(); }
-          aiCameraControls.stop(); aiCameraControls = null; cameraBox.style.display = 'none';
-          addProductToCurrentList(product, Number($('#addProductQty').value) || 1, $('#addProductBrand')?.value || product.brand || '', selectedManualUnit(product));
-        } catch (error) { console.error(error); toast(error.message || 'Falha na análise da imagem.'); }
-        finally { button.disabled = false; button.textContent = '✨ Ler com IA'; }
-      };
-      $('#lookupNewProductBarcode').onclick = async () => {
-        const code = normalizeBarcodeCode($('#addProductBarcode').value);
-        if (!code) { toast('Informe um código de barras válido.'); return; }
-        if (![8, 12, 13, 14].includes(code.length)) { toast('O código deve ter 8, 12, 13 ou 14 números.'); return; }
-        const button = $('#lookupNewProductBarcode'); button.disabled = true; button.textContent = 'IA pesquisando…';
-        try {
-          const product = await findProductByBarcode(code);
-          if (!product) { toast('A IA não encontrou uma correspondência confiável para esse código.'); return; }
-          addProductToCurrentList(product, Number($('#addProductQty').value) || 1, $('#addProductBrand')?.value || product.brand || '', selectedManualUnit(product));
-        } catch (error) { console.error(error); toast(error.message || 'Falha na pesquisa com IA.'); }
-        finally { button.disabled = false; button.textContent = 'Pesquisar com IA'; }
+      $('#closeModal').addEventListener('click',()=>barcodeCameraControls?.stop());
+      $('#modalBackdrop').addEventListener('click',event=>{if(event.target.id==='modalBackdrop')barcodeCameraControls?.stop();});
+      $('#createProductFromBarcode').onclick=()=>{
+        const code=normalizeBarcodeCode($('#addProductBarcode').value);
+        const name=formatDisplayName($('#unknownBarcodeName').value);
+        if(!name){toast('Informe o nome do produto.');return;}
+        const brand=formatDisplayName($('#addProductBrand')?.value||'');
+        const unit=$('#addProductUnit')?.value||'un';
+        const product={id:uid(),name,category:'Outros',unit,...packageInfo(name,unit),barcode:code,brand,brands:brand?[brand]:[],photo:'',photoPath:'',active:true,description:'',barcodeSources:[]};
+        db.products.push(product);save();
+        addProductToCurrentList(product,Number($('#addProductQty').value)||1,brand,selectedManualUnit(product));
       };
     }
   }
@@ -2034,7 +1997,7 @@ function renderShopping() {
               </small>
             </div>
             <input type="number" min="0" step="${i.unit==='kg'||i.unit==='l'?'.01':'1'}" data-qty="${i.id}" value="${i.qty}" aria-label="Quantidade">
-            <input type="number" min="0" step=".01" data-price="${i.id}" value="${i.price||''}" placeholder="Preço (R$)" aria-label="Preço">
+            <input type="text" inputmode="numeric" data-price="${i.id}" value="${i.price?formatPriceValue(i.price):''}" placeholder="Preço (R$)" aria-label="Preço">
             <span class="shop-total">${money((Number(i.qty)||0)*(Number(i.price)||0))}</span>
             <div class="shop-actions">
               <button type="button" class="scan-btn" data-scan="${i.id}" title="Associar código de barras" aria-label="Associar código de barras de ${esc(i.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5v14M7 5v14M11 5v14M15 5v14M18 5v14M21 5v14"/></svg></button>
@@ -2823,109 +2786,113 @@ function normalizeBarcodeCode(value) {
 }
 
 // A câmera captura uma foto; a Edge Function envia a imagem à IA para ler o GTIN e pesquisar o produto na web.
-async function startLiveBarcodeScanner(video) {
+async function startLiveBarcodeScanner(video, onFound) {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error('A câmera exige acesso HTTPS e permissão do navegador.');
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
-  video.srcObject = stream;
+  const ZXing = await loadZXingLibrary();
+  const reader = new ZXing.BrowserMultiFormatReader();
+  let controls = null;
+  let alreadyRead = false;
   video.setAttribute('autoplay', ''); video.setAttribute('muted', ''); video.setAttribute('playsinline', '');
   video.playsInline = true; video.muted = true;
-  await video.play();
-  return {
-    stop() { stream.getTracks().forEach(track => track.stop()); video.srcObject = null; },
-    async capture() {
-      if (!video.videoWidth || !video.videoHeight) throw new Error('A câmera ainda está ajustando a imagem. Aguarde um instante.');
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-      return await new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Não foi possível capturar a imagem.')), 'image/jpeg', 0.92));
-    }
-  };
+
+  controls = await reader.decodeFromVideoDevice(undefined, video, (result, error, activeControls) => {
+    if (!result || alreadyRead) return;
+    const code = normalizeBarcodeCode(result.getText());
+    if (![8,12,13,14].includes(code.length)) return;
+    alreadyRead = true;
+    (activeControls || controls)?.stop();
+    if (typeof onFound === 'function') onFound(code);
+  });
+
+  return { stop() { alreadyRead = true; controls?.stop(); } };
 }
+
 async function findProductByBarcode(value) {
   const code = normalizeBarcodeCode(value);
   if (!code) throw new Error('Informe um código de barras válido.');
   const local = (db.products || []).find(p => normalizeBarcodeCode(p.barcode) === code && normalizeBarcodeCode(p.barcode));
   if (local) return local;
-  if (!window.SuperlistCloud?.analyzeBarcode) throw new Error('Atualize o SuperList para habilitar a busca por IA.');
-  const result = await window.SuperlistCloud.analyzeBarcode({ code });
-  if (result.needs_confirmation || !result.barcode || result.barcode !== code) throw new Error('A IA não confirmou o código informado. Confira os números e tente novamente.');
-  if (!result.product_found || !result.name) return null;
-  const name = formatDisplayName(result.name);
-  const product = {
-    id: uid(), name, category: seedCategories.includes(result.category) ? result.category : 'Outros',
-    unit: 'un', ...packageInfo(name, 'un'), barcode: code,
-    brand: formatDisplayName(result.brand || ''), photo: '', photoPath: '', active: true,
-    description: result.description || '', barcodeSources: result.sources || []
-  };
-  db.products.push(product); save(); return product;
-}
-// Leitor de código de barras compatível com Safari e outros navegadores.
-async function scanBarcode(itemId) {
-  let item=currentList?.items.find(i=>i.id===itemId);
 
-  if(!item) {
-    toast('Item não encontrado.');
-    return;
-  }
+  const response = await fetch('https://world.openfoodfacts.org/api/v3/product/' + encodeURIComponent(code) + '.json?fields=product_name,product_name_en,brands,categories,categories_hierarchy,quantity,product_type');
+  if (!response.ok) throw new Error('Não foi possível consultar o catálogo de produtos. Tente novamente ou cadastre manualmente.');
+  const result = await response.json();
+  const data = result?.product;
+  const name = formatDisplayName(data?.product_name || data?.product_name_en || '');
+  if (result?.status !== 1 || !name) return null;
+
+  const categoryText = normalize([data.categories || '', ...(data.categories_hierarchy || [])].join(' '));
+  const category = db.categories.find(value => categoryText.includes(normalize(value))) || 'Outros';
+  const brand = formatDisplayName(String(data.brands || '').split(',')[0] || '');
+  const product = {
+    id: uid(), name, category, unit: 'un', ...packageInfo(name, 'un'),
+    barcode: code, brand, photo: '', photoPath: '', active: true,
+    description: data.quantity || '', barcodeSources: ['Open Food Facts']
+  };
+  db.products.push(product);
+  save();
+  return product;
+}
+
+// A câmera decodifica o código no navegador com ZXing. Nenhuma IA participa da leitura.
+async function scanBarcode(itemId) {
+  const item=currentList?.items.find(i=>String(i.id)===String(itemId));
+  if(!item) return toast('Item não encontrado.');
 
   openModal(
     'Ler código de barras',
-    `<div class="field">
-      <label>Código de barras</label>
-      <input id="barcodeInput" placeholder="Digite ou cole o código EAN">
-    </div>
-    <div class="camera-box" id="cameraBox">
-      Aponte a câmera para o código de barras
-    </div>
-    <div class="camera-controls">
-      <button type="button" class="btn secondary" id="startCamera">▣ Abrir câmera</button>
-      <button type="button" class="btn secondary" id="readBarcodeAI">✨ Ler com IA</button>
-      <button type="button" class="btn secondary" id="stopCamera">Parar câmera</button>
-      <button type="button" class="btn primary" id="lookupBarcode">Pesquisar com IA</button>
-    </div>
-    <p class="helper">
-      A câmera captura o código e a IA identifica os números e pesquisa o produto na internet. Você também pode digitar o código.
-    </p>`,
+    '<div class="field"><label>Código de barras</label><input id="barcodeInput" inputmode="numeric" placeholder="Digite ou escaneie o código EAN"></div>' +
+    '<div class="camera-box" id="cameraBox">Aponte a câmera para o código de barras</div>' +
+    '<div class="camera-controls"><button type="button" class="btn secondary" id="startCamera">▣ Abrir câmera</button><button type="button" class="btn secondary" id="stopCamera">Parar câmera</button><button type="button" class="btn primary" id="lookupBarcode">Vincular código ao produto</button></div>' +
+    '<p class="helper">A leitura é feita no navegador pela biblioteca ZXing. Nenhuma IA é usada.</p>',
     'SUPERLIST'
   );
 
-  let controls = null;
-  let lookupStarted = false;
-  const videoMarkup = () => { const video = document.createElement('video'); video.style.width = '100%'; video.style.height = '100%'; video.style.objectFit = 'contain'; return video; };
-  const stop = () => { if (controls) { controls.stop(); controls = null; } };
-  $('#startCamera').onclick = async () => {
-    const button = $('#startCamera'), box = $('#cameraBox');
-    try { button.disabled = true; button.textContent = 'Abrindo câmera…'; box.innerHTML = ''; const video = videoMarkup(); box.appendChild(video); controls = await startLiveBarcodeScanner(video); button.textContent = 'Câmera aberta'; toast('Câmera pronta. Centralize as barras e toque em Ler com IA.'); }
-    catch (error) { console.error(error); box.textContent = 'Não foi possível abrir a câmera.'; toast(error.message || 'Falha ao abrir a câmera.'); button.textContent = 'Abrir câmera'; }
-    finally { button.disabled = false; }
+  let controls=null;
+  let lookupStarted=false;
+  const stop=()=>{controls?.stop();controls=null;};
+  const associateCode=async value=>{
+    if(lookupStarted)return;
+    const code=normalizeBarcodeCode(value);
+    if(!code){toast('Informe um código de barras válido.');return;}
+    if(![8,12,13,14].includes(code.length)){toast('O código deve ter 8, 12, 13 ou 14 números.');return;}
+    lookupStarted=true;
+    const button=$('#lookupBarcode');
+    button.disabled=true;button.textContent='Associando…';
+    try{
+      let product=db.products.find(p=>normalizeBarcodeCode(p.barcode)===code);
+      if(!product){
+        product=findOrCreateProduct(item);
+        product.barcode=code;
+      }else{
+        item.productId=product.id;
+        item.name=product.name;
+        item.category=product.category||'Outros';
+        item.unit=product.unit||item.unit||'un';
+      }
+      stop();save();closeModal();renderShopping();
+      toast('Código de barras associado ao produto.');
+    }catch(error){console.error(error);toast(error.message||'Não foi possível associar o código.');}
+    finally{lookupStarted=false;if($('#lookupBarcode')){$('#lookupBarcode').disabled=false;$('#lookupBarcode').textContent='Vincular código ao produto';}}
   };
-  $('#readBarcodeAI').onclick = async () => {
-    if (!controls) { toast('Abra a câmera primeiro.'); return; }
-    const button = $('#readBarcodeAI'); button.disabled = true; button.textContent = 'IA analisando…';
-    try {
-      const image = await controls.capture(); const result = await window.SuperlistCloud.analyzeBarcode({ image }); const code = normalizeBarcodeCode(result.barcode);
-      if (!code || result.needs_confirmation || result.barcode_confidence === 'low') { toast('A IA não conseguiu ler os números com segurança. Aproxime a câmera e tente novamente.'); return; }
-      $('#barcodeInput').value = code;
-      if (!result.product_found || !result.name) { toast('Código ' + code + ' identificado, mas o produto não foi confirmado na pesquisa.'); return; }
-      let product = db.products.find(p => normalizeBarcodeCode(p.barcode) === code);
-      if (!product) { const name = formatDisplayName(result.name); product = { id: uid(), name, category: seedCategories.includes(result.category) ? result.category : 'Outros', unit: 'un', ...packageInfo(name, 'un'), barcode: code, brand: formatDisplayName(result.brand || ''), photo: '', active: true, description: result.description || '', barcodeSources: result.sources || [] }; db.products.push(product); }
-      item.productId = product.id; item.name = product.name; item.category = product.category || 'Outros'; item.unit = product.unit || item.unit || 'un';
-      stop(); save(); closeModal(); renderShopping(); toast('Produto identificado pela IA e associado à lista.');
-    } catch (error) { console.error(error); toast(error.message || 'Não foi possível analisar a imagem com IA.'); }
-    finally { button.disabled = false; button.textContent = '✨ Ler com IA'; }
+
+  $('#startCamera').onclick=async()=>{
+    const button=$('#startCamera'),box=$('#cameraBox');
+    try{
+      button.disabled=true;button.textContent='Abrindo câmera…';box.innerHTML='';
+      const video=document.createElement('video');
+      video.style.width='100%';video.style.height='100%';video.style.objectFit='contain';box.appendChild(video);
+      controls=await startLiveBarcodeScanner(video,code=>{
+        $('#barcodeInput').value=code;box.textContent='Código lido: '+code;
+        toast('Código lido.');associateCode(code);
+      });
+      button.textContent='Câmera aberta';toast('Centralize as barras no quadro.');
+    }catch(error){console.error(error);box.textContent='Não foi possível abrir a câmera.';toast(error.message||'Falha ao abrir a câmera.');button.textContent='Abrir câmera';}
+    finally{button.disabled=false;}
   };
-  $('#stopCamera').onclick = () => { stop(); $('#cameraBox').textContent = 'Câmera desligada.'; $('#startCamera').textContent = 'Abrir câmera novamente'; };
-  $('#lookupBarcode').onclick = async () => {
-    if (lookupStarted) return; const code = normalizeBarcodeCode($('#barcodeInput').value);
-    if (!code) { toast('Informe um código de barras válido.'); return; }
-    if (![8, 12, 13, 14].includes(code.length)) { toast('O código deve ter 8, 12, 13 ou 14 números.'); return; }
-    lookupStarted = true; const button = $('#lookupBarcode'); button.disabled = true; button.textContent = 'IA pesquisando…';
-    try { const product = await findProductByBarcode(code); if (!product) { toast('A IA não encontrou uma correspondência confiável para esse código.'); return; } item.productId = product.id; item.name = product.name; item.category = product.category || 'Outros'; item.unit = product.unit || item.unit || 'un'; stop(); save(); closeModal(); renderShopping(); toast('Produto encontrado pela IA e associado à lista.'); }
-    catch (error) { console.error(error); toast(error.message || 'Falha na pesquisa com IA.'); }
-    finally { lookupStarted = false; if ($('#lookupBarcode')) { $('#lookupBarcode').disabled = false; $('#lookupBarcode').textContent = 'Pesquisar com IA'; } }
-  };
-  $('#closeModal').addEventListener('click', stop);
-  $('#modalBackdrop').addEventListener('click', e => { if (e.target.id === 'modalBackdrop') stop(); });
+  $('#stopCamera').onclick=()=>{stop();$('#cameraBox').textContent='Câmera desligada.';$('#startCamera').textContent='Abrir câmera novamente';};
+  $('#lookupBarcode').onclick=()=>associateCode($('#barcodeInput').value);
+  $('#closeModal').addEventListener('click',stop);
+  $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')stop();});
 }
 function finishList() {
   if(!currentList)return;
@@ -3279,6 +3246,19 @@ if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
   if ($('#finishList')) $('#finishList').onclick=finishList;
   $('#finishListBottom').onclick=finishList;
 
+  $('#shoppingItems').addEventListener('input',e=>{
+    const input=e.target;
+    if(!input.dataset.price)return;
+    input.value=formatPriceEntry(input.value);
+    const item=currentList?.items.find(i=>String(i.id)===String(input.dataset.price));
+    if(!item)return;
+    item.price=parsePriceEntry(input.value);
+    item.estimate=item.price;
+    const row=input.closest('.shop-item');
+    if(row)row.querySelector('.shop-total').textContent=money((Number(item.qty)||0)*item.price);
+    updateSummary();
+  });
+
   $('#shoppingItems').addEventListener('change',e=>{
     let l=currentList;
     if(!l)return;
@@ -3298,7 +3278,7 @@ if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
     }
 
     if(e.target.dataset.price) {
-      item.price=Number(e.target.value)||0;
+      item.price=parsePriceEntry(e.target.value);
       item.estimate=item.price;
       savePrice(item);
     }
