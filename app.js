@@ -2204,7 +2204,8 @@ function renderShopping() {
                 ${(()=>{
                   const product=db.products.find(value=>String(value.id)===String(i.productId));
                   const brands=[...new Set([...(product?.brands||[]),...(product?.brandDetails||[]).map(value=>value.name).filter(name=>name&&name!=='Marca não identificada')])];
-                  return brands.length ? `<select data-item-brand="${i.id}" aria-label="Marca do produto"><option value="">Selecionar marca</option>${brands.map(name=>`<option value="${esc(name)}" ${String(i.brand||'')===String(name)?'selected':''}>${esc(name)}</option>`).join('')}</select>` : (i.brand ? `<small>${esc(i.brand)}</small>` : '');
+                  if(i.brand) return `<span class="list-item-brand">· ${esc(i.brand)}</span>`;
+                  return brands.length ? `<select class="list-brand-select" data-item-brand="${i.id}" aria-label="Marca do produto"><option value="">Marca</option>${brands.map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('')}</select>` : '';
                 })()}
                 <small>
                   ${unitLabel(i.unit)}
