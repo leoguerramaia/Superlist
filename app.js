@@ -1716,7 +1716,7 @@ function addCatalogProductToList() {
         try{
           const product=await findProductByBarcode(code);
           if(!product){$('#unknownBarcodeProduct').style.display='block';toast('Produto não localizado. Você pode cadastrá-lo manualmente.');return;}
-          addProductToCurrentList(product,Number($('#addProductQty').value)||1,$('#addProductBrand')?.value||product.brand||'',selectedManualUnit(product));
+          addProductToCurrentList(product,Number($('#addProductQty').value)||1,$('#addProductBrand')?.value||product.brand||'',product.unit || 'un');
         }catch(error){console.error('Erro ao consultar catálogo:',error);$('#unknownBarcodeProduct').style.display='block';toast('O catálogo não respondeu. Você ainda pode cadastrar o produto manualmente.');}
         finally{if($('#lookupNewProductBarcode')){$('#lookupNewProductBarcode').disabled=false;$('#lookupNewProductBarcode').textContent='Consultar catálogo';}}
       };
@@ -1756,7 +1756,7 @@ function addCatalogProductToList() {
         const unit=$('#addProductUnit')?.value||'un';
         const product={id:uid(),name,category:'Outros',unit,...packageInfo(name,unit),packageContent:formatPackageContent({name,unit,...packageInfo(name,unit)}),brands:brand?[brand]:[],brandDetails:[{id:uid(),name:brand||'Marca não identificada',barcode:code,photo:'',photoPath:''}],brandDetailsMigratedV1:true,active:true,description:'',barcodeSources:[]};
         db.products.push(product);save();
-        addProductToCurrentList(product,Number($('#addProductQty').value)||1,brand,selectedManualUnit(product));
+        addProductToCurrentList(product,Number($('#addProductQty').value)||1,brand,product.unit || 'un');
       };
     }
   }
@@ -1775,7 +1775,7 @@ function addCatalogProductToList() {
       addProductToCurrentList(
         product,
         Number($('#addProductQty').value) || 1,
-        $('#addProductBrand')?.value || '', selectedManualUnit(product)
+        $('#addProductBrand')?.value || '', product.unit || 'un'
       );
     }
   });
