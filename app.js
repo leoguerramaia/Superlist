@@ -196,16 +196,34 @@ function normalizeProductBrandData(data) {
     if(product.brand)names.push(product.brand);
     product.brands=[...new Set(names.map(value=>formatDisplayName(typeof value==='string'?value:value?.name)).filter(Boolean))];
     product.brandDetails=Array.isArray(product.brandDetails)?product.brandDetails:[];
-    product.brandDetails=product.brandDetails.map(brand=>({id:brand.id||uid(),name:formatDisplayName(brand.name),barcode:String(brand.barcode||''),photo:String(brand.photo||''),photoPath:String(brand.photoPath||'')})).filter(brand=>brand.name);
-    if(product.brandDetailsMigratedV1)return;
-    const legacy={barcode:String(product.barcode||''),photo:String(product.photo||''),photoPath:String(product.photoPath||'')};
-    if(product.brands.length===1){
-      const name=product.brands[0];
-      let brand=product.brandDetails.find(value=>value.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR'));
-      if(!brand){brand={id:uid(),name,barcode:'',photo:'',photoPath:''};product.brandDetails.push(brand);}
-      brand.barcode||=legacy.barcode;brand.photo||=legacy.photo;brand.photoPath||=legacy.photoPath;
-    }else if(legacy.barcode||legacy.photo||legacy.photoPath)product.legacyBrandData||=legacy;
-    product.brandDetailsMigratedV1=true;
+    product.brandDetails=product.brandDetails.map(brand=>({
+      id:brand.id||uid(),name:formatDisplayName(brand.name),barcode:String(brand.barcode||''),
+      packageContent:String(brand.packageContent||''),netAmount:Number(brand.netAmount)||0,netUnit:String(brand.netUnit||''),
+      photo:String(brand.photo||''),photoPath:String(brand.photoPath||'')
+    })).filter(brand=>brand.name);
+    if(!product.brandDetailsMigratedV1){
+      const legacy={barcode:String(product.barcode||''),photo:String(product.photo||''),photoPath:String(product.photoPath||'')};
+      if(product.brands.length===1){
+        const name=product.brands[0];
+        let brand=product.brandDetails.find(value=>value.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR'));
+        if(!brand){brand={id:uid(),name,barcode:'',packageContent:'',netAmount:0,netUnit:'',photo:'',photoPath:''};product.brandDetails.push(brand);}
+        brand.barcode||=legacy.barcode;brand.photo||=legacy.photo;brand.photoPath||=legacy.photoPath;
+      }else if(legacy.barcode||legacy.photo||legacy.photoPath)product.legacyBrandData||=legacy;
+      product.brandDetailsMigratedV1=true;
+    }
+    if(!product.brandDetailsMigratedV2){
+      const oldPackage=String(product.packageContent||'').trim();
+      if(oldPackage&&product.brands.length===1){
+        const name=product.brands[0];
+        let brand=product.brandDetails.find(value=>value.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR'));
+        if(!brand){brand={id:uid(),name,barcode:'',packageContent:'',netAmount:0,netUnit:'',photo:'',photoPath:''};product.brandDetails.push(brand);}
+        if(!brand.packageContent)Object.assign(brand,parsePackageContent(oldPackage,product.netUnit||product.unit||'un'));
+      }else if(oldPackage){
+        product.legacyBrandData||={};
+        product.legacyBrandData.packageContent||=oldPackage;
+      }
+      product.brandDetailsMigratedV2=true;
+    }
   });
 }
 function productBrandNames(product={}) {
@@ -358,8 +376,8 @@ function field(label,name,placeholder='',type='text',value='') {
   return `<div class="field"><label>${label}</label><input name="${name}" type="${type}" placeholder="${placeholder}" value="${String(value).replaceAll('"','&quot;')}"></div>`;
 }
 
-function selectField(label,name,options,value='') {
-  return `<div class="field"><label>${label}</label><select name="${name}">${options.map(o=>`<option value="${o}" ${o===value?'selected':''}>${o}</option>`).join('')}</select></div>`;
+function selectField(label,name,options,value='',required=false) {
+  return `<div class="field"><label>${label}</label><select name="${name}"${required?' required':''}>${required?`<option value="" disabled ${value?'':'selected'}>Selecione...</option>`:''}${options.map(o=>`<option value="${o}" ${o===value?'selected':''}>${o}</option>`).join('')}</select></div>`;
 }
 
 function formData(form=null) {
@@ -628,46 +646,29 @@ function renderProducts() {
   let counts=db.categories.map(c=>[c,db.products.filter(p=>p.category===c).length]);
   $('#categoryList').innerHTML=
     `<button class="category-item ${activeCategory==='all'?'active':''}" data-cat="all">Todas <small>${db.products.length}</small></button>`+
-    counts.map(([c,n])=>`<button class="category-item ${activeCategory===c?'active':''}" data-cat="${esc(c)}">${esc(c)} <small>${n}</small></button>`).join('');
+    counts.map(([c,n])=>`<button class="category-item ${activeCategory===c?'active':''}" data-cat="${esc(c)}"> ${esc(c)} <small>${n}</small></button>`).join('');
   let products=db.products.filter(p=>(activeCategory==='all'||p.category===activeCategory)&&(cat==='all'||p.category===cat)&&(p.name+' '+productBrandNames(p).join(' ')).toLowerCase().includes(q));
   $('#productCount').textContent=`${products.length} produtos`;
   $('#productTable').innerHTML=products.length
     ? products.map(p=>{
-        const brands=productBrandNames(p),pending=p.legacyBrandData&&!p.legacyBrandData.importedTo;
-        const photoBrand=(p.brandDetails||[]).find(brand=>brand.photo||brand.photoPath);
-        return `<div class="product-row">
-          <div class="product-thumb" data-brand-photo data-product-id="${esc(p.id)}" data-brand-id="${esc(photoBrand?.id||'')}" data-photo-url="${esc(photoBrand?.photo||'')}" data-photo-path="${esc(photoBrand?.photoPath||'')}"><span aria-hidden="true">◈</span></div>
-          <div><strong>${esc(p.name)}</strong><small>${esc(p.category)} · ${esc(formatPackageContent(p))}${brands.length?' · '+esc(brands.join(', ')):''}${pending?' · EAN/foto para revisar':''}</small></div>
-          <span class="unit-tag">${unitLabel(p.unit)}</span>
-          <button data-manage-product-brands="${esc(p.id)}" title="Gerenciar marcas">${brands.length} marca${brands.length===1?'':'s'}</button>
-          <button data-edit-product="${esc(p.id)}" title="Editar">✎</button>
+        const brands=productBrandNames(p);
+        const details=(p.brandDetails||[]);
+        const expanded=brands.length?brands.map(name=>{
+          const brand=details.find(value=>value.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR'));
+          return `<div class="expanded-brand"><strong>${esc(name)}</strong><span>${brand?.packageContent?'Embalagem '+esc(brand.packageContent):'Embalagem não informada'}</span><span>${brand?.barcode?'EAN/GTIN '+esc(brand.barcode):'Sem código de barras'}</span><button type="button" class="catalog-action" data-manage-product-brands="${esc(p.id)}">Editar marca</button></div>`;
+        }).join(''):'<p class="helper">Nenhuma marca vinculada a este produto.</p>';
+        return `<div class="product-row-wrap">
+          <div class="product-row">
+            <div class="product-main"><strong>${esc(p.name)}</strong><small>${esc(p.category)} · ${unitLabel(p.unit)}</small></div>
+            <button type="button" class="catalog-action" data-manage-product-brands="${esc(p.id)}" title="Incluir ou visualizar marcas">Marca do produto · ${brands.length}</button>
+            <button type="button" class="catalog-action" data-toggle-product-brands="${esc(p.id)}" aria-expanded="false">Expandir</button>
+            <button type="button" class="catalog-action" data-edit-product="${esc(p.id)}" title="Editar produto">Editar</button>
+            <button type="button" class="catalog-action danger" data-delete-product="${esc(p.id)}" title="Excluir produto">Excluir</button>
+          </div>
+          <div class="product-brand-expansion" data-product-brand-expansion hidden>${expanded}</div>
         </div>`;
       }).join('')
     : '<div class="empty-state">Nenhum produto nesta seleção.</div>';
-  hydrateProductBrandPhotos();
-}
-function hydrateProductBrandPhotos() {
-  document.querySelectorAll('#productTable [data-brand-photo]').forEach(async element=>{
-    let url=usableProductPhoto(element.dataset.photoUrl);
-    if(url&&isOscbrImageUrl(url)){
-      url='';
-      const product=db.products.find(value=>String(value.id)===String(element.dataset.productId));
-      const brand=(product?.brandDetails||[]).find(value=>String(value.id)===String(element.dataset.brandId));
-      if(brand?.barcode&&window.SuperlistCloud?.lookupProductByBarcode){
-        try{
-          const result=await window.SuperlistCloud.lookupProductByBarcode(brand.barcode);
-          if(result?.imageBase64){
-            const compact=await compactCatalogImage(result.imageBase64,result.imageContentType);
-            if(compact){brand.photo=compact;save();return;}
-          }
-        }catch(error){console.warn('Não foi possível carregar a imagem protegida da marca:',error);}
-      }
-    }
-    if(!url&&element.dataset.photoPath&&window.SuperlistCloud?.getProductPhotoUrl){
-      try { url=await window.SuperlistCloud.getProductPhotoUrl(element.dataset.photoPath); } catch(error) { console.warn('Não foi possível carregar a imagem da marca:',error); }
-    }
-    if(url&&element.isConnected)element.innerHTML=`<img src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`;
-  });
 }
 function renderPrices() {
   let store=$('#priceStoreFilter')?.value||'all';
@@ -1250,24 +1251,24 @@ async function compactCatalogImage(base64,contentType) {
 }
 
 function addProductModal(product = null) {
-  const p=product||{},content=formatPackageContent(p);
+  const p=product||{};
   openModal(product?'Editar produto':'Novo produto',`
     <form id="modalForm">
       <div class="field"><label>Nome do produto</label><input name="name" required placeholder="Ex.: Arroz tipo 1" value="${esc(p.name||'')}"></div>
       <div class="form-grid">
-        ${selectField('Categoria','category',db.categories,p.category||'Mercearia')}
-        ${selectField('Unidade de compra','unit',['un','kg','g','l','ml'],p.unit||'un')}
+        ${selectField('Categoria','category',db.categories,p.category||'',true)}
+        ${selectField('Unidade de compra','unit',['un','kg','g','l','ml'],p.unit||'',true)}
       </div>
-      <div class="field"><label>Conteúdo da embalagem</label><input name="packageContent" required placeholder="Ex.: 500 g, 1 L ou 12 unidades" value="${esc(content)}"><small class="helper">Informe o conteúdo e a unidade juntos.</small></div>
       <div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button class="btn primary">Salvar produto</button></div>
     </form>`);
   $('#modalForm').addEventListener('submit',e=>{
     e.preventDefault();const form=e.currentTarget,button=form.querySelector('.btn.primary');button.disabled=true;button.textContent='Salvando...';
     try{
-      const d=formData(form),pack=parsePackageContent(d.packageContent,p.netUnit||p.unit||d.unit||'un');
-      const values={name:formatDisplayName(d.name),category:d.category,unit:d.unit,packageContent:pack.packageContent,netAmount:pack.netAmount,netUnit:pack.netUnit,active:true};
+      const d=formData(form),name=formatDisplayName(d.name);
+      if(!name||!d.category||!d.unit)throw new Error('Preencha o nome, a categoria e a unidade de compra.');
+      const values={name,category:d.category,unit:d.unit,active:true};
       if(product)Object.assign(product,values);
-      else db.products.push({id:uid(),brands:[],brandDetails:[],brandDetailsMigratedV1:true,...values});
+      else db.products.push({id:uid(),brands:[],brandDetails:[],brandDetailsMigratedV1:true,brandDetailsMigratedV2:true,...values});
       save();closeModal();toast('Produto salvo com sucesso!');
     }catch(error){console.error(error);toast(error.message||'Não foi possível salvar o produto.');button.disabled=false;button.textContent='Salvar produto';}
   });
@@ -1275,12 +1276,14 @@ function addProductModal(product = null) {
 function manageProductBrands(productId) {
   const product=db.products.find(p=>String(p.id)===String(productId));if(!product)return;
   normalizeProductBrandData({products:[product]});
-  const names=productBrandNames(product),pending=product.legacyBrandData&&!product.legacyBrandData.importedTo;
+  const names=productBrandNames(product);
+  const pending=hasPendingLegacyBrandData(product);
   openModal('Marcas de '+product.name,`
-    <div class="field"><p class="muted">Cada marca tem seu próprio EAN/GTIN e imagem.</p>${pending?'<p class="helper">Há EAN/foto antigo sem associação clara. Ele continua preservado e pode ser associado ao cadastrar uma marca.</p>':''}</div>
+    <div class="field"><p class="muted">Cadastre uma marca para informar tamanho da embalagem, EAN/GTIN e imagem.</p>${pending?'<p class="helper">Há dados antigos sem marca associada. Eles foram preservados e podem ser vinculados ao cadastrar uma marca.</p>':''}</div>
     <div class="field">${names.length?names.map(name=>{
       const brand=(product.brandDetails||[]).find(value=>value.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR'));
-      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)"><div><strong>${esc(name)}</strong><small style="display:block">${brand?.barcode?'EAN '+esc(brand.barcode):'Sem EAN'} · ${brand?.photo||brand?.photoPath?'Imagem cadastrada':'Sem imagem'}</small></div><button type="button" class="btn secondary" data-edit-brand-id="${esc(brand?.id||'')}" data-edit-brand-name="${esc(name)}">Editar</button></div>`;
+      const packageContent=brand?.packageContent||'';
+      return `<div class="brand-list-row"><div><strong>${esc(name)}</strong><small>${packageContent?'Embalagem '+esc(packageContent)+' · ':''}${brand?.barcode?'EAN '+esc(brand.barcode):'Sem EAN'} · ${brand?.photo||brand?.photoPath?'Imagem cadastrada':'Sem imagem'}</small></div><div class="brand-list-actions"><button type="button" class="btn secondary" data-edit-brand-id="${esc(brand?.id||'')}" data-edit-brand-name="${esc(name)}">Editar</button><button type="button" class="btn danger" data-delete-brand-id="${esc(brand?.id||'')}" data-delete-brand-name="${esc(name)}">Excluir</button></div></div>`;
     }).join(''):'<p class="helper">Nenhuma marca cadastrada para este produto.</p>'}</div>
     <div class="form-actions"><button type="button" class="btn secondary" data-cancel>Fechar</button><button type="button" class="btn primary" id="addProductBrand">＋ Cadastrar marca</button></div>`);
   $('#addProductBrand').onclick=()=>addProductBrandModal(product);
@@ -1288,36 +1291,111 @@ function manageProductBrands(productId) {
     const brand=(product.brandDetails||[]).find(value=>String(value.id)===String(button.dataset.editBrandId));
     addProductBrandModal(product,brand||{name:button.dataset.editBrandName});
   });
+  $('#modalBody').querySelectorAll('[data-delete-brand-id]').forEach(button=>button.onclick=()=>{
+    const brand=(product.brandDetails||[]).find(value=>String(value.id)===String(button.dataset.deleteBrandId));
+    if(brand)deleteProductBrand(product,brand);
+  });
+}
+function hasPendingLegacyBrandData(product={}) {
+  const legacy=product.legacyBrandData||{};
+  return !!((legacy.barcode||legacy.photo||legacy.photoPath)&&!legacy.importedTo ||
+    (legacy.packageContent&&!legacy.packageImportedTo));
+}
+function productPackageMeasure(product={},brandName='') {
+  const brand=(product.brandDetails||[]).find(value=>String(value.name||'').toLocaleLowerCase('pt-BR')===String(brandName||'').toLocaleLowerCase('pt-BR'));
+  if(brand?.packageContent)return parsePackageContent(brand.packageContent,product.unit||'un');
+  if(product.packageContent)return parsePackageContent(product.packageContent,product.netUnit||product.unit||'un');
+  return {packageContent:'',netAmount:Number(product.netAmount)||1,netUnit:product.netUnit||product.unit||'un'};
+}
+async function deleteProductPhotoIfAvailable(photoPath) {
+  if(photoPath&&window.SuperlistCloud?.deleteProductPhoto)await window.SuperlistCloud.deleteProductPhoto(photoPath);
+}
+async function deleteProductBrand(product,brand) {
+  if(!confirm(`Excluir a marca "${brand.name}" deste produto? Os registros de listas e preços existentes serão mantidos.`))return;
+  try{
+    await deleteProductPhotoIfAvailable(brand.photoPath);
+    product.brandDetails=(product.brandDetails||[]).filter(value=>String(value.id)!==String(brand.id));
+    if(!product.brandDetails.some(value=>value.name.toLocaleLowerCase('pt-BR')===brand.name.toLocaleLowerCase('pt-BR')))
+      product.brands=(product.brands||[]).filter(value=>String(value).toLocaleLowerCase('pt-BR')!==brand.name.toLocaleLowerCase('pt-BR'));
+    save();manageProductBrands(product.id);toast('Marca excluída.');
+  }catch(error){console.error(error);toast(error.message||'Não foi possível excluir a marca.');}
+}
+async function deleteProductFromCatalog(productId) {
+  const product=db.products.find(value=>String(value.id)===String(productId));if(!product)return;
+  if(!confirm(`Excluir "${product.name}" do catálogo? Os itens das listas e o histórico de preços serão mantidos.`))return;
+  try{
+    for(const brand of product.brandDetails||[])await deleteProductPhotoIfAvailable(brand.photoPath);
+    db.products=db.products.filter(value=>String(value.id)!==String(product.id));
+    save();toast('Produto excluído do catálogo.');
+  }catch(error){console.error(error);toast(error.message||'Não foi possível excluir o produto.');}
 }
 function addProductBrandModal(product,brand=null) {
-  const pending=product.legacyBrandData&&!product.legacyBrandData.importedTo;
-  const initial={name:brand?.name||'',barcode:brand?.barcode||(pending?product.legacyBrandData.barcode:'')||'',photo:brand?.photo||(pending?product.legacyBrandData.photo:'')||'',photoPath:brand?.photoPath||(pending?product.legacyBrandData.photoPath:'')||''};
-  const protectedPhoto=isOscbrImageUrl(initial.photo);let resolvedPhoto=initial.photo.startsWith('data:image/')?initial.photo:'';
+  const legacy=product.legacyBrandData||{},pending=hasPendingLegacyBrandData(product);
+  const initial={
+    name:brand?.name||'',
+    packageContent:brand?.packageContent||((legacy.packageContent&&!legacy.packageImportedTo)?legacy.packageContent:''),
+    barcode:brand?.barcode||((legacy.barcode&&!legacy.importedTo)?legacy.barcode:''),
+    photo:brand?.photo||((legacy.photo&&!legacy.importedTo)?legacy.photo:''),
+    photoPath:brand?.photoPath||((legacy.photoPath&&!legacy.importedTo)?legacy.photoPath:'')
+  };
+  const protectedPhoto=isOscbrImageUrl(initial.photo);
+  let resolvedPhoto=initial.photo.startsWith('data:image/')?initial.photo:'';
+  let selectedFile=null;
   openModal(brand?.id?'Editar marca':'Cadastrar marca',`
     <form id="modalForm">
       <div class="field"><label>Nome da marca</label><input name="name" required value="${esc(initial.name)}" placeholder="Ex.: Marca"></div>
-      <div class="field"><label>Código de barras (EAN/GTIN)</label><input name="barcode" inputmode="numeric" value="${esc(initial.barcode)}" placeholder="Digite o código"></div>
+      <div class="field"><label>Tamanho da embalagem</label><input name="packageContent" value="${esc(initial.packageContent)}" placeholder="Ex.: 500 g, 1 L ou 12 unidades"></div>
+      <div class="field"><label>Código de barras (EAN/GTIN)</label><div class="brand-barcode-row"><input id="brandBarcode" name="barcode" inputmode="numeric" value="${esc(initial.barcode)}" placeholder="Digite o código"><button type="button" class="btn secondary" id="lookupBrandBarcode">Consultar código</button></div></div>
       <div class="field"><label>Foto por URL</label><input name="photo" type="url" value="${esc(protectedPhoto||resolvedPhoto?'':initial.photo)}" placeholder="https://..."></div>
-      <div class="field"><label>Foto pela câmera ou galeria</label><input id="brandPhotoFile" type="file" accept="image/*"><small class="helper">Limite de 5 MB.</small></div>
+      <div class="field"><label>Foto do produto</label><div class="brand-photo-actions"><button type="button" class="btn secondary" id="takeBrandPhoto">Tirar foto</button><button type="button" class="btn secondary" id="chooseBrandPhoto">Carregar dos arquivos</button><input id="brandCameraFile" type="file" accept="image/*" capture="environment" hidden><input id="brandGalleryFile" type="file" accept="image/*" hidden></div><small class="helper">JPG, PNG ou WebP; limite de 5 MB.</small></div>
       <div id="brandPhotoPreview" class="field">${resolvedPhoto?`<img src="${esc(resolvedPhoto)}" alt="Foto da marca" style="max-width:130px;max-height:130px;object-fit:contain">`:initial.photo&&!protectedPhoto?`<img src="${esc(usableProductPhoto(initial.photo))}" alt="Foto da marca" style="max-width:130px;max-height:130px;object-fit:contain">`:initial.photoPath?'<span class="helper">Imagem armazenada no Supabase.</span>':'<span class="helper">Nenhuma imagem selecionada.</span>'}</div>
-      ${pending?'<label class="helper" style="display:flex;gap:8px;align-items:flex-start"><input name="useLegacy" type="checkbox" checked>Associar a esta marca os dados de EAN/foto antigos ainda sem marca.</label>':''}
-      <div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button class="btn primary">Salvar marca</button></div>
+      ${pending?'<label class="helper legacy-brand-association"><input name="useLegacy" type="checkbox" checked>Associar a esta marca os dados antigos sem marca (EAN, foto e tamanho da embalagem).</label>':''}
+      <div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button>${brand?.id?'<button type="button" class="btn danger" id="deleteBrandFromForm">Excluir marca</button>':''}<button class="btn primary">Salvar marca</button></div>
     </form>`);
-  const form=$('#modalForm'),fileInput=$('#brandPhotoFile');
+  const form=$('#modalForm'),cameraInput=$('#brandCameraFile'),galleryInput=$('#brandGalleryFile'),preview=$('#brandPhotoPreview');
+  const showFile=input=>{
+    const file=input.files?.[0];if(!file)return;
+    selectedFile=file;
+    const url=URL.createObjectURL(file);
+    preview.innerHTML=`<img src="${esc(url)}" alt="Foto da marca" style="max-width:130px;max-height:130px;object-fit:contain">`;
+  };
+  $('#takeBrandPhoto').onclick=()=>cameraInput.click();
+  $('#chooseBrandPhoto').onclick=()=>galleryInput.click();
+  cameraInput.addEventListener('change',()=>showFile(cameraInput));
+  galleryInput.addEventListener('change',()=>showFile(galleryInput));
+  $('#lookupBrandBarcode').onclick=async()=>{
+    const code=normalizeBarcodeCode($('#brandBarcode').value);
+    if(!code||![8,12,13,14].includes(code.length)||!isValidBarcodeGTIN(code))return toast('Informe um EAN/GTIN válido para consultar.');
+    if(!window.SuperlistCloud?.lookupProductByBarcode)return toast('A consulta de EAN/GTIN não está disponível.');
+    const button=$('#lookupBrandBarcode');button.disabled=true;button.textContent='Consultando...';
+    try{
+      const result=await window.SuperlistCloud.lookupProductByBarcode(code);
+      if(result?.imageBase64){
+        const compact=await compactCatalogImage(result.imageBase64,result.imageContentType);
+        if(compact){resolvedPhoto=compact;preview.innerHTML=`<img src="${esc(compact)}" alt="Foto da marca" style="max-width:130px;max-height:130px;object-fit:contain">`;}
+      }
+      toast(result?.imageBase64?'Código consultado; foto encontrada.':'Código consultado. Nenhuma foto foi encontrada.');
+    }catch(error){console.error(error);toast(error.message||'Não foi possível consultar o código.');}
+    finally{button.disabled=false;button.textContent='Consultar código';}
+  };
+  $('#deleteBrandFromForm')?.addEventListener('click',()=>{
+    const current=(product.brandDetails||[]).find(value=>String(value.id)===String(brand.id));
+    if(current)deleteProductBrand(product,current);
+  });
   if(protectedPhoto&&initial.barcode&&window.SuperlistCloud?.lookupProductByBarcode){
     window.SuperlistCloud.lookupProductByBarcode(initial.barcode).then(async result=>{
       if(!result?.imageBase64)return;
       const compact=await compactCatalogImage(result.imageBase64,result.imageContentType);
       if(!compact)return;
       resolvedPhoto=compact;
-      const preview=$('#brandPhotoPreview');
       if(preview)preview.innerHTML=`<img src="${esc(compact)}" alt="Foto da marca" style="max-width:130px;max-height:130px;object-fit:contain">`;
-    }).catch(error=>console.warn('Não foi possível carregar a imagem da marca:',error));
+    }).catch(error=>console.warn('Não foi possível carregar a imagem protegida da marca:',error));
   }
   form.addEventListener('submit',async e=>{
     e.preventDefault();const button=form.querySelector('.btn.primary');button.disabled=true;button.textContent='Salvando...';
     try{
       const d=formData(form),name=formatDisplayName(d.name),code=normalizeBarcodeCode(d.barcode);
+      if(!name)throw new Error('Informe o nome da marca.');
       if(code&&(![8,12,13,14].includes(code.length)||!isValidBarcodeGTIN(code)))throw new Error('Informe um EAN/GTIN válido.');
       const duplicateName=(product.brandDetails||[]).some(value=>String(value.id)!==String(brand?.id||'')&&value.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR'));
       if(duplicateName)throw new Error('Esta marca já está cadastrada para o produto.');
@@ -1326,17 +1404,27 @@ function addProductBrandModal(product,brand=null) {
         return details.some(value=>code&&String(value.id)!==String(brand?.id||'')&&normalizeBarcodeCode(value.barcode)===code)||(other!==product&&code&&normalizeBarcodeCode(other.barcode)===code);
       });
       if(duplicate)throw new Error('Esse EAN/GTIN já está associado a outra marca.');
-      const file=fileInput.files?.[0];if(file&&file.size>5*1024*1024)throw new Error('A imagem deve ter no máximo 5 MB.');
+      if(selectedFile&&selectedFile.size>5*1024*1024)throw new Error('A imagem deve ter no máximo 5 MB.');
+      const brandId=brand?.id||uid();
+      const pack=parsePackageContent(d.packageContent,product.unit||'un');
       let photoPath=initial.photoPath,photo=String(d.photo||'').trim()||resolvedPhoto;
-      if(file){if(!window.SuperlistCloud?.uploadProductPhoto)throw new Error('A integração de fotos não está disponível.');const uploaded=await window.SuperlistCloud.uploadProductPhoto(file,product.id,record.id);photoPath=uploaded.path||uploaded;photo='';}
-      const record={id:brand?.id||uid(),name,barcode:code,photo,photoPath};
+      if(selectedFile){
+        if(!window.SuperlistCloud?.uploadProductPhoto)throw new Error('A integração de fotos não está disponível.');
+        const uploaded=await window.SuperlistCloud.uploadProductPhoto(selectedFile,product.id,brandId);
+        photoPath=uploaded.path||uploaded;photo='';
+      }else if(String(d.photo||'').trim())photoPath='';
+      const record={id:brandId,name,barcode:code,packageContent:pack.packageContent,netAmount:pack.netAmount,netUnit:pack.netUnit,photo,photoPath};
       product.brandDetails||=[];const index=product.brandDetails.findIndex(value=>String(value.id)===String(record.id));
       if(index>=0)product.brandDetails[index]=record;else product.brandDetails.push(record);
       product.brands||=[];
       const previousName=String(brand?.name||'');
       if(previousName&&previousName.toLocaleLowerCase('pt-BR')!==name.toLocaleLowerCase('pt-BR')&&!product.brandDetails.some(value=>String(value.id)!==String(record.id)&&value.name.toLocaleLowerCase('pt-BR')===previousName.toLocaleLowerCase('pt-BR')))product.brands=product.brands.filter(value=>String(value).toLocaleLowerCase('pt-BR')!==previousName.toLocaleLowerCase('pt-BR'));
       if(!product.brands.some(value=>String(value).toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR')))product.brands.push(name);
-      if(pending&&d.useLegacy)product.legacyBrandData.importedTo=record.id;
+      if(pending&&d.useLegacy){
+        product.legacyBrandData||={};
+        if(legacy.barcode||legacy.photo||legacy.photoPath)product.legacyBrandData.importedTo=record.id;
+        if(legacy.packageContent)product.legacyBrandData.packageImportedTo=record.id;
+      }
       save();manageProductBrands(product.id);toast('Marca salva com sucesso!');
     }catch(error){console.error(error);toast(error.message||'Não foi possível salvar a marca.');button.disabled=false;button.textContent='Salvar marca';}
   });
@@ -1754,7 +1842,7 @@ function addCatalogProductToList() {
         if(!name){toast('Informe o nome do produto.');return;}
         const brand=formatDisplayName($('#addProductBrand')?.value||'');
         const unit=$('#addProductUnit')?.value||'un';
-        const product={id:uid(),name,category:'Outros',unit,...packageInfo(name,unit),packageContent:formatPackageContent({name,unit,...packageInfo(name,unit)}),brands:brand?[brand]:[],brandDetails:[{id:uid(),name:brand||'Marca não identificada',barcode:code,photo:'',photoPath:''}],brandDetailsMigratedV1:true,active:true,description:'',barcodeSources:[]};
+        const product={id:uid(),name,category:'Outros',unit,...packageInfo(name,unit),packageContent:formatPackageContent({name,unit,...packageInfo(name,unit)}),brands:brand?[brand]:[],brandDetails:[{id:uid(),name:brand||'Marca não identificada',barcode:code,packageContent:formatPackageContent({name,unit,...packageInfo(name,unit)}),photo:'',photoPath:''}],brandDetailsMigratedV1:true,active:true,description:'',barcodeSources:[]};
         db.products.push(product);save();
         addProductToCurrentList(product,Number($('#addProductQty').value)||1,brand,product.unit || 'un');
       };
@@ -2028,7 +2116,7 @@ function renderShopping() {
                 ${(()=>{const last=i.productId?latestPrice(i.productId,l.storeId):null;if(last)return ' · último preço cadastrado '+money(last.price)+(last.date?' · '+dateBR(last.date):'');return i.estimate?' · previsão '+money(i.estimate):'';})()}
                 ${(()=>{
                   let p=db.products.find(p=>p.id===i.productId);
-                  return p&&p.netAmount>1?' · embalagem '+p.netAmount+' '+p.netUnit:'';
+                  if(!p)return '';const pack=productPackageMeasure(p,i.brand);return pack.netAmount>1?' · embalagem '+pack.netAmount+' '+pack.netUnit:'';
                 })()}
               </small>
             </div>
@@ -2152,8 +2240,8 @@ function savePrice(item) {
     date:today(),
     price:Number(item.price),
     unit:item.unit,
-    netAmount:product.netAmount||1,
-    netUnit:product.netUnit||item.unit
+    netAmount:productPackageMeasure(product,item.brand).netAmount||1,
+    netUnit:productPackageMeasure(product,item.brand).netUnit||item.unit
   };
 
   if(existing)Object.assign(existing,row);
@@ -3036,7 +3124,7 @@ async function findProductByBarcode(value) {
           netUnit: productUnitFromBarcodeData(record.packageUnit || unit),
           packageContent:formatPackageContent({name,unit,netAmount:Number.isFinite(amount)&&amount>0?amount:parsedPackage.amount,netUnit:productUnitFromBarcodeData(record.packageUnit||unit)}),
           brands:record.brand?[formatDisplayName(record.brand)]:[],
-          brandDetails:[{id:uid(),name:formatDisplayName(record.brand||'Marca não identificada'),barcode:code,photo:remotePhoto,photoPath:''}],
+          brandDetails:[{id:uid(),name:formatDisplayName(record.brand||'Marca não identificada'),barcode:code,packageContent:formatPackageContent({name,unit,netAmount:Number.isFinite(amount)&&amount>0?amount:parsedPackage.amount,netUnit:productUnitFromBarcodeData(record.packageUnit||unit)}),photo:remotePhoto,photoPath:''}],
           brandDetailsMigratedV1:true,
           active: true,
           description: '',
@@ -3066,7 +3154,7 @@ async function findProductByBarcode(value) {
       id: uid(), name, category, unit: 'un', ...packageInfo(name, 'un'),
       packageContent:String(data.quantity||formatPackageContent({name,unit,...packageInfo(name,unit)})),
       brands:brand?[brand]:[],
-      brandDetails:[{id:uid(),name:brand||'Marca não identificada',barcode:code,photo:'',photoPath:''}],
+      brandDetails:[{id:uid(),name:brand||'Marca não identificada',barcode:code,packageContent:String(data.quantity||formatPackageContent({name,unit,...packageInfo(name,unit)})),photo:'',photoPath:''}],
       brandDetailsMigratedV1:true,active:true,
       description: data.quantity || '', barcodeSources: ['Open Food Facts']
     };
@@ -3401,6 +3489,16 @@ function init() {
       addCategory();
       return;
     }
+
+    let toggleBrands=e.target.closest('[data-toggle-product-brands]');
+    if(toggleBrands){
+      const row=toggleBrands.closest('.product-row-wrap'),panel=row?.querySelector('[data-product-brand-expansion]');
+      if(panel){panel.hidden=!panel.hidden;toggleBrands.setAttribute('aria-expanded',String(!panel.hidden));toggleBrands.textContent=panel.hidden?'Expandir':'Recolher';}
+      return;
+    }
+
+    let deleteProduct=e.target.closest('[data-delete-product]');
+    if(deleteProduct){deleteProductFromCatalog(deleteProduct.dataset.deleteProduct);return;}
 
     let manageBrands=e.target.closest('[data-manage-product-brands]');
     if(manageBrands) { manageProductBrands(manageBrands.dataset.manageProductBrands); return; }
