@@ -360,7 +360,7 @@ body.sidebar-open{overflow:hidden}
 .catalog-icon-button svg{width:16px;height:16px}
 .catalog-icon-button.add-brand-icon{border-color:#d9ece1;color:var(--green)}
 .catalog-expand-button{display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;border-radius:8px;background:transparent;color:#64766b;cursor:pointer}
-.catalog-expand-button:hover{background:#edf6f1;color:var(--green)}
+.product-row .catalog-expand-button{border:1px solid var(--line);background:#fff;color:#61756a}.catalog-expand-button:hover{background:#edf6f1;color:var(--green)}
 .catalog-expand-button svg{width:20px;height:20px;transition:transform .18s ease}
 .catalog-expand-button.is-expanded svg{transform:rotate(180deg)}
 .product-brand-expansion{padding:0 0 12px 0}
@@ -380,4 +380,18 @@ body.sidebar-open{overflow:hidden}
   .catalog-expand-button{width:34px;height:38px}
   .expanded-brand{align-items:flex-start;flex-direction:column}
   .expanded-brand-info{align-items:flex-start;flex-direction:column;gap:4px}
+}
+
+/* Keep every product action next to its name instead of at the far edge of the row. */
+.product-row{display:block;padding:10px 0}
+.product-main{grid-column:auto;min-width:0}
+.product-title-actions{gap:5px}
+.catalog-expand-button{display:inline-grid;place-items:center;width:30px;height:30px;flex:0 0 30px;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;background:#fff;color:#61756a;cursor:pointer}
+.catalog-expand-button:hover{background:#edf6f1;color:var(--green)}
+.catalog-expand-button svg{width:17px;height:17px;transition:transform .18s ease}
+.catalog-expand-button.is-expanded svg{transform:rotate(180deg)}
+@media(max-width:480px){
+  .product-row{display:block;padding:9px 0}
+  .product-title-actions{gap:4px}
+  .catalog-expand-button{width:32px;height:32px;flex-basis:32px}
 }
