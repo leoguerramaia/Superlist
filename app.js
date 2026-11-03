@@ -97,7 +97,16 @@ function packageInfo(name,unit) {
   return {amount:1,unit:unit==='un'?'un':unit};
 }
 
+function listContentFingerprint(list) {
+  const content = { ...list };
+  delete content.lastEditedAt;
+  delete content.lastEditedBy;
+  delete content.viewedBy;
+  return JSON.stringify(content);
+}
+
 let db = loadDB();
+let savedListFingerprints = new Map((db.lists || []).map(list => [String(list.id), listContentFingerprint(list)]));
 let currentList = null;
 let activeCategory = 'all';
 
@@ -260,6 +269,19 @@ function loadDB() {
 }
 
 function save() {
+  const userId = window.SuperlistCloud?.currentUserId?.();
+  const now = Date.now();
+  (db.lists || []).forEach(list => {
+    const id = String(list.id);
+    const fingerprint = listContentFingerprint(list);
+    const previous = savedListFingerprints.get(id);
+    if (userId && previous !== fingerprint) {
+      const previousTime = Date.parse(list.lastEditedAt || '') || 0;
+      list.lastEditedAt = new Date(Math.max(now, previousTime + 1)).toISOString();
+      list.lastEditedBy = userId;
+    }
+  });
+  savedListFingerprints = new Map((db.lists || []).map(list => [String(list.id), listContentFingerprint(list)]));
   localStorage.setItem(KEY,JSON.stringify(db));
   renderAll();
   if(window.SuperlistCloud) window.SuperlistCloud.scheduleSync(db);
@@ -385,6 +407,19 @@ function listCard(l) {
   </article>`;
 }
 
+function isListUpdatedForCurrentUser(list) {
+  const userId = window.SuperlistCloud?.currentUserId?.();
+  if (!userId || !list?.lastEditedAt || !list.lastEditedBy || list.lastEditedBy === userId) return false;
+  return (list.viewedBy?.[userId] || '') < list.lastEditedAt;
+}
+
+function markListSeenByCurrentUser(list) {
+  const userId = window.SuperlistCloud?.currentUserId?.();
+  if (!userId || !list?.lastEditedAt || !isListUpdatedForCurrentUser(list)) return;
+  list.viewedBy = { ...(list.viewedBy || {}), [userId]: list.lastEditedAt };
+  save();
+}
+
 function renderLists() {
   let q=($('#listSearch')?.value||'').toLowerCase();
   let f=$('#listFilter')?.value||'all';
@@ -393,7 +428,7 @@ function renderLists() {
     .sort((a,b)=>b.created.localeCompare(a.created));
 
   $('#allLists').innerHTML=ls.length
-    ? ls.map(l=>`<article class="list-card" data-open-list="${l.id}">${listCardInner(l).replace('<h3>', '<div class="list-card-title-row"><h3>').replace('</h3>', '</h3><div class="list-card-actions"><button type="button" class="list-card-action" data-rename-list="${l.id}" aria-label="Renomear lista" title="Renomear lista"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button type="button" class="list-card-action danger" data-delete-list="${l.id}" aria-label="Excluir lista" title="Excluir lista"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button></div></div>')}</article>`).join('')
+    ? ls.map(l=>`<article class="list-card ${isListUpdatedForCurrentUser(l)?'family-updated':''}" data-open-list="${l.id}">${listCardInner(l).replace('<h3>', '<div class="list-card-title-row"><h3>').replace('</h3>', '</h3><div class="list-card-actions"><button type="button" class="list-card-action" data-rename-list="${l.id}" aria-label="Renomear lista" title="Renomear lista"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button type="button" class="list-card-action danger" data-delete-list="${l.id}" aria-label="Excluir lista" title="Excluir lista"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button></div></div>')}</article>`).join('')
     : '<div class="empty-state">Nenhuma lista encontrada. Clique em “Nova lista” para começar.</div>';
   $('#allLists').querySelectorAll('.list-card').forEach((card,index)=>{
     const list=ls[index];
@@ -1335,6 +1370,7 @@ function addCategory() {
 function openList(id) {
   currentList=db.lists.find(l=>String(l.id)===String(id));
   if(!currentList)return;
+  markListSeenByCurrentUser(currentList);
   page('shopping');
   renderShopping();
 }
@@ -3558,6 +3594,7 @@ if(window.SuperlistCloud) {
     setData:d=>{
       const original = JSON.stringify(d || {});
       db=normalizeProductNames(d || {});
+      savedListFingerprints = new Map((db.lists || []).map(list => [String(list.id), listContentFingerprint(list)]));
       db.categories ||= [];
       seedCategories.forEach(category => { if (!db.categories.includes(category)) db.categories.push(category); });
       db.lists.forEach(list => (list.items || []).forEach(item => { item.brand = formatDisplayName(item.brand); }));
