@@ -110,6 +110,7 @@ let savedListFingerprints = new Map((db.lists || []).map(list => [String(list.id
 let currentList = null;
 let activeCategory = 'all';
 let expandedProductBrandIds = new Set();
+const productPhotoUrlCache = new Map();
 
 
 // Padroniza nomes de produtos e marcas em formato Título, mantendo conectores em minúsculas.
@@ -241,37 +242,40 @@ function productBrandForPhoto(product={},brandName='') {
   }
   return details.find(hasPhoto)||null;
 }
+function productPhotoCacheKey(photoPath,photoUrl) {
+  return String(photoPath||photoUrl||'');
+}
 function productPhotoThumb(product,brand,className='product-thumb',showPlaceholder=false) {
   if(!brand&&!showPlaceholder)return '';
-  const attrs=brand?` data-brand-photo data-product-id="${esc(product.id)}" data-brand-id="${esc(brand.id||'')}" data-photo-url="${esc(brand.photo||'')}" data-photo-path="${esc(brand.photoPath||'')}" data-barcode="${esc(brand.barcode||'')}"`:'';
-  return `<div class="${className}${brand?' has-photo':''}"${attrs}><span aria-hidden="true">◈</span></div>`;
+  const cacheKey=brand?productPhotoCacheKey(brand.photoPath,brand.photo):'';
+  const cached=cacheKey?productPhotoUrlCache.get(cacheKey):null;
+  const cachedUrl=cached&&cached.expiresAt>Date.now()?cached.url:'';
+  const directUrl=brand&&!isOscbrImageUrl(brand.photo||'')?usableProductPhoto(brand.photo):'';
+  const initialUrl=cachedUrl||directUrl;
+  const attrs=brand?` data-brand-photo data-product-id="${esc(product.id)}" data-brand-id="${esc(brand.id||'')}" data-photo-url="${esc(brand.photo||'')}" data-photo-path="${esc(brand.photoPath||'')}" data-photo-cache-key="${esc(cacheKey)}" data-barcode="${esc(brand.barcode||'')}"`:'';
+  const image=initialUrl?`<img src="${esc(initialUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:'<span aria-hidden="true">◈</span>';
+  return `<div class="${className}${brand?' has-photo':''}"${attrs}>${image}</div>`;
 }
 function hydrateProductBrandPhotos() {
   document.querySelectorAll('[data-brand-photo]').forEach(async element=>{
-    let url=usableProductPhoto(element.dataset.photoUrl);
-    if(url&&isOscbrImageUrl(url)){
-      url='';
-      const product=db.products.find(value=>String(value.id)===String(element.dataset.productId));
-      const brand=(product?.brandDetails||[]).find(value=>String(value.id)===String(element.dataset.brandId));
-      if(brand?.barcode&&window.SuperlistCloud?.lookupProductByBarcode){
-        try{
+    if(element.dataset.photoHydrating==='true')return;
+    const cacheKey=element.dataset.photoCacheKey||productPhotoCacheKey(element.dataset.photoPath,element.dataset.photoUrl);
+    const cached=cacheKey?productPhotoUrlCache.get(cacheKey):null;
+    let url=cached&&cached.expiresAt>Date.now()?cached.url:usableProductPhoto(element.dataset.photoUrl);
+    if(url&&isOscbrImageUrl(url))url='';
+    element.dataset.photoHydrating='true';
+    try{
+      if(!url&&element.dataset.photoUrl&&isOscbrImageUrl(element.dataset.photoUrl)){
+        const product=db.products.find(value=>String(value.id)===String(element.dataset.productId));
+        const brand=(product?.brandDetails||[]).find(value=>String(value.id)===String(element.dataset.brandId));
+        if(brand?.barcode&&window.SuperlistCloud?.lookupProductByBarcode){
           const result=await window.SuperlistCloud.lookupProductByBarcode(brand.barcode);
-          if(result?.imageBase64){
-            const compact=await compactCatalogImage(result.imageBase64,result.imageContentType);
-            if(compact){
-              brand.photo=compact;
-              try{localStorage.setItem(KEY,JSON.stringify(db));window.SuperlistCloud.scheduleSync(db);}catch(error){console.warn('Não foi possível guardar a foto compactada da marca:',error);}
-              url=compact;
-            }
-          }
-        }catch(error){console.warn('Não foi possível carregar a foto protegida da marca:',error);}
+          if(result?.imageBase64){const compact=await compactCatalogImage(result.imageBase64,result.imageContentType);if(compact){brand.photo=compact;try{localStorage.setItem(KEY,JSON.stringify(db));window.SuperlistCloud.scheduleSync(db)}catch(error){console.warn('Não foi possível guardar a foto compactada da marca:',error)}url=compact;}}
+        }
       }
-    }
-    if(!url&&element.dataset.photoPath&&window.SuperlistCloud?.getProductPhotoUrl){
-      try{url=await window.SuperlistCloud.getProductPhotoUrl(element.dataset.photoPath);}
-      catch(error){console.warn('Não foi possível carregar a foto da marca:',error);}
-    }
-    if(url&&element.isConnected)element.innerHTML=`<img src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
+      if(!url&&element.dataset.photoPath&&window.SuperlistCloud?.getProductPhotoUrl){url=await window.SuperlistCloud.getProductPhotoUrl(element.dataset.photoPath);if(url&&cacheKey)productPhotoUrlCache.set(cacheKey,{url,expiresAt:Date.now()+50*60*1000});}
+      if(url&&element.isConnected){let image=element.querySelector('img');if(!image){image=document.createElement('img');image.alt='';image.loading='lazy';image.referrerPolicy='no-referrer';element.replaceChildren(image)}if(image.src!==url)image.src=url;}
+    }catch(error){console.warn('Não foi possível carregar a foto da marca:',error)}finally{delete element.dataset.photoHydrating}
   });
 }
 function normalizeProductNames(data) {
