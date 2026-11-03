@@ -449,7 +449,7 @@ function renderHome() {
 }
 
 function listTotal(l) {
-  return (l.items||[]).reduce((s,i)=>s+(Number(i.qty)||0)*(Number(i.price)||0),0);
+  return (l.items||[]).reduce((s,i)=>s+(Number(i.weightKg ?? i.qty)||0)*(Number(i.price)||0),0);
 }
 
 function listCard(l) {
@@ -1678,7 +1678,8 @@ function addProductToCurrentList(product, qty = 1, brand = '', unit = '') {
       brand: normalizedBrand,
       category: product.category || 'Outros',
       unit: unit || product.unit || 'un',
-      qty,
+      qty: unit === 'kg' ? 0 : qty,
+      weightKg: unit === 'kg' ? qty : null,
       price: 0,
       estimate: previous?.price || 0,
       checked: false
@@ -2182,7 +2183,7 @@ function renderShopping() {
                 </small>
               </div>
             </div>
-            <input type="number" min="0" step="${i.unit==='kg'||i.unit==='l'?'.01':'1'}" data-qty="${i.id}" value="${i.qty}" aria-label="Quantidade">
+            <input type="number" min="0" step="${i.unit==='kg'||i.unit==='l'?'.01':'1'}" data-qty="${i.id}" value="${i.unit==='kg'?(i.weightKg??i.qty):i.qty}" placeholder="${i.unit==='kg'?'Peso (kg)':'Quantidade'}" aria-label="${i.unit==='kg'?'Peso em quilos':'Quantidade'}">
             <input type="text" inputmode="numeric" data-price="${i.id}" value="${i.price?formatPriceValue(i.price):''}" placeholder="Preço (R$)" aria-label="Preço">
             <span class="shop-total">${money((Number(i.qty)||0)*(Number(i.price)||0))}</span>
             <div class="shop-actions">
@@ -3165,6 +3166,7 @@ async function findProductByBarcode(value) {
   const code = normalizeBarcodeCode(value);
   if (!code) throw new Error('Informe um código de barras válido.');
   const local = (db.products || []).find(p => normalizeBarcodeCode(p.barcode) === code || (p.brandDetails||[]).some(brand=>normalizeBarcodeCode(brand.barcode)===code));
+  // A correspondência local sempre tem prioridade; só então consultamos APIs externas.
   if (local) return local;
 
   let providerError = null;
