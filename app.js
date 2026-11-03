@@ -701,12 +701,16 @@ function openStoreDetails(storeId) {
   $('#editStoreFromDetails').addEventListener('click',()=>addStoreModal(()=>openStoreDetails(store.id),store));
 }
 
+function sortedCategoryNames(categories = db.categories || []) {
+  return [...new Set(categories.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'pt-BR',{sensitivity:'base'}));
+}
+
 function renderProducts() {
   let q=($('#productSearch')?.value||'').toLowerCase();
   let cat=$('#categoryFilter')?.value||'all';
-  let cats=['all',...db.categories];
+  let cats=['all',...sortedCategoryNames()];
   $('#categoryFilter').innerHTML=cats.map(c=>`<option value="${esc(c)}" ${c===cat?'selected':''}>${c==='all'?'Todas as categorias':esc(c)}</option>`).join('');
-  let products=db.products.filter(p=>(cat==='all'||p.category===cat)&&(p.name+' '+productBrandNames(p).join(' ')).toLowerCase().includes(q));
+  let products=db.products.filter(p=>(cat==='all'||p.category===cat)&&(p.name+' '+productBrandNames(p).join(' ')).toLowerCase().includes(q)).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR',{sensitivity:'base'}));
   $('#productCount').textContent=`${products.length} produtos`;
   $('#productTable').innerHTML=products.length
     ? products.map(p=>{
@@ -1546,10 +1550,7 @@ function editShoppingItem(itemId) {
   const item = currentList?.items.find(i => i.id === itemId);
   if (!item) return;
 
-  const categories = [...new Set([
-    ...db.categories,
-    item.category || 'Outros'
-  ])];
+  const categories = sortedCategoryNames([...db.categories, item.category || 'Outros']);
 
   openModal('Editar item da compra', `
     <form id="editShoppingItemForm">
@@ -1620,11 +1621,11 @@ item.category = d.category;
 item.unit = d.unit;
 
 const product = findOrCreateProduct(item);
-Object.assign(product, {
-  name: item.name,
-  category: item.category,
-  unit: item.unit
-});
+item.productId = product.id;
+product.name = item.name;
+product.category = d.category;
+product.unit = d.unit;
+item.category = product.category;
 
 item.price = price;
     if (item.unit === 'kg') item.weightKg = Number(d.weightKg) || 0;
@@ -1641,7 +1642,7 @@ item.price = price;
 
 function findOrCreateProduct(item) {
   let product = item.productId
-    ? db.products.find(p => p.id === item.productId)
+    ? db.products.find(p => String(p.id) === String(item.productId))
     : null;
 
   if (!product) {
@@ -1851,7 +1852,7 @@ function addCatalogProductToList() {
           <label>Selecione a categoria</label>
           <select id="addProductCategory">
             <option value="">Todas as categorias</option>
-            ${db.categories.map(c => `
+            ${sortedCategoryNames().map(c => `
               <option value="${esc(c)}">${esc(c)}</option>
             `).join('')}
           </select>
@@ -2182,7 +2183,7 @@ function renderShopping() {
     const productText=(item.name+' '+(item.brand||'')).toLocaleLowerCase('pt-BR');
     return productText.includes(search)&&(!department||(item.category||'Outros')===department);
   });
-  let cats=[...new Set(visibleItems.map(i=>i.category||'Outros'))];
+  let cats=sortedCategoryNames(visibleItems.map(i=>i.category||'Outros'));
 
   $('#shoppingItems').innerHTML=cats.length
     ? cats.map(cat=>{
