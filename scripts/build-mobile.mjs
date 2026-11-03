@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, stat } from 'node:fs/promises';
+import { cp, mkdir, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -6,6 +6,7 @@ const root = process.cwd();
 const output = path.join(root, 'www');
 const allowed = new Set(['.html', '.css', '.js', '.webmanifest', '.png', '.jpg', '.jpeg', '.svg', '.webp', '.woff', '.woff2']);
 
+await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 
 async function copyPublicFiles(source, destination) {
