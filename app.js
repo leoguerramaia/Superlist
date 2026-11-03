@@ -1302,8 +1302,12 @@ function hasPendingLegacyBrandData(product={}) {
     (legacy.packageContent&&!legacy.packageImportedTo));
 }
 function productPackageMeasure(product={},brandName='') {
-  const brand=(product.brandDetails||[]).find(value=>String(value.name||'').toLocaleLowerCase('pt-BR')===String(brandName||'').toLocaleLowerCase('pt-BR'));
-  if(brand?.packageContent)return parsePackageContent(brand.packageContent,product.unit||'un');
+  const brands=product.brandDetails||[];
+  const brand=brands.find(value=>String(value.name||'').toLocaleLowerCase('pt-BR')===String(brandName||'').toLocaleLowerCase('pt-BR'));
+  if(brandName)return brand&&brand.packageContent?parsePackageContent(brand.packageContent,product.unit||'un'):{packageContent:'',netAmount:1,netUnit:product.unit||'un'};
+  if(brands.length>1||product.legacyBrandData&&product.legacyBrandData.packageContent)return {packageContent:'',netAmount:1,netUnit:product.unit||'un'};
+  if(brands.length===1)return brands[0].packageContent?parsePackageContent(brands[0].packageContent,product.unit||'un'):{packageContent:'',netAmount:1,netUnit:product.unit||'un'};
+  if(product.brands&&product.brands.length)return {packageContent:'',netAmount:1,netUnit:product.unit||'un'};
   if(product.packageContent)return parsePackageContent(product.packageContent,product.netUnit||product.unit||'un');
   return {packageContent:'',netAmount:Number(product.netAmount)||1,netUnit:product.netUnit||product.unit||'un'};
 }
