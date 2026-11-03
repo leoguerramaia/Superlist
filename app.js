@@ -1570,8 +1570,9 @@ function editShoppingItem(itemId) {
         </select>
       </div>
 
+      ${item.unit==='kg' ? `<div class="field"><label>Peso (kg)</label><input name="weightKg" type="number" min="0.01" step="0.01" required value="${Number(item.weightKg ?? item.qty) || ''}"><small class="helper">Informe o preço por quilo e o peso do produto para calcular o total.</small></div>` : ''}
       <div class="field">
-        <label>Preço (R$)</label>
+        <label>Preço ${item.unit==='kg'?'por quilo (R$ / kg)':'(R$)'}</label>
         <input name="price" inputmode="decimal"
           value="${item.price?formatPriceValue(item.price):''}">
       </div>
@@ -1609,6 +1610,7 @@ Object.assign(product, {
 });
 
 item.price = price;
+    if (item.unit === 'kg') item.weightKg = Number(d.weightKg) || 0;
     item.estimate = price;
 
     savePrice(item);
