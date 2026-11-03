@@ -392,23 +392,10 @@ function toast(t) {
   setTimeout(() => e.classList.remove('show'),2400);
 }
 
-async function page(name) {
-  if(name==='admin') {
-    if(!window.__superlistIsAdmin){toast('Acesso restrito à administração.');return;}
-    try {
-      const flow=await window.SuperlistCloud.beginAdminMfa();
-      if(flow.type!=='verified') {
-        const verified=await promptAdminMfa(flow);
-        if(!verified)return;
-      }
-      await window.SuperlistCloud.assertAdminMfa();
-    } catch(error) {
-      toast(error.message||'Não foi possível confirmar sua identidade para a Administração.');
-      return;
-    }
-  }
-  $('.page').forEach(p => p.classList.toggle('active',p.id==='page-'+name));
-  $('.nav-link').forEach(b => b.classList.toggle('active',b.dataset.page===name));
+function page(name) {
+  if(name==='admin' && !window.__superlistIsAdmin){toast('Acesso restrito à administração.');return;}
+  $$('.page').forEach(p => p.classList.toggle('active',p.id==='page-'+name));
+  $$('.nav-link').forEach(b => b.classList.toggle('active',b.dataset.page===name));
   $('#pageTitle').textContent = ({
     home:'Visão geral',
     lists:'Minhas listas',
@@ -422,7 +409,6 @@ async function page(name) {
   if(name!=='shopping') renderAll();
   if(name==='admin') loadAdminDashboard();
 }
-
 function openModal(title,body,eyebrow='SUPERLIST') {
   $('#modalTitle').textContent = title;
   $('#modalEyebrow').textContent = eyebrow;
@@ -432,68 +418,6 @@ function openModal(title,body,eyebrow='SUPERLIST') {
 
 function closeModal() {
   $('#modalBackdrop').classList.remove('open');
-}
-
-function promptAdminMfa(flow) {
-  return new Promise(resolve => {
-    const enrolling=flow.type==='enroll';
-    const body='<p>'+(enrolling
-      ? 'Escaneie este QR code com seu aplicativo autenticador. Depois, digite o código de seis números para ativar a proteção.'
-      : 'Digite o código de seis números exibido no seu aplicativo autenticador.')+'</p>'
-      +(enrolling
-        ? '<div id="adminMfaQr" style="display:grid;place-items:center;margin:16px auto;min-height:180px"></div><p style="text-align:center;font-size:13px">Se não puder escanear o QR code, use esta chave:</p><code id="adminMfaSecret" style="display:block;text-align:center;overflow-wrap:anywhere;padding:10px;background:#f3f7f4;border-radius:8px"></code>'
-        : '')
-      +'<form id="adminMfaForm"><div class="field"><label for="adminMfaCode">Código do aplicativo</label><input id="adminMfaCode" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="000000"></div><p id="adminMfaError" class="auth-note" role="alert" aria-live="polite"></p><button class="btn primary full" id="adminMfaSubmit" type="submit">'+(enrolling?'Ativar e abrir Administração':'Confirmar e abrir Administração')+'</button></form><p style="text-align:center;margin-top:12px"><button class="text-button" id="adminMfaCancel" type="button">Cancelar</button></p>';
-    openModal(enrolling?'Ative a verificação em duas etapas':'Confirme sua identidade',body,'PROTEÇÃO DA ADMINISTRAÇÃO');
-
-    if(enrolling) {
-      const qr=document.createElement('img');
-      qr.alt='QR code para configurar o autenticador';
-      qr.src=flow.qrCode;
-      qr.style.cssText='width:180px;height:180px;max-width:100%';
-      $('#adminMfaQr').replaceChildren(qr);
-      $('#adminMfaSecret').textContent=flow.secret||'';
-    }
-
-    const form=$('#adminMfaForm'), input=$('#adminMfaCode'), submit=$('#adminMfaSubmit');
-    const feedback=$('#adminMfaError'), closeButton=$('#closeModal'), backdrop=$('#modalBackdrop');
-    let settled=false, submitting=false;
-    const finish=async accepted=>{
-      if(settled)return;
-      settled=true;
-      form.removeEventListener('submit',onSubmit);
-      closeButton.removeEventListener('click',onCancel);
-      backdrop.removeEventListener('click',onBackdrop);
-      $('#adminMfaCancel')?.removeEventListener('click',onCancel);
-      closeModal();
-      if(!accepted&&enrolling) {
-        try { await window.SuperlistCloud.cancelAdminMfa(flow.factorId); }
-        catch(error) { console.warn('Não foi possível cancelar a configuração do autenticador:',error); }
-      }
-      resolve(accepted);
-    };
-    const onCancel=()=>{void finish(false);};
-    const onBackdrop=event=>{if(event.target===backdrop)onCancel();};
-    const onSubmit=async event=>{
-      event.preventDefault();
-      if(submitting)return;
-      submitting=true;submit.disabled=true;feedback.textContent='';
-      try {
-        await window.SuperlistCloud.verifyAdminMfa(flow.factorId,flow.challengeId,input.value);
-        await finish(true);
-      } catch(error) {
-        feedback.textContent=error.message||'Código inválido. Confira o aplicativo e tente novamente.';
-      } finally {
-        submitting=false;
-        if(!settled)submit.disabled=false;
-      }
-    };
-    form.addEventListener('submit',onSubmit);
-    closeButton.addEventListener('click',onCancel);
-    $('#adminMfaCancel').addEventListener('click',onCancel);
-    backdrop.addEventListener('click',onBackdrop);
-    input.focus();
-  });
 }
 
 function field(label,name,placeholder='',type='text',value='') {
