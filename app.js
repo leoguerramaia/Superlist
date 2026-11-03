@@ -1615,17 +1615,25 @@ function editShoppingItem(itemId) {
       return;
     }
 
+const selectedCategory = d.category;
 item.name = formatDisplayName(d.name);
 item.brand = formatDisplayName(d.brand);
-item.category = d.category;
 item.unit = d.unit;
 
 const product = findOrCreateProduct(item);
 item.productId = product.id;
 product.name = item.name;
-product.category = d.category;
+product.category = selectedCategory;
 product.unit = d.unit;
-item.category = product.category;
+
+// A categoria escolhida no editor é a fonte final. Atualize também os itens
+// ligados ao mesmo produto para manter listas e catálogo consistentes.
+item.category = selectedCategory;
+(db.lists || []).forEach(list => (list.items || []).forEach(listItem => {
+  if (String(listItem.productId) === String(product.id)) {
+    listItem.category = selectedCategory;
+  }
+}));
 
 item.price = price;
     if (item.unit === 'kg') item.weightKg = Number(d.weightKg) || 0;
