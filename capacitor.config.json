@@ -1,0 +1,18 @@
+{
+  "appId": "com.superlist.app",
+  "appName": "SuperList",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "backgroundColor": "#f7f9f8",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1800,
+      "backgroundColor": "#f7f9f8",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#f7f9f8"
+    }
+  }
+}
