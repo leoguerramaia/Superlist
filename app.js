@@ -1334,7 +1334,7 @@ function addProductModal(product = null) {
     <form id="modalForm">
       <div class="field"><label>Nome do produto</label><input name="name" required placeholder="Ex.: Arroz tipo 1" value="${esc(p.name||'')}"></div>
       <div class="form-grid">
-        ${selectField('Categoria','category',db.categories,p.category||'',true)}
+        ${selectField('Categoria','category',sortedCategoryNames(),p.category||'',true)}
         ${selectField('Unidade de compra','unit',['un','kg','g','l','ml'],p.unit||'',true)}
       </div>
       <div class="form-actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button class="btn primary">Salvar produto</button></div>
@@ -1761,8 +1761,9 @@ function addCatalogProductToList() {
   }
 
   function showProducts(products) {
-    results.innerHTML = products.length
-      ? products.map(p => `
+    const sortedProducts=[...products].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR',{sensitivity:'base'}));
+    results.innerHTML = sortedProducts.length
+      ? sortedProducts.map(p => `
           <button type="button" class="product-picker-row"
             data-add-catalog="${p.id}"
             style="width:100%;text-align:left">
