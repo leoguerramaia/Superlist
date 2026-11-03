@@ -563,8 +563,8 @@ function listCardInner(l) {
     <span class="status ${l.done?'done':''}">${l.done?'Concluída':'Em andamento'}</span>
   </div>
   <h3>${esc(l.name)}</h3>
+  ${l.createdByName || l.lastEditedByName ? `<div class="list-authorship"><span>Criada por ${esc(l.createdByName || 'Membro da família')}</span><span>Última alteração por ${esc(l.lastEditedByName || l.createdByName || 'Membro da família')}</span></div>` : ''}
   <div class="list-info">
-    ${l.createdByName ? `<div class="list-authorship">Criada por ${esc(l.createdByName)}${l.lastEditedByName && l.lastEditedBy!==l.createdBy ? ` · Alterada por ${esc(l.lastEditedByName)}` : ''}</div>` : ''}
     <div>▦ ${l.items.length} produtos</div>
     <div>⌖ ${esc(storeName(l.storeId))}</div>
     <div>◷ ${dateBR(l.created)}</div>
@@ -2166,7 +2166,7 @@ function renderShopping() {
   let l=currentList;
 
   $('#shoppingTitle').textContent=l.name;
-  $('#shoppingMeta').textContent=`Criada em ${dateBR(l.created)} · ${l.items.length} produtos`;
+  $('#shoppingMeta').innerHTML=`Criada em ${dateBR(l.created)} · ${l.items.length} produtos${l.createdByName || l.lastEditedByName ? `<span class="shopping-authorship"><span>Criada por ${esc(l.createdByName || 'Membro da família')}</span><span>Última alteração por ${esc(l.lastEditedByName || l.createdByName || 'Membro da família')}</span></span>` : ''}`;
   $('#shoppingStore').textContent=storeName(l.storeId);
 
   const search = ($('#shoppingSearch')?.value || '').trim().toLocaleLowerCase('pt-BR');
@@ -2235,7 +2235,7 @@ function renderShopping() {
 
   const actionBar = document.createElement('div');
   actionBar.className = 'shopping-list-actions';
-  actionBar.innerHTML = '<button type="button" class="btn secondary" id="importShoppingItems"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg> Importar itens</button><button type="button" class="btn primary" id="addShoppingProduct"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="4"/></svg> Novo Produto</button><button type="button" class="btn secondary" id="addShoppingBarcode"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5v14M6 5v14M9 5v14M13 5v14M16 5v14M19 5v14M22 5v14"/></svg> Ler Código de Barras</button>';
+  actionBar.innerHTML = '<button type="button" class="btn primary" id="addShoppingProduct"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="4"/></svg> Novo Produto</button><button type="button" class="btn secondary" id="importShoppingItems"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg> Importar itens</button><button type="button" class="btn secondary" id="addShoppingBarcode"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5v14M6 5v14M9 5v14M13 5v14M16 5v14M19 5v14M22 5v14"/></svg> Ler Código de Barras</button>';
   $('#shoppingItems').prepend(actionBar);
   $('#importShoppingItems').addEventListener('click', importItemsIntoOpenList);
   hydrateProductBrandPhotos();
