@@ -420,7 +420,7 @@ body.sidebar-open{overflow:hidden}
 .shop-name-text{flex:1;min-width:0}
 .shop-name-text strong{display:block;font-size:11px;overflow-wrap:anywhere}
 .shop-name-text small{display:block;font-size:9px;line-height:1.45;color:#96a199}
-.list-product-thumb{width:42px;height:42px;flex:0 0 42px;border-radius:9px}
+.list-product-thumb{position:relative;display:grid;place-items:center;overflow:hidden;width:42px;height:42px;flex:0 0 42px;border-radius:9px}
 @media(max-width:480px){
   .product-row{grid-template-columns:minmax(0,1fr) 140px;gap:6px;padding:9px 0}
   .product-row-actions{width:140px;gap:4px}
