@@ -1681,6 +1681,8 @@ function findOrCreateProduct(item) {
 
 function addProductToCurrentList(product, qty = 1, brand = '', unit = '') {
   if (!currentList || !product) return;
+  currentList = db.lists.find(list => String(list.id) === String(currentList.id)) || currentList;
+  if (!db.lists.includes(currentList)) return;
 
   const normalizedBrand = formatDisplayName(brand);
   if (normalizedBrand) { product.brands = Array.isArray(product.brands) ? product.brands : []; if (!product.brands.some(value => value.toLocaleLowerCase('pt-BR') === normalizedBrand.toLocaleLowerCase('pt-BR'))) product.brands.push(normalizedBrand); }
@@ -3740,8 +3742,10 @@ if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
 
   $('#shoppingItems').addEventListener('change',e=>{
     if(e.target.dataset.itemBrand) {
+      const activeList=db.lists.find(list=>String(list.id)===String(currentList?.id));
+      currentList=activeList||null;
       const item=currentList?.items.find(value=>String(value.id)===String(e.target.dataset.itemBrand));
-      if(item){item.brand=e.target.value;save();renderShopping();}
+      if(item){item.brand=formatDisplayName(e.target.value);save();renderShopping();}
       return;
     }
     if(e.target.dataset.weightMode) {
