@@ -3703,6 +3703,17 @@ if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
 
   $('#shoppingItems').addEventListener('input',e=>{
     const input=e.target;
+    if(input.dataset.qty) {
+      const item=currentList?.items.find(i=>String(i.id)===String(input.dataset.qty));
+      if(item?.unit==='kg'&&item.quantityMode!=='unit') {
+        item.weightKg=parseWeightMilli(input.value);
+        input.value=input.value.replace(/\\D/g,'') ? formatWeightMilli(item.weightKg) : '';
+        const row=input.closest('.shop-item');
+        if(row)row.querySelector('.shop-total').textContent=money(itemLineTotal(item));
+        updateSummary();
+      }
+      return;
+    }
     if(!input.dataset.price)return;
     input.value=formatPriceEntry(input.value);
     const item=currentList?.items.find(i=>String(i.id)===String(input.dataset.price));
@@ -3715,6 +3726,16 @@ if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
   });
 
   $('#shoppingItems').addEventListener('change',e=>{
+    if(e.target.dataset.weightMode) {
+      const item=currentList?.items.find(i=>String(i.id)===String(e.target.dataset.weightMode));
+      if(!item)return;
+      item.quantityMode=e.target.value;
+      if(item.quantityMode==='unit') item.qty=Math.max(1,Math.round(Number(item.qty)||1));
+      else item.weightKg=Number(item.weightKg)||0;
+      renderShopping();
+      save();
+      return;
+    }
     let l=currentList;
     if(!l)return;
 
@@ -3729,8 +3750,8 @@ if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
     }
 
     if(e.target.dataset.qty) {
-      if(item.unit==='kg') item.weightKg=Number(e.target.value)||0;
-      else item.qty=Number(e.target.value)||0;
+      if(item.unit==='kg'&&item.quantityMode!=='unit') item.weightKg=parseWeightMilli(e.target.value);
+      else item.qty=Math.max(0,Math.round(Number(e.target.value)||0));
     }
 
     if(e.target.dataset.price) {
