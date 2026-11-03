@@ -448,8 +448,14 @@ function renderHome() {
     : '<div class="empty-state">Você ainda não criou listas. Comece sua primeira compra!</div>';
 }
 
+function itemMeasure(item) {
+  return item.unit === 'kg' ? (Number(item.weightKg ?? item.qty) || 0) : (Number(item.qty) || 0);
+}
+function itemLineTotal(item) {
+  return itemMeasure(item) * (Number(item.price) || 0);
+}
 function listTotal(l) {
-  return (l.items||[]).reduce((s,i)=>s+(Number(i.weightKg ?? i.qty)||0)*(Number(i.price)||0),0);
+  return (l.items || []).reduce((sum, item) => sum + itemLineTotal(item), 0);
 }
 
 function listCard(l) {
@@ -2158,7 +2164,7 @@ function renderShopping() {
   $('#shoppingItems').innerHTML=cats.length
     ? cats.map(cat=>{
         let its=visibleItems.filter(i=>(i.category||'Outros')===cat);
-        let subtotal=its.reduce((s,i)=>s+(Number(i.qty)||0)*(Number(i.price)||0),0);
+        let subtotal=its.reduce((sum,item)=>sum+itemLineTotal(item),0);
 
         return `<section class="shopping-category">
           <h3>${esc(cat)} <small>${money(subtotal)}</small></h3>
@@ -2185,7 +2191,7 @@ function renderShopping() {
             </div>
             <input type="number" min="0" step="${i.unit==='kg'||i.unit==='l'?'.01':'1'}" data-qty="${i.id}" value="${i.unit==='kg'?(i.weightKg??i.qty):i.qty}" placeholder="${i.unit==='kg'?'Peso (kg)':'Quantidade'}" aria-label="${i.unit==='kg'?'Peso em quilos':'Quantidade'}">
             <input type="text" inputmode="numeric" data-price="${i.id}" value="${i.price?formatPriceValue(i.price):''}" placeholder="Preço (R$)" aria-label="Preço">
-            <span class="shop-total">${money((Number(i.qty)||0)*(Number(i.price)||0))}</span>
+            <span class="shop-total">${money(itemLineTotal(i))}</span>
             <div class="shop-actions">
               <button type="button" class="scan-btn" data-scan="${i.id}" title="Associar código de barras" aria-label="Associar código de barras de ${esc(i.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5v14M7 5v14M11 5v14M15 5v14M18 5v14M21 5v14"/></svg></button>
               <button type="button" class="scan-btn" data-edit-shopping-item="${i.id}" title="Editar item" aria-label="Editar ${esc(i.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>
@@ -2271,7 +2277,7 @@ function updateSummary() {
   if(!l)return;
 
   let total=listTotal(l);
-  let estimate=l.items.reduce((s,i)=>s+(Number(i.qty)||0)*(Number(i.estimate)||Number(i.price)||0),0);
+  let estimate=l.items.reduce((sum,item)=>sum+itemMeasure(item)*(Number(item.estimate)||Number(item.price)||0),0);
 
   $('#summaryItems').textContent=l.items.length;
   $('#summaryChecked').textContent=l.items.filter(i=>i.checked).length;
@@ -2282,7 +2288,7 @@ function updateSummary() {
     let cat=section.querySelector('h3').childNodes[0].textContent.trim();
     let sum=l.items
       .filter(i=>i.category===cat)
-      .reduce((s,i)=>s+(Number(i.qty)||0)*(Number(i.price)||0),0);
+      .reduce((total,item)=>total+itemLineTotal(item),0);
 
     section.querySelector('h3 small').textContent=money(sum);
   });
