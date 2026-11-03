@@ -1552,23 +1552,19 @@ function addCatalogProductToList() {
   if (!currentList) return;
 
   openModal('Adicionar produto à compra', `
+    <div id="addProductSearchArea"></div>
+    <div class="field">
+      <label>Buscar por</label>
+      <select id="addProductMode" aria-label="Forma de busca">
+        <option value="name">Nome do produto</option>
+        <option value="category">Categoria</option>
+        <option value="barcode">Código de barras</option>
+      </select>
+    </div>
     <div class="field">
       <label>Quantidade</label>
       <input id="addProductQty" type="number" min="0.01" step="0.01" value="1">
     </div>
-    <div class="field">
-      <label>Unidade</label>
-      <select id="addProductUnit"><option value="un">un</option><option value="kg">kg</option><option value="g">g</option><option value="l">l</option><option value="ml">ml</option><option value="cx">cx</option><option value="pct">pct</option></select>
-    </div>
-    <div class="field">
-      <label>Produto / associar ao catálogo</label>
-      <select id="addProductMode">
-        <option value="name">Buscar pelo nome</option>
-        <option value="category">Buscar por categoria</option>
-        <option value="barcode">Código de barras</option>
-      </select>
-    </div>
-    <div id="addProductSearchArea"></div>
     <div class="field">
       <label>Marca (opcional)</label>
       <input id="addProductBrand" placeholder="Digite ou selecione uma marca">
@@ -1585,10 +1581,6 @@ function addCatalogProductToList() {
   const mode = $('#addProductMode');
   const area = $('#addProductSearchArea');
   const results = $('#addProductResults');
-  let manualUnitChanged = false;
-  $('#addProductUnit').addEventListener('change', () => { manualUnitChanged = true; });
-  const selectedManualUnit = product => { const input=$('#addProductUnit'); if(!manualUnitChanged && input) input.value=product.unit||'un'; return input?.value || product.unit || 'un'; };
-
   function availableProducts() {
     return db.products.filter(p => p.active !== false);
   }
@@ -1633,12 +1625,14 @@ function addCatalogProductToList() {
       function searchName() {
         const q = input.value.trim().toLocaleLowerCase('pt-BR');
 
-        showProducts(q
+        const matches = q
           ? availableProducts().filter(p =>
               p.name.toLocaleLowerCase('pt-BR').includes(q)
             )
-          : availableProducts()
-        );
+          : [];
+        showProducts(matches);
+        const exactMatch = matches.some(p => p.name.trim().toLocaleLowerCase('pt-BR') === q);
+        $('#createProductFromSearch').hidden = !q || exactMatch;
       }
 
       input.addEventListener('input', searchName);
@@ -1673,7 +1667,7 @@ function addCatalogProductToList() {
         addProductToCurrentList(
           product,
           Number($('#addProductQty').value) || 1,
-          $('#addProductBrand')?.value || '', selectedManualUnit(product)
+          $('#addProductBrand')?.value || '', product.unit || 'un'
         );
       };
 
@@ -1693,9 +1687,10 @@ function addCatalogProductToList() {
       const select = $('#addProductCategory');
 
       function searchCategory() {
-        showProducts(availableProducts().filter(p =>
-          !select.value || p.category === select.value
-        ));
+        showProducts(select.value
+          ? availableProducts().filter(p => p.category === select.value)
+          : []
+        );
       }
 
       select.addEventListener('change', searchCategory);
