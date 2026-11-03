@@ -139,6 +139,13 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     if(error) throw error;
     return data?.signedUrl||'';
   }
+  async function deleteProductPhoto(path){
+    if(!client||!householdId) throw new Error('Entre em uma família para excluir a foto da marca.');
+    const safePath=String(path||'');
+    if(!safePath.startsWith(`${householdId}/`)) throw new Error('A foto não pertence à família atual.');
+    const {error}=await client.storage.from('produtos').remove([safePath]);
+    if(error) throw error;
+  }
   async function adminRequest(action, payload={}){
     if(!client)throw new Error('Supabase não está conectado.');
     const {data,error}=await client.functions.invoke('admin-panel',{body:{action,...payload}});
@@ -257,5 +264,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     return data;
   }
 
-  window.SuperlistCloud={boot,status,currentUserId:()=>currentUserId,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,uploadStorePhoto,uploadProductPhoto,getProductPhotoUrl,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,lookupProductByBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,currentUserId:()=>currentUserId,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,uploadStorePhoto,uploadProductPhoto,getProductPhotoUrl,deleteProductPhoto,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,lookupProductByBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
 })();
