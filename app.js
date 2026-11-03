@@ -3898,6 +3898,7 @@ if(window.SuperlistCloud) {
     setData:d=>{
       const original = JSON.stringify(d || {});
       db=normalizeProductNames(d || {});
+      if (currentList) currentList = db.lists.find(list => String(list.id) === String(currentList.id)) || null;
       db.categories ||= [];
       seedCategories.forEach(category => { if (!db.categories.includes(category)) db.categories.push(category); });
       db.lists.forEach(list => (list.items || []).forEach(item => { item.brand = formatDisplayName(item.brand); }));
