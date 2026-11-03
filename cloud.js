@@ -7,7 +7,7 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
 
 (function(){
   const cfg=window.SUPERLIST_CONFIG;
-  let client=null, householdId=null, timer=null, callback=null, app=null, channel=null, syncing=false, pendingSnapshot=null, onlineMembers=0, currentUserEmail=null, currentUserId=null, currentUserName=null;
+  let client=null, householdId=null, timer=null, callback=null, app=null, channel=null, syncing=false, pendingSnapshot=null, hasUnsyncedChanges=false, onlineMembers=0, currentUserEmail=null, currentUserId=null, currentUserName=null;
   const configured=()=>cfg.supabaseUrl&&!cfg.supabaseUrl.includes('YOUR_PROJECT')&&cfg.supabaseAnonKey&&!cfg.supabaseAnonKey.includes('YOUR_SUPABASE');
   const emit=(label,state='')=>{if(callback)callback({label,state,onlineMembers,userEmail:currentUserEmail,userId:currentUserId})};
   const localKey='superlist-v1';
@@ -52,6 +52,7 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
         const {error}=await client.from('household_snapshots').upsert({household_id:householdId,data:snapshot,updated_at:updatedAt},{onConflict:'household_id'});if(error)throw error;
         if(channel)await channel.send({type:'broadcast',event:'snapshot',payload:{data:snapshot,updated_at:updatedAt}});
       }
+      hasUnsyncedChanges=false;
       emit(onlineMembers>1?`Compartilhado · ${onlineMembers} online`:'Sincronizado','online')
     }catch(e){
       if(!pendingSnapshot)pendingSnapshot=snapshot;
@@ -59,12 +60,12 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
       clearTimeout(timer);timer=setTimeout(()=>{if(pendingSnapshot)syncNow(pendingSnapshot)},5000);
     }finally{syncing=false}
   }
-  function scheduleSync(data){if(!client||!householdId)return;emit('Alterações pendentes…','pending');clearTimeout(timer);timer=setTimeout(()=>syncNow(data),200)}
+  function scheduleSync(data){if(!client||!householdId)return;hasUnsyncedChanges=true;pendingSnapshot=data|| (app&&app.getData?app.getData():null);emit('Alterações pendentes…','pending');clearTimeout(timer);timer=setTimeout(()=>syncNow(pendingSnapshot),200)}
   async function subscribe(){if(!client||!householdId)return;if(channel)client.removeChannel(channel);
     const {data:{user:currentUser}}=await client.auth.getUser();currentUserId=currentUser?.id||currentUserId;
     channel=client.channel('household-'+householdId,{config:{presence:{key:currentUser?.id||('guest-'+Math.random().toString(36).slice(2))}}})
-      .on('postgres_changes',{event:'*',schema:'public',table:'household_snapshots',filter:'household_id=eq.'+householdId},payload=>{if(syncing)return;let remote=payload.new&&payload.new.data;if(remote&&app&&app.setData){app.setData(remote);emit('Atualizado em tempo real','online')}})
-      .on('broadcast',{event:'snapshot'},payload=>{if(syncing)return;let remote=payload.payload&&payload.payload.data;if(remote&&app&&app.setData){app.setData(remote);emit('Lista atualizada ao vivo','online')}})
+      .on('postgres_changes',{event:'*',schema:'public',table:'household_snapshots',filter:'household_id=eq.'+householdId},payload=>{if(syncing||hasUnsyncedChanges)return;let remote=payload.new&&payload.new.data;if(remote&&app&&app.setData){app.setData(remote);emit('Atualizado em tempo real','online')}})
+      .on('broadcast',{event:'snapshot'},payload=>{if(syncing||hasUnsyncedChanges)return;let remote=payload.payload&&payload.payload.data;if(remote&&app&&app.setData){app.setData(remote);emit('Lista atualizada ao vivo','online')}})
       .on('presence',{event:'sync'},()=>{let state=channel.presenceState();onlineMembers=Object.keys(state).length;emit(onlineMembers>1?`Compartilhado · ${onlineMembers} online`:'Sincronizado · só você online','online')})
       .subscribe(async status=>{if(status==='SUBSCRIBED'){const {data:{user}}=await client.auth.getUser();await channel.track({user_id:user?.id||'member',online_at:new Date().toISOString()})}});
   }
@@ -350,6 +351,9 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     if(!window.supabase||!window.supabase.createClient){emit('Biblioteca Supabase indisponível','pending');return false}
     client=window.supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
     const {data:{session}}=await client.auth.getSession();currentUserEmail=session?.user?.email||null;currentUserId=session?.user?.id||null;currentUserName=session?.user?.user_metadata?.full_name||session?.user?.email||null;if(session){const loaded=await loadIntoApp();if(!loaded)return false}else{emit('Entre para sincronizar','');return false}
+    const flushPendingSync=()=>{if(!client||!householdId||!hasUnsyncedChanges)return;clearTimeout(timer);timer=null;syncNow(pendingSnapshot||(app&&app.getData?app.getData():null));};
+    window.addEventListener('pagehide',flushPendingSync);
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushPendingSync();});
     client.auth.onAuthStateChange((event,session)=>{currentUserEmail=session?.user?.email||null;if(session){emit('Conta conectada','online');if(event!=='TOKEN_REFRESHED')setTimeout(loadIntoApp,0)}else{householdId=null;currentUserId=null;emit('Entre para sincronizar','')}});
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
     return true;
