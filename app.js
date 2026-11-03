@@ -3594,11 +3594,11 @@ if(window.SuperlistCloud) {
     setData:d=>{
       const original = JSON.stringify(d || {});
       db=normalizeProductNames(d || {});
-      savedListFingerprints = new Map((db.lists || []).map(list => [String(list.id), listContentFingerprint(list)]));
       db.categories ||= [];
       seedCategories.forEach(category => { if (!db.categories.includes(category)) db.categories.push(category); });
       db.lists.forEach(list => (list.items || []).forEach(item => { item.brand = formatDisplayName(item.brand); }));
       db.prices.forEach(price => { price.brand = formatDisplayName(price.brand); });
+      savedListFingerprints = new Map((db.lists || []).map(list => [String(list.id), listContentFingerprint(list)]));
       const normalized = JSON.stringify(db);
       localStorage.setItem(KEY,normalized);
       renderAll();
