@@ -732,6 +732,7 @@ function renderProducts() {
               <button type="button" class="catalog-expand-button ${expanded?'is-expanded':''}" data-toggle-product-brands="${esc(p.id)}" aria-expanded="${expanded}" aria-label="${expanded?'Recolher':'Expandir'} marcas de ${esc(p.name)}" title="${expanded?'Recolher marcas':'Expandir marcas'}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
             </div>
           </div>
+          ${brands.length?'<div class="product-brand-count">Esse produto possui '+brands.length+' marca'+(brands.length===1?'':'s')+' cadastrada'+(brands.length===1?'':'s')+'</div>':''}
           <div class="product-brand-expansion" data-product-brand-expansion ${expanded?'':'hidden'}>
             <div class="product-brand-expansion-head"><strong>Marcas cadastradas</strong><span>${brands.length} marca${brands.length===1?'':'s'}</span></div>
             <div class="product-brand-list">${brandRows}</div>
