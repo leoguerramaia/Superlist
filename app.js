@@ -2189,7 +2189,12 @@ function renderShopping() {
                 return productPhotoThumb(product,brand,'list-product-thumb',false);
               })()}
               <div class="shop-name-text">
-                <strong>${esc(i.name)}${i.brand ? ` · ${esc(i.brand)}` : ''}</strong>
+                <strong>${esc(i.name)}</strong>
+                ${(()=>{
+                  const product=db.products.find(value=>String(value.id)===String(i.productId));
+                  const brands=[...new Set([...(product?.brands||[]),...(product?.brandDetails||[]).map(value=>value.name).filter(name=>name&&name!=='Marca não identificada')])];
+                  return brands.length ? `<select data-item-brand="${i.id}" aria-label="Marca do produto"><option value="">Selecionar marca</option>${brands.map(name=>`<option value="${esc(name)}" ${String(i.brand||'')===String(name)?'selected':''}>${esc(name)}</option>`).join('')}</select>` : (i.brand ? `<small>${esc(i.brand)}</small>` : '');
+                })()}
                 <small>
                   ${unitLabel(i.unit)}
                   ${i.productId?'· cadastrado':'· revisar produto'}
@@ -3726,6 +3731,11 @@ if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
   });
 
   $('#shoppingItems').addEventListener('change',e=>{
+    if(e.target.dataset.itemBrand) {
+      const item=currentList?.items.find(value=>String(value.id)===String(e.target.dataset.itemBrand));
+      if(item){item.brand=e.target.value;save();renderShopping();}
+      return;
+    }
     if(e.target.dataset.weightMode) {
       const item=currentList?.items.find(i=>String(i.id)===String(e.target.dataset.weightMode));
       if(!item)return;
