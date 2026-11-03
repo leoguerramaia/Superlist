@@ -39,13 +39,25 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     }catch(e){emit('Erro na sincronização','pending');console.error(e);return false}
   }
   async function syncNow(data){
-    if(!client||!householdId||syncing)return;const {data:{session}}=await client.auth.getSession();if(!session)return;
+    if(!client||!householdId)return;
+    const {data:{session}}=await client.auth.getSession();if(!session)return;
+    pendingSnapshot=data||(app&&app.getData?app.getData():JSON.parse(localStorage.getItem(localKey)||'{}'));
+    if(syncing)return;
     syncing=true;emit('Sincronizando…','pending');
-    try{const snapshot=data|| (app&&app.getData?app.getData():JSON.parse(localStorage.getItem(localKey)||'{}'));
-      const {error}=await client.from('household_snapshots').upsert({household_id:householdId,data:snapshot,updated_at:new Date().toISOString()},{onConflict:'household_id'});if(error)throw error;
-      if(channel)await channel.send({type:'broadcast',event:'snapshot',payload:{data:snapshot,updated_at:new Date().toISOString()}});
+    let snapshot=null;
+    try{
+      while(pendingSnapshot){
+        snapshot=pendingSnapshot;pendingSnapshot=null;
+        const updatedAt=new Date().toISOString();
+        const {error}=await client.from('household_snapshots').upsert({household_id:householdId,data:snapshot,updated_at:updatedAt},{onConflict:'household_id'});if(error)throw error;
+        if(channel)await channel.send({type:'broadcast',event:'snapshot',payload:{data:snapshot,updated_at:updatedAt}});
+      }
       emit(onlineMembers>1?`Compartilhado · ${onlineMembers} online`:'Sincronizado','online')
-    }catch(e){emit('Offline — aguardando conexão','pending');console.warn(e)}finally{syncing=false}
+    }catch(e){
+      if(!pendingSnapshot)pendingSnapshot=snapshot;
+      emit('Offline — aguardando conexão','pending');console.warn(e);
+      clearTimeout(timer);timer=setTimeout(()=>{if(pendingSnapshot)syncNow(pendingSnapshot)},5000);
+    }finally{syncing=false}
   }
   function scheduleSync(data){if(!client||!householdId)return;emit('Alterações pendentes…','pending');clearTimeout(timer);timer=setTimeout(()=>syncNow(data),900)}
   async function subscribe(){if(!client||!householdId)return;if(channel)client.removeChannel(channel);
