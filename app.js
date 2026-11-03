@@ -448,8 +448,16 @@ function renderHome() {
     : '<div class="empty-state">Você ainda não criou listas. Comece sua primeira compra!</div>';
 }
 
+function formatWeightMilli(value) {
+  const milli = Math.round((Number(value) || 0) * 1000);
+  return (milli / 1000).toLocaleString('pt-BR',{minimumFractionDigits:3,maximumFractionDigits:3});
+}
+function parseWeightMilli(value) {
+  const digits=String(value??'').replace(/\D/g,'');
+  return digits ? Number(digits)/1000 : 0;
+}
 function itemMeasure(item) {
-  return item.unit === 'kg' ? (Number(item.weightKg ?? item.qty) || 0) : (Number(item.qty) || 0);
+  return item.unit === 'kg' && item.quantityMode !== 'unit' ? (Number(item.weightKg ?? item.qty) || 0) : (Number(item.qty) || 0);
 }
 function itemLineTotal(item) {
   return itemMeasure(item) * (Number(item.price) || 0);
@@ -1689,6 +1697,7 @@ function addProductToCurrentList(product, qty = 1, brand = '', unit = '') {
       unit: unit || product.unit || 'un',
       qty: qty,
       weightKg: (unit || product.unit) === 'kg' ? qty : null,
+      quantityMode: 'weight',
       price: 0,
       estimate: previous?.price || 0,
       checked: false
@@ -2192,7 +2201,9 @@ function renderShopping() {
                 </small>
               </div>
             </div>
-            <input type="number" min="0" step="${i.unit==='kg'||i.unit==='l'?'.01':'1'}" data-qty="${i.id}" value="${i.unit==='kg'?(i.weightKg??i.qty):i.qty}" placeholder="${i.unit==='kg'?'Peso (kg)':'Quantidade'}" aria-label="${i.unit==='kg'?'Peso em quilos':'Quantidade'}">
+            ${i.unit==='kg' ? `<select data-weight-mode="${i.id}" aria-label="Tipo de quantidade"><option value="weight" ${i.quantityMode!=='unit'?'selected':''}>Peso</option><option value="unit" ${i.quantityMode==='unit'?'selected':''}>Unidade</option></select>` : ''}
+            <input type="${i.unit==='kg'&&i.quantityMode!=='unit'?'text':'number'}" ${i.unit==='kg'&&i.quantityMode!=='unit'?'inputmode="decimal"':'min="0" step="1"'} data-qty="${i.id}" value="${i.unit==='kg'&&i.quantityMode!=='unit'?formatWeightMilli(i.weightKg??i.qty):i.qty}" placeholder="${i.unit==='kg'&&i.quantityMode!=='unit'?'Peso (kg)':'Quantidade'}" aria-label="${i.unit==='kg'&&i.quantityMode!=='unit'?'Peso em quilos':'Quantidade'}">
+            ${i.unit==='kg'&&i.quantityMode!=='unit'?'<small class="weight-guidance">Informe o peso 0,000.</small>':''}
             <input type="text" inputmode="numeric" data-price="${i.id}" value="${i.price?formatPriceValue(i.price):''}" placeholder="Preço (R$)" aria-label="Preço">
             <span class="shop-total">${money(itemLineTotal(i))}</span>
             <div class="shop-actions">
