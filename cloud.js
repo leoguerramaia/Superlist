@@ -159,99 +159,8 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     const {error}=await client.storage.from('produtos').remove([safePath]);
     if(error) throw error;
   }
-  async function getAdminMfaStatus() {
-    if (!client) throw new Error('Supabase não está conectado.');
-    const { data: assurance, error: assuranceError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (assuranceError) throw assuranceError;
-    const { data: factors, error: factorsError } = await client.auth.mfa.listFactors();
-    if (factorsError) throw factorsError;
-    return {
-      currentLevel: assurance?.currentLevel || 'aal1',
-      nextLevel: assurance?.nextLevel || 'aal1',
-      totp: factors?.totp || []
-    };
-  }
-
-  async function beginAdminMfa() {
-    const state = await getAdminMfaStatus();
-    if (state.currentLevel === 'aal2') return { type: 'verified' };
-
-    const existing = state.totp.find(factor => factor.status === 'verified');
-    if (existing) {
-      const { data, error } = await client.auth.mfa.challenge({ factorId: existing.id });
-      if (error) throw error;
-      return { type: 'challenge', factorId: existing.id, challengeId: data.id };
-    }
-
-    for (const factor of state.totp) {
-      if (factor.status !== 'verified') {
-        const { error } = await client.auth.mfa.unenroll({ factorId: factor.id });
-        if (error) throw error;
-      }
-    }
-
-    const { data: enrolled, error: enrollError } = await client.auth.mfa.enroll({
-      factorType: 'totp',
-      friendlyName: 'SuperList Administração'
-    });
-    if (enrollError) throw enrollError;
-    const factorId = enrolled?.id;
-    if (!factorId || !enrolled?.totp?.qr_code) {
-      if (factorId) await client.auth.mfa.unenroll({ factorId });
-      throw new Error('O Supabase não retornou o QR code para configurar o autenticador.');
-    }
-
-    const { data: challenge, error: challengeError } = await client.auth.mfa.challenge({ factorId });
-    if (challengeError) {
-      await client.auth.mfa.unenroll({ factorId });
-      throw challengeError;
-    }
-    return {
-      type: 'enroll',
-      factorId,
-      challengeId: challenge.id,
-      qrCode: enrolled.totp.qr_code,
-      secret: enrolled.totp.secret || ''
-    };
-  }
-
-  async function verifyAdminMfa(factorId, challengeId, code) {
-    if (!client) throw new Error('Supabase não está conectado.');
-    const normalizedCode = String(code || '').replace(/\D/g, '');
-    if (!/^\d{6}$/.test(normalizedCode)) throw new Error('Digite os seis números do aplicativo autenticador.');
-    const { error } = await client.auth.mfa.verify({
-      factorId,
-      challengeId,
-      code: normalizedCode
-    });
-    if (error) throw error;
-    return assertAdminMfa();
-  }
-
-  async function cancelAdminMfa(factorId) {
-    if (!client || !factorId) return;
-    const { data, error } = await client.auth.mfa.listFactors();
-    if (error) throw error;
-    const factor = (data?.totp || []).find(value => value.id === factorId);
-    if (factor && factor.status !== 'verified') {
-      const { error: unenrollError } = await client.auth.mfa.unenroll({ factorId });
-      if (unenrollError) throw unenrollError;
-    }
-  }
-
-  async function assertAdminMfa() {
-    if (!client) throw new Error('Supabase não está conectado.');
-    const { data, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (error) throw error;
-    if (data?.currentLevel !== 'aal2') {
-      throw new Error('Confirme o código de dois fatores antes de usar a Administração.');
-    }
-    return true;
-  }
-
   async function adminRequest(action, payload={}){
     if(!client)throw new Error('Supabase não está conectado.');
-    await assertAdminMfa();
     const {data,error}=await client.functions.invoke('admin-panel',{body:{action,...payload}});
     if(error){let message=error.message||'Falha na operação administrativa.';try{const body=await error.context?.json?.();if(body?.error)message=body.error;}catch(_){}throw new Error(message);}
     if(!data?.ok)throw new Error(data?.error||'A operação administrativa não foi concluída.');
@@ -260,7 +169,6 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
 
   async function providerSettings(action, order){
     if(!client)throw new Error('Supabase não está conectado.');
-    await assertAdminMfa();
     const {data,error}=await client.functions.invoke('manage-provider-settings',{body:{action,...(order?{order}:{})}});
     if(error){let message=error.message||'Falha ao salvar a prioridade das APIs.';try{const body=await error.context?.json?.();if(body?.error)message=body.error;}catch(_){}throw new Error(message);}
     if(!data?.ok)throw new Error(data?.error||'Não foi possível atualizar a prioridade das APIs.');
@@ -372,5 +280,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     return data;
   }
 
-  window.SuperlistCloud={boot,status,getAdminMfaStatus,beginAdminMfa,verifyAdminMfa,cancelAdminMfa,assertAdminMfa,currentUserId:()=>currentUserId,currentUserName:()=>currentUserName,currentUserEmail:()=>currentUserEmail,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,uploadStorePhoto,uploadProductPhoto,getProductPhotoUrl,deleteProductPhoto,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,lookupProductByBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,currentUserId:()=>currentUserId,currentUserName:()=>currentUserName,currentUserEmail:()=>currentUserEmail,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,uploadStorePhoto,uploadProductPhoto,getProductPhotoUrl,deleteProductPhoto,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,lookupProductByBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
 })();
