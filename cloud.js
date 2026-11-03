@@ -7,7 +7,7 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
 
 (function(){
   const cfg=window.SUPERLIST_CONFIG;
-  let client=null, householdId=null, timer=null, callback=null, app=null, channel=null, syncing=false, onlineMembers=0, currentUserEmail=null, currentUserId=null;
+  let client=null, householdId=null, timer=null, callback=null, app=null, channel=null, syncing=false, pendingSnapshot=null, onlineMembers=0, currentUserEmail=null, currentUserId=null;
   const configured=()=>cfg.supabaseUrl&&!cfg.supabaseUrl.includes('YOUR_PROJECT')&&cfg.supabaseAnonKey&&!cfg.supabaseAnonKey.includes('YOUR_SUPABASE');
   const emit=(label,state='')=>{if(callback)callback({label,state,onlineMembers,userEmail:currentUserEmail,userId:currentUserId})};
   const localKey='superlist-v1';
