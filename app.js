@@ -1630,7 +1630,8 @@ function addCatalogProductToList() {
               p.name.toLocaleLowerCase('pt-BR').includes(q)
             )
           : [];
-        showProducts(matches);
+        if (q) showProducts(matches);
+        else results.innerHTML = '';
         const exactMatch = matches.some(p => p.name.trim().toLocaleLowerCase('pt-BR') === q);
         $('#createProductFromSearch').hidden = !q || exactMatch;
       }
@@ -1687,10 +1688,11 @@ function addCatalogProductToList() {
       const select = $('#addProductCategory');
 
       function searchCategory() {
-        showProducts(select.value
-          ? availableProducts().filter(p => p.category === select.value)
-          : []
-        );
+        if (!select.value) {
+          results.innerHTML = '';
+          return;
+        }
+        showProducts(availableProducts().filter(p => p.category === select.value));
       }
 
       select.addEventListener('change', searchCategory);
