@@ -23,8 +23,8 @@ Deno.serve(async (req) => {
   if (!projectUrl || !serviceKey || !accessToken || !anonKey) return json({ ok: false, error: "Configuração do Supabase incompleta." }, 503);
 
   try {
-    const token = accessToken.replace(/^Bearer\\s+/i, "");
-    const authClient = createClient(projectUrl.replace(/\\/+$/, ""), anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const token = accessToken.replace(/^Bearer\s+/i, "");
+    const authClient = createClient(projectUrl.replace(/\/+$/, ""), anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
     if (claimsError || claimsData?.claims?.aal !== "aal2") return json({ ok: false, error: "Confirme o código de dois fatores antes de usar a Administração." }, 403);
 
