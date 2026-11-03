@@ -101,6 +101,7 @@ function listContentFingerprint(list) {
   const content = { ...list };
   delete content.lastEditedAt;
   delete content.lastEditedBy;
+  delete content.lastEditedByName;
   delete content.viewedBy;
   return JSON.stringify(content);
 }
@@ -344,6 +345,7 @@ function save() {
       const previousTime = Date.parse(list.lastEditedAt || '') || 0;
       list.lastEditedAt = new Date(Math.max(now, previousTime + 1)).toISOString();
       list.lastEditedBy = userId;
+      list.lastEditedByName = window.SuperlistCloud?.currentUserName?.() || window.SuperlistCloud?.currentUserEmail?.() || 'Membro da família';
     }
   });
   savedListFingerprints = new Map((db.lists || []).map(list => [String(list.id), listContentFingerprint(list)]));
@@ -563,6 +565,7 @@ function listCardInner(l) {
   </div>
   <h3>${esc(l.name)}</h3>
   <div class="list-info">
+    ${l.createdByName ? `<div class="list-authorship">Criada por ${esc(l.createdByName)}${l.lastEditedByName && l.lastEditedBy!==l.createdBy ? ` · Alterada por ${esc(l.lastEditedByName)}` : ''}</div>` : ''}
     <div>▦ ${l.items.length} produtos</div>
     <div>⌖ ${esc(storeName(l.storeId))}</div>
     <div>◷ ${dateBR(l.created)}</div>
@@ -1148,7 +1151,9 @@ function createListModal() {
     if (!name) { form.elements.name.focus(); return toast('Informe o nome da lista.'); }
     if (!storeId) return toast('Selecione um supermercado.');
     items.forEach(item => { const history = latestPrice(item.productId, storeId); if (history) item.estimate = history.price; });
-    const list = { id:uid(), name, storeId, created:today(), done:false, items };
+    const memberId=window.SuperlistCloud?.currentUserId?.()||'';
+    const memberName=window.SuperlistCloud?.currentUserName?.()||window.SuperlistCloud?.currentUserEmail?.()||'Membro da família';
+    const list = { id:uid(), name, storeId, created:today(), createdBy:memberId, createdByName:memberName, lastEditedBy:memberId, lastEditedByName:memberName, lastEditedAt:new Date().toISOString(), done:false, items };
     db.lists.push(list); save(); closeModal(); openList(list.id);
     toast(items.length ? 'Lista criada com produtos!' : 'Lista criada. Adicione seus produtos!');
   }
