@@ -546,14 +546,14 @@ function openStoreDetails(storeId) {
       <div><dt>Nome da unidade</dt><dd>${esc(store.unitName||'Não informado')}</dd></div>
       ${legacyAddress?`<div><dt>Endereço salvo anteriormente</dt><dd>${esc(legacyAddress)}</dd></div>`:''}
     </dl>
-    <details class="store-detail-section" open>
+    <details class="store-detail-section">
       <summary class="store-detail-heading"><h3>Listas vinculadas</h3><span>${lists.length}</span></summary>
       <label class="store-detail-search-label" for="storeListSearch">Buscar lista</label>
       <input class="store-detail-search" id="storeListSearch" type="search" placeholder="Digite o nome da lista">
       <div id="storeDetailLists">${listContent}</div>
       <p class="muted store-detail-no-results" id="storeListsNoResults" hidden>Nenhuma lista corresponde à busca.</p>
     </details>
-    <details class="store-detail-section" open>
+    <details class="store-detail-section">
       <summary class="store-detail-heading"><h3>Produtos e preços</h3><span>${products.length}</span></summary>
       <label class="store-detail-search-label" for="storeProductSearch">Buscar produto</label>
       <input class="store-detail-search" id="storeProductSearch" type="search" placeholder="Digite o nome do produto">
