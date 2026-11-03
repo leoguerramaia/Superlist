@@ -109,6 +109,7 @@ let db = loadDB();
 let savedListFingerprints = new Map((db.lists || []).map(list => [String(list.id), listContentFingerprint(list)]));
 let currentList = null;
 let activeCategory = 'all';
+let expandedProductBrandIds = new Set();
 
 
 // Padroniza nomes de produtos e marcas em formato Título, mantendo conectores em minúsculas.
@@ -643,29 +644,34 @@ function renderProducts() {
   let cat=$('#categoryFilter')?.value||'all';
   let cats=['all',...db.categories];
   $('#categoryFilter').innerHTML=cats.map(c=>`<option value="${esc(c)}" ${c===cat?'selected':''}>${c==='all'?'Todas as categorias':esc(c)}</option>`).join('');
-  let counts=db.categories.map(c=>[c,db.products.filter(p=>p.category===c).length]);
-  $('#categoryList').innerHTML=
-    `<button class="category-item ${activeCategory==='all'?'active':''}" data-cat="all">Todas <small>${db.products.length}</small></button>`+
-    counts.map(([c,n])=>`<button class="category-item ${activeCategory===c?'active':''}" data-cat="${esc(c)}"> ${esc(c)} <small>${n}</small></button>`).join('');
-  let products=db.products.filter(p=>(activeCategory==='all'||p.category===activeCategory)&&(cat==='all'||p.category===cat)&&(p.name+' '+productBrandNames(p).join(' ')).toLowerCase().includes(q));
+  let products=db.products.filter(p=>(cat==='all'||p.category===cat)&&(p.name+' '+productBrandNames(p).join(' ')).toLowerCase().includes(q));
   $('#productCount').textContent=`${products.length} produtos`;
   $('#productTable').innerHTML=products.length
     ? products.map(p=>{
         const brands=productBrandNames(p);
-        const details=(p.brandDetails||[]);
-        const expanded=brands.length?brands.map(name=>{
+        const details=p.brandDetails||[];
+        const expanded=expandedProductBrandIds.has(String(p.id));
+        const brandRows=brands.length?brands.map(name=>{
           const brand=details.find(value=>value.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR'));
-          return `<div class="expanded-brand"><strong>${esc(name)}</strong><span>${brand?.packageContent?'Embalagem '+esc(brand.packageContent):'Embalagem não informada'}</span><span>${brand?.barcode?'EAN/GTIN '+esc(brand.barcode):'Sem código de barras'}</span><button type="button" class="catalog-action" data-manage-product-brands="${esc(p.id)}">Editar marca</button></div>`;
-        }).join(''):'<p class="helper">Nenhuma marca vinculada a este produto.</p>';
+          return `<div class="expanded-brand"><div class="expanded-brand-info"><strong>${esc(name)}</strong><span>${brand?.packageContent?'Embalagem '+esc(brand.packageContent):'Embalagem não informada'}</span><span>${brand?.barcode?'EAN/GTIN '+esc(brand.barcode):'Sem código de barras'}</span></div><button type="button" class="catalog-action" data-manage-product-brands="${esc(p.id)}" title="Gerenciar marcas">Gerenciar</button></div>`;
+        }).join(''):'<p class="helper">Nenhuma marca cadastrada para este produto.</p>';
         return `<div class="product-row-wrap">
           <div class="product-row">
-            <div class="product-main"><strong>${esc(p.name)}</strong><small>${esc(p.category)} · ${unitLabel(p.unit)}</small></div>
-            <button type="button" class="catalog-action" data-manage-product-brands="${esc(p.id)}" title="Incluir ou visualizar marcas">Marca do produto · ${brands.length}</button>
-            <button type="button" class="catalog-action" data-toggle-product-brands="${esc(p.id)}" aria-expanded="false">Expandir</button>
-            <button type="button" class="catalog-action" data-edit-product="${esc(p.id)}" title="Editar produto">Editar</button>
-            <button type="button" class="catalog-action danger" data-delete-product="${esc(p.id)}" title="Excluir produto">Excluir</button>
+            <div class="product-main">
+              <div class="product-title-actions">
+                <strong>${esc(p.name)}</strong>
+                <button type="button" class="catalog-icon-button add-brand-icon" data-add-product-brand="${esc(p.id)}" aria-label="Adicionar marca a ${esc(p.name)}" title="Adicionar marca"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+                <button type="button" class="catalog-icon-button" data-edit-product="${esc(p.id)}" aria-label="Editar ${esc(p.name)}" title="Editar produto"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>
+                <button type="button" class="catalog-icon-button danger" data-delete-product="${esc(p.id)}" aria-label="Excluir ${esc(p.name)}" title="Excluir produto"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button>
+              </div>
+              <small>${esc(p.category)} · ${esc(p.unit||'un')}</small>
+            </div>
+            <button type="button" class="catalog-expand-button ${expanded?'is-expanded':''}" data-toggle-product-brands="${esc(p.id)}" aria-expanded="${expanded}" aria-label="${expanded?'Recolher':'Expandir'} marcas de ${esc(p.name)}" title="${expanded?'Recolher marcas':'Expandir marcas'}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
           </div>
-          <div class="product-brand-expansion" data-product-brand-expansion hidden>${expanded}</div>
+          <div class="product-brand-expansion" data-product-brand-expansion ${expanded?'':'hidden'}>
+            <div class="product-brand-expansion-head"><strong>Marcas cadastradas</strong><span>${brands.length} marca${brands.length===1?'':'s'}</span></div>
+            <div class="product-brand-list">${brandRows}</div>
+          </div>
         </div>`;
       }).join('')
     : '<div class="empty-state">Nenhum produto nesta seleção.</div>';
@@ -1329,6 +1335,7 @@ async function deleteProductFromCatalog(productId) {
   if(!confirm(`Excluir "${product.name}" do catálogo? Os itens das listas e o histórico de preços serão mantidos.`))return;
   try{
     for(const brand of product.brandDetails||[])await deleteProductPhotoIfAvailable(brand.photoPath);
+    expandedProductBrandIds.delete(String(product.id));
     db.products=db.products.filter(value=>String(value.id)!==String(product.id));
     save();toast('Produto excluído do catálogo.');
   }catch(error){console.error(error);toast(error.message||'Não foi possível excluir o produto.');}
@@ -3496,8 +3503,16 @@ function init() {
 
     let toggleBrands=e.target.closest('[data-toggle-product-brands]');
     if(toggleBrands){
-      const row=toggleBrands.closest('.product-row-wrap'),panel=row?.querySelector('[data-product-brand-expansion]');
-      if(panel){panel.hidden=!panel.hidden;toggleBrands.setAttribute('aria-expanded',String(!panel.hidden));toggleBrands.textContent=panel.hidden?'Expandir':'Recolher';}
+      const id=String(toggleBrands.dataset.toggleProductBrands||'');
+      if(expandedProductBrandIds.has(id))expandedProductBrandIds.delete(id);else expandedProductBrandIds.add(id);
+      renderProducts();
+      return;
+    }
+
+    let addBrand=e.target.closest('[data-add-product-brand]');
+    if(addBrand){
+      const product=db.products.find(value=>String(value.id)===String(addBrand.dataset.addProductBrand));
+      if(product)addProductBrandModal(product);
       return;
     }
 
