@@ -232,6 +232,48 @@ function productBrandNames(product={}) {
   (product.brandDetails||[]).forEach(brand=>names.push(brand.name));
   return [...new Set(names.map(formatDisplayName).filter(Boolean))];
 }
+function productBrandForPhoto(product={},brandName='') {
+  const details=product.brandDetails||[];
+  const hasPhoto=brand=>!!(brand&&(brand.photo||brand.photoPath));
+  if(brandName){
+    const match=details.find(brand=>String(brand.name||'').toLocaleLowerCase('pt-BR')===String(brandName).toLocaleLowerCase('pt-BR'));
+    return hasPhoto(match)?match:null;
+  }
+  return details.find(hasPhoto)||null;
+}
+function productPhotoThumb(product,brand,className='product-thumb',showPlaceholder=false) {
+  if(!brand&&!showPlaceholder)return '';
+  const attrs=brand?` data-brand-photo data-product-id="${esc(product.id)}" data-brand-id="${esc(brand.id||'')}" data-photo-url="${esc(brand.photo||'')}" data-photo-path="${esc(brand.photoPath||'')}" data-barcode="${esc(brand.barcode||'')}"`:'';
+  return `<div class="${className}${brand?' has-photo':''}"${attrs}><span aria-hidden="true">◈</span></div>`;
+}
+function hydrateProductBrandPhotos() {
+  document.querySelectorAll('[data-brand-photo]').forEach(async element=>{
+    let url=usableProductPhoto(element.dataset.photoUrl);
+    if(url&&isOscbrImageUrl(url)){
+      url='';
+      const product=db.products.find(value=>String(value.id)===String(element.dataset.productId));
+      const brand=(product?.brandDetails||[]).find(value=>String(value.id)===String(element.dataset.brandId));
+      if(brand?.barcode&&window.SuperlistCloud?.lookupProductByBarcode){
+        try{
+          const result=await window.SuperlistCloud.lookupProductByBarcode(brand.barcode);
+          if(result?.imageBase64){
+            const compact=await compactCatalogImage(result.imageBase64,result.imageContentType);
+            if(compact){
+              brand.photo=compact;
+              try{localStorage.setItem(KEY,JSON.stringify(db));window.SuperlistCloud.scheduleSync(db);}catch(error){console.warn('Não foi possível guardar a foto compactada da marca:',error);}
+              url=compact;
+            }
+          }
+        }catch(error){console.warn('Não foi possível carregar a foto protegida da marca:',error);}
+      }
+    }
+    if(!url&&element.dataset.photoPath&&window.SuperlistCloud?.getProductPhotoUrl){
+      try{url=await window.SuperlistCloud.getProductPhotoUrl(element.dataset.photoPath);}
+      catch(error){console.warn('Não foi possível carregar a foto da marca:',error);}
+    }
+    if(url&&element.isConnected)element.innerHTML=`<img src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
+  });
+}
 function normalizeProductNames(data) {
   if (!data || typeof data !== 'object') return data;
   data.products ||= [];
@@ -649,24 +691,27 @@ function renderProducts() {
   $('#productTable').innerHTML=products.length
     ? products.map(p=>{
         const brands=productBrandNames(p);
-        const details=p.brandDetails||[];
+        const photoBrand=productBrandForPhoto(p);
         const expanded=expandedProductBrandIds.has(String(p.id));
         const brandRows=brands.length?brands.map(name=>{
-          const brand=details.find(value=>value.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR'));
+          const brand=(p.brandDetails||[]).find(value=>value.name.toLocaleLowerCase('pt-BR')===name.toLocaleLowerCase('pt-BR'));
           return `<div class="expanded-brand"><div class="expanded-brand-info"><strong>${esc(name)}</strong><span>${brand?.packageContent?'Embalagem '+esc(brand.packageContent):'Embalagem não informada'}</span><span>${brand?.barcode?'EAN/GTIN '+esc(brand.barcode):'Sem código de barras'}</span></div><button type="button" class="catalog-action" data-manage-product-brands="${esc(p.id)}" title="Gerenciar marcas">Gerenciar</button></div>`;
         }).join(''):'<p class="helper">Nenhuma marca cadastrada para este produto.</p>';
         return `<div class="product-row-wrap">
           <div class="product-row">
             <div class="product-main">
-              <div class="product-title-actions">
-                <strong>${esc(p.name)}</strong>
-                <button type="button" class="catalog-icon-button add-brand-icon" data-add-product-brand="${esc(p.id)}" aria-label="Adicionar marca a ${esc(p.name)}" title="Adicionar marca"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-                <button type="button" class="catalog-icon-button" data-edit-product="${esc(p.id)}" aria-label="Editar ${esc(p.name)}" title="Editar produto"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>
-                <button type="button" class="catalog-icon-button danger" data-delete-product="${esc(p.id)}" aria-label="Excluir ${esc(p.name)}" title="Excluir produto"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button>
-                <button type="button" class="catalog-expand-button ${expanded?'is-expanded':''}" data-toggle-product-brands="${esc(p.id)}" aria-expanded="${expanded}" aria-label="${expanded?'Recolher':'Expandir'} marcas de ${esc(p.name)}" title="${expanded?'Recolher marcas':'Expandir marcas'}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+              <div class="product-identity">
+                ${productPhotoThumb(p,photoBrand,'product-thumb',true)}
+                <div class="product-title-text"><strong>${esc(p.name)}</strong><small>${esc(p.category)} · ${esc(p.unit||'un')}</small></div>
               </div>
-              <small>${esc(p.category)} · ${esc(p.unit||'un')}</small>
             </div>
+            <div class="product-row-actions" aria-label="Ações de ${esc(p.name)}">
+              <button type="button" class="catalog-icon-button add-brand-icon" data-add-product-brand="${esc(p.id)}" aria-label="Adicionar marca a ${esc(p.name)}" title="Adicionar marca"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+              <button type="button" class="catalog-icon-button" data-edit-product="${esc(p.id)}" aria-label="Editar ${esc(p.name)}" title="Editar produto"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>
+              <button type="button" class="catalog-icon-button danger" data-delete-product="${esc(p.id)}" aria-label="Excluir ${esc(p.name)}" title="Excluir produto"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button>
+              <button type="button" class="catalog-expand-button ${expanded?'is-expanded':''}" data-toggle-product-brands="${esc(p.id)}" aria-expanded="${expanded}" aria-label="${expanded?'Recolher':'Expandir'} marcas de ${esc(p.name)}" title="${expanded?'Recolher marcas':'Expandir marcas'}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+            </div>
+          </div>
           <div class="product-brand-expansion" data-product-brand-expansion ${expanded?'':'hidden'}>
             <div class="product-brand-expansion-head"><strong>Marcas cadastradas</strong><span>${brands.length} marca${brands.length===1?'':'s'}</span></div>
             <div class="product-brand-list">${brandRows}</div>
@@ -674,6 +719,7 @@ function renderProducts() {
         </div>`;
       }).join('')
     : '<div class="empty-state">Nenhum produto nesta seleção.</div>';
+  hydrateProductBrandPhotos();
 }
 function renderPrices() {
   let store=$('#priceStoreFilter')?.value||'all';
@@ -1686,12 +1732,10 @@ function addCatalogProductToList() {
   function showProducts(products) {
     results.innerHTML = products.length
       ? products.map(p => `
-          <button type="button" class="product-row"
+          <button type="button" class="product-picker-row"
             data-add-catalog="${p.id}"
             style="width:100%;text-align:left">
-            <div class="product-thumb">
-              ${(p.brandDetails||[]).some(b=>b.photo||b.photoPath) ? '▧' : '◈'}
-            </div>
+            ${productPhotoThumb(p,productBrandForPhoto(p),'product-thumb',true)}
             <div>
               <strong>${esc(p.name)}</strong>
               <small>${esc(p.category || 'Outros')} · ${unitLabel(p.unit)}</small>
@@ -1700,6 +1744,7 @@ function addCatalogProductToList() {
           </button>
         `).join('')
       : '<div class="empty-state">Nenhum produto encontrado.</div>';
+    hydrateProductBrandPhotos();
   }
 
   function renderMode() {
@@ -2119,16 +2164,23 @@ function renderShopping() {
           ${its.map(i=>`<div class="shop-item">
             <input type="checkbox" data-check="${i.id}" aria-label="Marcar ${esc(i.name)} como comprado" ${i.checked?'checked':''}>
             <div class="shop-name ${i.checked?'checked':''}">
-              <strong>${esc(i.name)}${i.brand ? ` · ${esc(i.brand)}` : ''}</strong>
-              <small>
-                ${unitLabel(i.unit)}
-                ${i.productId?'· cadastrado':'· revisar produto'}
-                ${(()=>{const last=i.productId?latestPrice(i.productId,l.storeId):null;if(last)return ' · último preço cadastrado '+money(last.price)+(last.date?' · '+dateBR(last.date):'');return i.estimate?' · previsão '+money(i.estimate):'';})()}
-                ${(()=>{
-                  let p=db.products.find(p=>p.id===i.productId);
-                  if(!p)return '';const pack=productPackageMeasure(p,i.brand);return pack.netAmount>1?' · embalagem '+pack.netAmount+' '+pack.netUnit:'';
-                })()}
-              </small>
+              ${(()=>{
+                const product=db.products.find(value=>String(value.id)===String(i.productId));
+                const brand=product&&i.brand?productBrandForPhoto(product,i.brand):null;
+                return productPhotoThumb(product,brand,'list-product-thumb',false);
+              })()}
+              <div class="shop-name-text">
+                <strong>${esc(i.name)}${i.brand ? ` · ${esc(i.brand)}` : ''}</strong>
+                <small>
+                  ${unitLabel(i.unit)}
+                  ${i.productId?'· cadastrado':'· revisar produto'}
+                  ${(()=>{const last=i.productId?latestPrice(i.productId,l.storeId):null;if(last)return ' · último preço cadastrado '+money(last.price)+(last.date?' · '+dateBR(last.date):'');return i.estimate?' · previsão '+money(i.estimate):'';})()}
+                  ${(()=>{
+                    let p=db.products.find(p=>p.id===i.productId);
+                    if(!p)return '';const pack=productPackageMeasure(p,i.brand);return pack.netAmount>1?' · embalagem '+pack.netAmount+' '+pack.netUnit:'';
+                  })()}
+                </small>
+              </div>
             </div>
             <input type="number" min="0" step="${i.unit==='kg'||i.unit==='l'?'.01':'1'}" data-qty="${i.id}" value="${i.qty}" aria-label="Quantidade">
             <input type="text" inputmode="numeric" data-price="${i.id}" value="${i.price?formatPriceValue(i.price):''}" placeholder="Preço (R$)" aria-label="Preço">
@@ -2148,6 +2200,7 @@ function renderShopping() {
   actionBar.innerHTML = '<button type="button" class="btn secondary" id="importShoppingItems"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg> Importar itens</button><button type="button" class="btn primary" id="addShoppingProduct"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="4"/></svg> Novo Produto</button><button type="button" class="btn secondary" id="addShoppingBarcode"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5v14M6 5v14M9 5v14M13 5v14M16 5v14M19 5v14M22 5v14"/></svg> Ler Código de Barras</button>';
   $('#shoppingItems').prepend(actionBar);
   $('#importShoppingItems').addEventListener('click', importItemsIntoOpenList);
+  hydrateProductBrandPhotos();
   updateSummary();
 }
 
