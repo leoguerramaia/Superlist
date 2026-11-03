@@ -7,13 +7,13 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
 
 (function(){
   const cfg=window.SUPERLIST_CONFIG;
-  let client=null, householdId=null, timer=null, callback=null, app=null, channel=null, syncing=false, pendingSnapshot=null, onlineMembers=0, currentUserEmail=null, currentUserId=null;
+  let client=null, householdId=null, timer=null, callback=null, app=null, channel=null, syncing=false, pendingSnapshot=null, onlineMembers=0, currentUserEmail=null, currentUserId=null, currentUserName=null;
   const configured=()=>cfg.supabaseUrl&&!cfg.supabaseUrl.includes('YOUR_PROJECT')&&cfg.supabaseAnonKey&&!cfg.supabaseAnonKey.includes('YOUR_SUPABASE');
   const emit=(label,state='')=>{if(callback)callback({label,state,onlineMembers,userEmail:currentUserEmail,userId:currentUserId})};
   const localKey='superlist-v1';
   function status(){return client?'Supabase conectado — entre para sincronizar':'Configure o Supabase para ativar a nuvem'}
   async function requireHousehold(){
-    const {data:{user}}=await client.auth.getUser();if(!user)throw new Error('Faça login primeiro.');currentUserId=user.id;
+    const {data:{user}}=await client.auth.getUser();if(!user)throw new Error('Faça login primeiro.');currentUserId=user.id;currentUserName=user.user_metadata?.full_name||user.email||null;
     const {data:members,error}=await client.from('household_members').select('household_id').eq('user_id',user.id).limit(1);
     if(error)throw error;
     if(members&&members.length){householdId=members[0].household_id;return householdId}
@@ -26,7 +26,7 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
   }
   async function loadIntoApp(){
     if(!client)return false;const {data:{session}}=await client.auth.getSession();if(!session){currentUserId=null;emit('Entre para sincronizar','');return false}
-    currentUserId=session.user?.id||null;
+    currentUserId=session.user?.id||null;currentUserName=session.user?.user_metadata?.full_name||session.user?.email||null;
     try{await requireHousehold();const {data,error}=await client.from('household_snapshots').select('data,updated_at').eq('household_id',householdId).maybeSingle();if(error)throw error;
       if(data&&data.data&&app&&app.setData){app.setData(data.data);emit('Sincronizado','online')}else{
         // Never copy the previous browser user's localStorage into a new household.
@@ -59,7 +59,7 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
       clearTimeout(timer);timer=setTimeout(()=>{if(pendingSnapshot)syncNow(pendingSnapshot)},5000);
     }finally{syncing=false}
   }
-  function scheduleSync(data){if(!client||!householdId)return;emit('Alterações pendentes…','pending');clearTimeout(timer);timer=setTimeout(()=>syncNow(data),900)}
+  function scheduleSync(data){if(!client||!householdId)return;emit('Alterações pendentes…','pending');clearTimeout(timer);timer=setTimeout(()=>syncNow(data),200)}
   async function subscribe(){if(!client||!householdId)return;if(channel)client.removeChannel(channel);
     const {data:{user:currentUser}}=await client.auth.getUser();currentUserId=currentUser?.id||currentUserId;
     channel=client.channel('household-'+householdId,{config:{presence:{key:currentUser?.id||('guest-'+Math.random().toString(36).slice(2))}}})
@@ -68,11 +68,11 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
       .on('presence',{event:'sync'},()=>{let state=channel.presenceState();onlineMembers=Object.keys(state).length;emit(onlineMembers>1?`Compartilhado · ${onlineMembers} online`:'Sincronizado · só você online','online')})
       .subscribe(async status=>{if(status==='SUBSCRIBED'){const {data:{user}}=await client.auth.getUser();await channel.track({user_id:user?.id||'member',online_at:new Date().toISOString()})}});
   }
-  async function signIn(email,password){if(!client)throw new Error('Configure o Supabase primeiro.');let {data,error}=await client.auth.signInWithPassword({email,password});if(error)throw error;currentUserEmail=data?.user?.email||data?.session?.user?.email||email;currentUserId=data?.user?.id||data?.session?.user?.id||null;emit('Conta conectada','online');await loadIntoApp()}
+  async function signIn(email,password){if(!client)throw new Error('Configure o Supabase primeiro.');let {data,error}=await client.auth.signInWithPassword({email,password});if(error)throw error;currentUserEmail=data?.user?.email||data?.session?.user?.email||email;currentUserId=data?.user?.id||data?.session?.user?.id||null;currentUserName=data?.user?.user_metadata?.full_name||data?.user?.email||currentUserEmail;emit('Conta conectada','online');await loadIntoApp()}
   async function signUp(email,password){if(!client)throw new Error('Configure o Supabase primeiro.');let {error}=await client.auth.signUp({email,password});if(error)throw error}
   async function sendRecoveryCode(email){if(!client)throw new Error('Configure o Supabase primeiro.');const {error}=await client.auth.resetPasswordForEmail(email);if(error)throw error}
   async function verifyRecoveryCode(email,token,newPassword){if(!client)throw new Error('Configure o Supabase primeiro.');const {error:verifyError}=await client.auth.verifyOtp({email,token,type:'recovery'});if(verifyError)throw verifyError;const {error:updateError}=await client.auth.updateUser({password:newPassword});if(updateError)throw updateError}
-  async function signOut(){if(!client)return;await client.auth.signOut();currentUserEmail=null;currentUserId=null;householdId=null;if(channel)client.removeChannel(channel);emit('Sessão encerrada','');window.location.replace('./index.html')}
+  async function signOut(){if(!client)return;await client.auth.signOut();currentUserEmail=null;currentUserId=null;currentUserName=null;householdId=null;if(channel)client.removeChannel(channel);emit('Sessão encerrada','');window.location.replace('./index.html')}
   async function getInviteCode(){if(!client||!householdId)throw new Error('Entre em um espaço primeiro.');let {data,error}=await client.from('households').select('invite_code').eq('id',householdId).single();if(error)throw error;return data.invite_code}
   async function join(code){if(!client)throw new Error('Configure o Supabase primeiro.');let {data,error}=await client.rpc('join_household',{invite_code_input:code});if(error)throw error;householdId=data;await loadIntoApp()}
 
@@ -257,7 +257,7 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     if(!configured()){emit('Supabase não configurado','pending');return false}
     if(!window.supabase||!window.supabase.createClient){emit('Biblioteca Supabase indisponível','pending');return false}
     client=window.supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-    const {data:{session}}=await client.auth.getSession();currentUserEmail=session?.user?.email||null;currentUserId=session?.user?.id||null;if(session){const loaded=await loadIntoApp();if(!loaded)return false}else{emit('Entre para sincronizar','');return false}
+    const {data:{session}}=await client.auth.getSession();currentUserEmail=session?.user?.email||null;currentUserId=session?.user?.id||null;currentUserName=session?.user?.user_metadata?.full_name||session?.user?.email||null;if(session){const loaded=await loadIntoApp();if(!loaded)return false}else{emit('Entre para sincronizar','');return false}
     client.auth.onAuthStateChange((event,session)=>{currentUserEmail=session?.user?.email||null;if(session){emit('Conta conectada','online');if(event!=='TOKEN_REFRESHED')setTimeout(loadIntoApp,0)}else{householdId=null;currentUserId=null;emit('Entre para sincronizar','')}});
     window.addEventListener('online',()=>{if(app&&householdId)syncNow()});window.addEventListener('offline',()=>emit('Offline — dados salvos neste dispositivo','pending'));
     return true;
@@ -276,5 +276,5 @@ window.SUPERLIST_CONFIG = window.SUPERLIST_CONFIG || {
     return data;
   }
 
-  window.SuperlistCloud={boot,status,currentUserId:()=>currentUserId,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,uploadStorePhoto,uploadProductPhoto,getProductPhotoUrl,deleteProductPhoto,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,lookupProductByBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
+  window.SuperlistCloud={boot,status,currentUserId:()=>currentUserId,currentUserName:()=>currentUserName,currentUserEmail:()=>currentUserEmail,signIn,signUp,sendRecoveryCode,verifyRecoveryCode,signOut,join,getInviteCode,getProfile,updatePhone,uploadAvatar,uploadStorePhoto,uploadProductPhoto,getProductPhotoUrl,deleteProductPhoto,scheduleSync,analyzeReceipt,analyzeListPhoto,validateListItems,analyzeListAudio,analyzeBarcode,lookupProductByBarcode,adminRequest,providerSettings,onStatus(fn){callback=fn},loadIntoApp};
 })();
