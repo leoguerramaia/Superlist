@@ -1672,7 +1672,8 @@ function addProductToCurrentList(product, qty = 1, brand = '', unit = '') {
   );
 
   if (already) {
-    already.qty = (Number(already.qty) || 0) + qty;
+    if ((unit || product.unit) === 'kg') already.weightKg = (Number(already.weightKg ?? already.qty) || 0) + qty;
+    else already.qty = (Number(already.qty) || 0) + qty;
     toast('Quantidade atualizada na compra.');
   } else {
     const previous = latestPrice(product.id, currentList.storeId);
@@ -1684,8 +1685,8 @@ function addProductToCurrentList(product, qty = 1, brand = '', unit = '') {
       brand: normalizedBrand,
       category: product.category || 'Outros',
       unit: unit || product.unit || 'un',
-      qty: unit === 'kg' ? 0 : qty,
-      weightKg: unit === 'kg' ? qty : null,
+      qty: qty,
+      weightKg: (unit || product.unit) === 'kg' ? qty : null,
       price: 0,
       estimate: previous?.price || 0,
       checked: false
@@ -3696,7 +3697,7 @@ if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
     item.price=parsePriceEntry(input.value);
     item.estimate=item.price;
     const row=input.closest('.shop-item');
-    if(row)row.querySelector('.shop-total').textContent=money((Number(item.qty)||0)*item.price);
+    if(row)row.querySelector('.shop-total').textContent=money(itemLineTotal(item));
     updateSummary();
   });
 
@@ -3715,7 +3716,8 @@ if (e.target.closest('#exportCurrentList')) { exportCurrentList(); return; }
     }
 
     if(e.target.dataset.qty) {
-      item.qty=Number(e.target.value)||0;
+      if(item.unit==='kg') item.weightKg=Number(e.target.value)||0;
+      else item.qty=Number(e.target.value)||0;
     }
 
     if(e.target.dataset.price) {
